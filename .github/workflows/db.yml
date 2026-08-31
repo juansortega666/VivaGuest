@@ -8,9 +8,10 @@ on:
 jobs:
   # Las 4 puertas de base de datos.
   #
-  # Este job queda EN ROJO al terminar el plan 01-01 y eso es correcto: todavia no
-  # existen migraciones, ni tests pgTAP, ni lib/database.types.ts. Lo pone en verde el
-  # plan 01-09. No relajar el workflow para "arreglarlo".
+  # Este job estuvo EN ROJO a proposito desde el plan 01-01 hasta el 01-09: no existian
+  # migraciones, ni tests pgTAP, ni lib/database.types.ts. El plan 01-09 lo puso en
+  # verde generando y commiteando los tipos. Medido en local sobre un `db start` en
+  # frio: 10 migraciones, 6 seeds, `Files=5, Tests=47, Result: PASS`.
   database:
     runs-on: ubuntu-latest # Docker viene preinstalado; macOS/Windows no
     steps:
@@ -34,10 +35,23 @@ jobs:
         run: supabase db lint --local
 
       # 2) puerta de seguridad
-      # El umbral es error, nunca WARN: este diseno de policies emite 3 WARN
-      # multiple_permissive_policies inherentes sobre cleanings, profiles y properties
-      # (una policy para admin + una para aseador, mismo rol, misma accion), asi que
-      # bajar el umbral a WARN dejaria el job rojo siempre. Deuda aceptada y registrada.
+      #
+      # Medicion del plan 01-09 sobre el schema completo, que corrige lo que decia el
+      # comentario anterior: `--type security` hoy sale **sin ningun hallazgo**, ni
+      # ERROR ni WARN. Los 14 WARN `multiple_permissive_policies` que emite este diseno
+      # (una policy de admin + una de aseador sobre el mismo rol y la misma accion, en
+      # 14 tablas) son de categoria PERFORMANCE, asi que no aparecen bajo este `--type`.
+      # Deuda aceptada y registrada: consolidarlas en un OR haria el modelo ilegible.
+      #
+      # El umbral se queda en `error` de todas formas. Es deliberado y no es porque hoy
+      # haga falta: los lints de seguridad que solo existen en hosted (configuracion de
+      # `[auth]`, extensiones en `public`) llegan como WARN, y no se quiere que el job
+      # de PR se ponga rojo por un hallazgo de plataforma que no se arregla con una
+      # migracion. Subirlo a `warn` es una decision de la fase que linkee el proyecto.
+      #
+      # Este advisor NO ve tablas sin grants: durante el plan 01-07 reporto 20 tablas
+      # con RLS deshabilitada y no 22, porque property_secrets y storage_deletion_queue
+      # no tienen ningun grant. Ese punto ciego lo cubren los guardarrailes de pgTAP.
       - name: db advisors (security)
         run: supabase db advisors --local --type security --fail-on error
 
