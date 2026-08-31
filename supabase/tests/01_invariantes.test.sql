@@ -54,9 +54,13 @@ insert into public.properties
   ('44444444-4444-4444-4444-444444444444', 'Apto 404 sin tarifas', 'Cluster Test', true,
    null, null, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
 
-insert into public.calendar_feeds (id, property_id, provider, url) values
+-- calendar_feeds NO lleva columna `url`: la URL de exportacion iCal es una
+-- credencial y vive en property_secrets.ical_url (decision bloqueada en
+-- 01-CONTEXT.md). Este fixture solo existe para satisfacer la FK de
+-- calendar_reservations; ninguna asercion de este archivo prueba el feed.
+insert into public.calendar_feeds (id, property_id, provider) values
   ('ffffffff-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111',
-   'airbnb', 'https://www.airbnb.com/calendar/ical/FIXTURE-P1.ics');
+   'airbnb');
 
 insert into public.calendar_reservations
   (id, feed_id, property_id, uid, starts_on, ends_on, payload_hash) values
