@@ -19,7 +19,7 @@
 
 - [ ] **APTO-01**: Admin crea, edita, activa y desactiva apartamentos
 - [ ] **APTO-02**: Admin configura tarifa al huésped y pago al aseador, y el sistema impide activar el apartamento sin ambas
-- [ ] **APTO-03**: Admin registra uno o más links de calendario de Airbnb y el sistema valida que respondan al guardar
+- [ ] **APTO-03**: Admin registra uno o más links de calendario (Airbnb o Google Calendar) y el sistema valida que respondan al guardar
 - [ ] **APTO-04**: Admin registra ubicación de Google Maps y código de acceso del apartamento
 - [ ] **APTO-05**: Admin configura la hora límite del aseo por apartamento, con default 11:30
 - [ ] **APTO-06**: Admin define la lista de cuartos del apartamento, que determina qué checklist se arma
@@ -48,6 +48,7 @@
 - [ ] **SYNC-09**: El sistema alerta al admin cuando un link de calendario deja de responder
 - [ ] **SYNC-10**: El sistema alerta al admin cuando el propio job de sincronización deja de correr
 - [ ] **SYNC-11**: El sistema genera un aseo informativo, sin estado ni asignación, para apartamentos con `gestion_vivaguest = false`
+- [ ] **SYNC-12**: El sistema procesa feeds de Google Calendar además de Airbnb, incluyendo eventos con hora y eventos recurrentes
 
 ### Ciclo de vida del aseo
 
@@ -79,7 +80,7 @@
 - [ ] **CHECK-01**: El checklist se arma con los cuartos que tiene ese apartamento y no muestra cuartos que no existen
 - [ ] **CHECK-02**: Aseador marca las tareas de cada cuarto al final del aseo
 - [ ] **CHECK-03**: Aseador adjunta evidencia fotográfica de cada cuarto en el mismo paso del checklist
-- [ ] **CHECK-04**: Las fotos se comprimen en el dispositivo y se les elimina el EXIF antes de subirse
+- [ ] **CHECK-04**: Las fotos se comprimen en el dispositivo a ~200 KB con lado largo de 1280 px y se les elimina el EXIF antes de subirse
 
 ### Reportes de campo
 
@@ -115,11 +116,13 @@
 
 ### Retención de datos
 
-- [ ] **RET-01**: El sistema borra automáticamente aseos, checklists, fotos, gastos y daños con más de 6 meses
+- [ ] **RET-01**: El sistema borra automáticamente aseos, checklists, gastos y daños con más de 6 meses
 - [ ] **RET-02**: El sistema avisa al admin 15 días antes de cada borrado
 - [ ] **RET-03**: Admin marca un aseo con retención legal y ese aseo no se borra
 - [ ] **RET-04**: El borrado elimina los archivos en Storage además de las filas, sin dejar huérfanos facturando
 - [ ] **RET-05**: Los agregados de desempeño (timestamps de inicio y fin, eventos "no puedo") sobreviven al borrado del detalle
+- [ ] **RET-06**: El sistema borra las fotos de evidencia a los 30 días, conservando el registro del aseo y su checklist
+- [ ] **RET-07**: El admin ve el consumo de Storage y recibe alerta al superar el 70% del cupo
 
 ## v2 Requirements
 
@@ -144,7 +147,8 @@
 | Feature | Reason |
 |---------|--------|
 | API oficial de Airbnb | No existe API pública; iCal es la única vía |
-| Integración con Booking.com | El MVP lee únicamente calendarios de Airbnb; Booking no expone código de reserva en su iCal |
+| Integración con Booking.com | El MVP lee únicamente calendarios de Airbnb y Google Calendar; Booking no expone código de reserva en su iCal |
+| Escritura hacia Google Calendar | Google entra solo como fuente de lectura vía `.ics`; publicar aseos exigiría OAuth y reconciliación bidireccional |
 | Checklist configurable por apartamento | Biblioteca fija y global en el MVP; los cuartos sí son configurables |
 | Estados de pago por gasto individual | El reembolso se gestiona fuera del sistema |
 | Alerta de ventana de tiempo insuficiente | Descartada explícitamente; se gestiona con el huésped por fuera |
@@ -200,58 +204,61 @@
 | SYNC-09 | Fase 3 | Pending |
 | SYNC-10 | Fase 3 | Pending |
 | SYNC-11 | Fase 3 | Pending |
-| ASEO-01 | Fase 6 | Pending |
-| ASEO-02 | Fase 6 | Pending |
-| ASEO-03 | Fase 6 | Pending |
-| ASEO-04 | Fase 6 | Pending |
-| ASEO-05 | Fase 6 | Pending |
-| ASEO-06 | Fase 6 | Pending |
+| SYNC-12 | Fase 3 | Pending |
+| ASEO-01 | Fase 4 | Pending |
+| ASEO-02 | Fase 4 | Pending |
+| ASEO-03 | Fase 4 | Pending |
+| ASEO-04 | Fase 4 | Pending |
+| ASEO-05 | Fase 4 | Pending |
+| ASEO-06 | Fase 4 | Pending |
 | ASEO-07 | Fase 1 | Pending |
-| ASEO-08 | Fase 6 | Pending |
-| ASEO-09 | Fase 6 | Pending |
-| PWA-01 | Fase 5 | Pending |
-| PWA-02 | Fase 4 | Pending |
-| PWA-03 | Fase 4 | Pending |
-| PWA-04 | Fase 5 | Pending |
-| PWA-05 | Fase 5 | Pending |
-| PWA-06 | Fase 5 | Pending |
-| PWA-07 | Fase 5 | Pending |
-| PWA-08 | Fase 5 | Pending |
-| PWA-09 | Fase 5 | Pending |
-| PWA-10 | Fase 5 | Pending |
-| CHECK-01 | Fase 5 | Pending |
-| CHECK-02 | Fase 5 | Pending |
-| CHECK-03 | Fase 5 | Pending |
-| CHECK-04 | Fase 5 | Pending |
-| REPORT-01 | Fase 5 | Pending |
-| REPORT-02 | Fase 5 | Pending |
-| REPORT-03 | Fase 5 | Pending |
-| REPORT-04 | Fase 6 | Pending |
-| NOTIF-01 | Fase 4 | Pending |
-| NOTIF-02 | Fase 4 | Pending |
-| NOTIF-03 | Fase 4 | Pending |
-| NOTIF-04 | Fase 4 | Pending |
-| DASH-01 | Fase 6 | Pending |
-| DASH-02 | Fase 6 | Pending |
-| DASH-03 | Fase 6 | Pending |
-| DASH-04 | Fase 6 | Pending |
-| DASH-05 | Fase 6 | Pending |
-| DASH-06 | Fase 6 | Pending |
-| DASH-07 | Fase 6 | Pending |
+| ASEO-08 | Fase 4 | Pending |
+| ASEO-09 | Fase 4 | Pending |
+| PWA-01 | Fase 6 | Pending |
+| PWA-02 | Fase 5 | Pending |
+| PWA-03 | Fase 5 | Pending |
+| PWA-04 | Fase 6 | Pending |
+| PWA-05 | Fase 6 | Pending |
+| PWA-06 | Fase 6 | Pending |
+| PWA-07 | Fase 6 | Pending |
+| PWA-08 | Fase 6 | Pending |
+| PWA-09 | Fase 6 | Pending |
+| PWA-10 | Fase 6 | Pending |
+| CHECK-01 | Fase 6 | Pending |
+| CHECK-02 | Fase 6 | Pending |
+| CHECK-03 | Fase 6 | Pending |
+| CHECK-04 | Fase 6 | Pending |
+| REPORT-01 | Fase 6 | Pending |
+| REPORT-02 | Fase 6 | Pending |
+| REPORT-03 | Fase 6 | Pending |
+| REPORT-04 | Fase 4 | Pending |
+| NOTIF-01 | Fase 5 | Pending |
+| NOTIF-02 | Fase 5 | Pending |
+| NOTIF-03 | Fase 5 | Pending |
+| NOTIF-04 | Fase 5 | Pending |
+| DASH-01 | Fase 4 | Pending |
+| DASH-02 | Fase 4 | Pending |
+| DASH-03 | Fase 4 | Pending |
+| DASH-04 | Fase 4 | Pending |
+| DASH-05 | Fase 4 | Pending |
+| DASH-06 | Fase 4 | Pending |
+| DASH-07 | Fase 4 | Pending |
 | FIN-01 | Fase 1 | Pending |
 | FIN-02 | Fase 7 | Pending |
 | FIN-03 | Fase 7 | Pending |
 | FIN-04 | Fase 7 | Pending |
 | FIN-05 | Fase 7 | Pending |
-| RET-01 | Fase 7 | Pending |
-| RET-02 | Fase 7 | Pending |
+| RET-01 | Fase 9 | Pending |
+| RET-02 | Fase 9 | Pending |
 | RET-03 | Fase 7 | Pending |
-| RET-04 | Fase 7 | Pending |
-| RET-05 | Fase 7 | Pending |
+| RET-04 | Fase 9 | Pending |
+| RET-05 | Fase 9 | Pending |
+| RET-06 | Fase 9 | Pending |
+| RET-07 | Fase 7 | Pending |
 
 **Coverage:**
-- v1 requirements: 80 total
-- Mapped to phases: 80 ✓
+- v1 requirements: 83 total
+- Mapped to phases: 83 ✓
 - Unmapped: 0
 
 **Por fase:**
@@ -260,12 +267,13 @@
 |------|------------|
 | 1. Fundación, schema y RLS | 5 |
 | 2. Acceso y administración del catálogo | 18 |
-| 3. Motor de sincronización iCal | 11 |
-| 4. Notificaciones push e instalación de la PWA | 6 |
-| 5. PWA del aseador, offline-first | 15 |
-| 6. Dashboard operativo del admin | 16 |
-| 7. Financiero y retención | 9 |
+| 3. Motor de sincronización iCal | 12 |
+| 4. Dashboard operativo del admin | 16 |
+| 5. Notificaciones push e instalación de la PWA | 6 |
+| 6. PWA del aseador, offline-first | 15 |
+| 7. Financiero | 6 |
 | 8. Piloto en Bogotá 1 | 0 (fase de validación operativa) |
+| 9. Borrado automático y retención | 5 |
 
 ---
-*Requirements defined: 2026-08-31 — trazabilidad mapeada al roadmap 2026-08-31*
+*Requirements defined: 2026-08-31. Actualizado 2026-08-31: alcance a solo Airbnb + Google Calendar, retención de fotos a 30 días, resecuenciado para equipo de dos.*

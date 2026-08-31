@@ -9,10 +9,10 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 
 ## Current Position
 
-Phase: 1 de 8 (Fundación, schema y RLS)
+Phase: 1 de 9 (Fundación, schema y RLS)
 Plan: — (fase sin planear)
 Status: Ready to plan
-Last activity: 2026-08-31 — Roadmap creado a partir de REQUIREMENTS.md y el research; 80/80 requisitos v1 mapeados
+Last activity: 2026-08-31 — Roadmap resecuenciado para equipo de dos (9 fases secuenciales); 83/83 requisitos v1 mapeados
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -42,7 +42,7 @@ Progress: [░░░░░░░░░░] 0%
 Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que más pesan sobre el trabajo actual:
 
 - Schema + migraciones + RLS antes que UI: `database.types.ts` y la forma de los RPC son el contrato de toda la UI
-- `legal_hold` y `deleted_at` van en el schema inicial (Fase 1) aunque el job de borrado llegue en la Fase 7
+- `legal_hold` y `deleted_at` van en el schema inicial (Fase 1) aunque el job de borrado llegue en la Fase 9
 - El código de acceso vive en tabla aparte con RPC y auditoría, no como columna
 - La autorización nunca se apoya en claims del JWT (la desactivación de un aseador debe surtir efecto inmediato)
 - PWA offline-first desde el día uno, con cola de mutaciones en IndexedDB e idempotencia por `client_event_id`
@@ -54,10 +54,18 @@ Ninguno.
 
 ### Blockers/Concerns
 
-- **[Fase 3] Bloqueante humano:** falta capturar un `.ics` real de Airbnb de la cuenta de VivaGuest. Es prerequisito para planear la fase, no una tarea dentro de ella. Sin esos archivos no hay fixtures ni forma de resolver la estabilidad del `UID`
+- **[Fase 3] Bloqueante humano:** falta capturar un `.ics` real de Airbnb y uno de Google Calendar de la cuenta de VivaGuest. Es prerequisito para planear la fase, no una tarea dentro de ella. Sin esos archivos no hay fixtures ni forma de resolver la estabilidad del `UID`
 - **[Fase 3] Conflicto de research sin resolver:** la estabilidad del `UID` de Airbnb está en contradicción directa entre documentos; se resuelve empíricamente contra los feeds propios, con instrumentación desde el primer sync
 - **[Fase 1] Abierto de producto:** la lista definitiva de tareas del checklist bloquea el seed del catálogo, no el schema. Se arranca con el catálogo provisional (máximo 3 tareas por tipo de cuarto), editable sin migración
-- **[Fase 4] Riesgo aceptado:** push como único canal, sin semáforo de entregabilidad. Si en el piloto de Bogotá un aseo confirmado nunca llega al aseador, entra el semáforo (NOTIF-V2-01)
+- **[Fase 5] Riesgo aceptado:** push como único canal, sin semáforo de entregabilidad. Si en el piloto de Bogotá un aseo confirmado nunca llega al aseador, entra el semáforo (NOTIF-V2-01)
+
+## Restricciones nuevas (2026-08-31)
+
+- **Free tier de Vercel y Supabase durante todo el desarrollo.** Obliga a retención de fotos de 30 días (no 6 meses), compresión a ~200 KB con lado largo de 1280 px y una foto por cuarto. El cron de 30 min vive en `pg_cron`, así que el tope de 1 corrida diaria de Vercel Hobby no aplica
+- **Vercel Hobby prohíbe uso comercial.** El piloto de la Fase 8 en operación real cruza esa línea y obliga a migrar a plan pago
+- **Equipo de dos personas.** Ejecución secuencial estricta; el grafo de paralelización queda documentado en ROADMAP.md pero no se asume
+- **Google Calendar entra como fuente de solo lectura** vía su URL `.ics`, sin OAuth ni escritura
+- **[Fase 4] Costura conocida:** confirmar un aseo lo asigna pero no notifica a nadie hasta que exista la Fase 5. El evento se encola y se drena después
 
 ## Deferred Items
 
@@ -67,9 +75,12 @@ Ninguno.
 | Financiero | Exportación/impresión del cierre mensual (FIN-V2-01) | v2 | 2026-08-31 |
 | Desempeño | Scorecard por aseador (PERF-V2-01) | v2 | 2026-08-31 |
 | Propietarios | Dashboard de propietarios (OWNER-V2-01) | v2 | 2026-08-31 |
+| Calendario | Integración con Booking.com | Fuera de MVP | 2026-08-31 |
+| Calendario | Escritura hacia Google Calendar (publicar aseos) | Fuera de MVP | 2026-08-31 |
+| Piloto | Métrica de éxito del piloto sin definir | Abierto | 2026-08-31 |
 
 ## Session Continuity
 
 Last session: 2026-08-31
-Stopped at: ROADMAP.md y STATE.md creados; trazabilidad de REQUIREMENTS.md actualizada
+Stopped at: Roadmap resecuenciado a 9 fases secuenciales; alcance ajustado a free tier, Google Calendar y equipo de dos
 Resume file: None

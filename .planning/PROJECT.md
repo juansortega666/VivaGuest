@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Plataforma que automatiza la asignación y ejecución de aseos en propiedades de renta corta (STR). Lee los calendarios de Airbnb vía iCal, genera el aseo al detectar el fin del bloqueo, pasa por confirmación humana del admin (número de huéspedes + instrucciones), lo asigna en firme al aseador responsable fijo del apartamento, y el aseador lo ejecuta desde una PWA con checklist por cuarto y evidencia fotográfica. Reemplaza la coordinación actual por WhatsApp y Excel sobre 39 unidades reales en 8 clusters de Colombia, de las cuales 34 se gestionan dentro del sistema y 5 son informativas.
+Plataforma que automatiza la asignación y ejecución de aseos en propiedades de renta corta (STR). Lee los calendarios de Airbnb y de Google Calendar vía iCal, genera el aseo al detectar el fin del bloqueo, pasa por confirmación humana del admin (número de huéspedes + instrucciones), lo asigna en firme al aseador responsable fijo del apartamento, y el aseador lo ejecuta desde una PWA con checklist por cuarto y evidencia fotográfica. Reemplaza la coordinación actual por WhatsApp y Excel sobre 39 unidades reales en 8 clusters de Colombia, de las cuales 34 se gestionan dentro del sistema y 5 son informativas.
 
 ## Core Value
 
@@ -49,6 +49,8 @@ Que ningún aseo se pierda: todo checkout detectado en calendario termina en un 
 - [ ] El sistema calcula el pago mensual a aseadores al cierre del último día laboral del mes y lo persiste como snapshot propio, visible en pantalla
 - [ ] Apartamentos con `gestion_vivaguest = false` generan aseo informativo sin estado, sin aseador y fuera de métricas
 - [ ] El sistema retiene 6 meses de historial y borra automáticamente, notificando al admin 15 días antes, con retención legal por aseo para casos en disputa
+- [ ] El sistema borra las fotos de evidencia a los 30 días, conservando el registro del aseo y su checklist los 6 meses completos
+- [ ] El admin ve cuánto Storage lleva consumido y recibe alerta al superar el 70% del cupo
 
 ### Out of Scope
 
@@ -115,14 +117,18 @@ Que ningún aseo se pierda: todo checkout detectado en calendario termina en un 
 - **Tech stack**: Next.js 15 (App Router) + TypeScript + Tailwind + Supabase (Postgres, Auth, Storage, RLS), deploy en Vercel — un solo proyecto sirve dashboard admin y PWA del aseador
 - **Tech stack**: PWA instalable con Web Push (VAPID) — push es el único canal de notificación al aseador; en iOS exige PWA instalada en pantalla de inicio y una denegación de permiso es irreversible sin reinstalar
 - **Tech stack**: la PWA es offline-first con cola de mutaciones en IndexedDB e idempotencia por `client_event_id` — iOS Safari no tiene Background Sync, así que la cola drena en foreground con contador visible de pendientes
-- **Integración**: iCal de Airbnb como única fuente de calendario — no hay API oficial pública y Booking queda fuera del MVP
+- **Integración**: iCal de Airbnb y de Google Calendar como fuentes de calendario, ambas de solo lectura — no hay API oficial pública y Booking queda fuera del MVP
+- **Integración**: Google Calendar entra por su URL `.ics` privada, no por la API de Google — sin OAuth, sin tokens, sin escritura
 - **Scheduler**: `pg_cron` dispara y hace fan-out con `pg_net`, una invocación por feed — aísla feeds caídos por construcción y evita depender del cron de Vercel, que en Hobby está capado a 1 corrida diaria
 - **Timezone**: UTC-5 (Bogotá) fijo en todo el sistema, sin DST — `fecha_aseo` se modela como `date`, no `timestamptz`
 - **Seguridad**: el código de acceso vive en tabla aparte con RPC y auditoría, no como columna — en Supabase admin y aseador comparten el rol Postgres `authenticated` y los grants por columna no discriminan usuarios
 - **Seguridad**: la autorización nunca se apoya en claims del JWT — un token ya emitido sigue siendo válido hasta expirar, y la desactivación de un aseador debe surtir efecto de inmediato
-- **Datos**: retención de 6 meses para aseos, checklists, fotos con metadatos, gastos y daños, con aviso 15 días antes y retención legal por aseo
-- **Datos**: las fotos se comprimen a JPEG en el cliente y se les elimina el EXIF, conservando solo la corrección de orientación
+- **Datos**: retención de 6 meses para aseos, checklists, gastos y daños, con aviso 15 días antes y retención legal por aseo. Las fotos de evidencia se borran a los 30 días para caber en el free tier de Storage
+- **Datos**: las fotos se comprimen a JPEG en el cliente con objetivo de ~200 KB y lado largo de 1280 px, y se les elimina el EXIF conservando solo la corrección de orientación
+- **Datos**: una foto por cuarto, no una ráfaga. El presupuesto de Storage se calcula sobre ~6 fotos por aseo
 - **Datos**: montos en pesos colombianos enteros (`bigint`), sin subunidad
+- **Infraestructura**: free tier de Vercel y Supabase durante todo el desarrollo. El cron de 30 min vive en `pg_cron`, así que el tope de 1 corrida diaria de Vercel Hobby no aplica. Vercel Hobby prohíbe uso comercial: el piloto en operación real obliga a migrar a plan pago
+- **Equipo**: dos personas. El roadmap se ejecuta secuencial, sin aprovechar el grafo de paralelización
 - **Escala**: 34 unidades gestionadas, ~8 aseadores, decenas de aseos por día — no es un problema de escala, es de correctitud operativa
 - **Orden de trabajo**: schema + migraciones + RLS antes que UI
 
@@ -132,6 +138,8 @@ Que ningún aseo se pierda: todo checkout detectado en calendario termina en un 
 |---|---|---|
 | Push como único canal, sin semáforo de entregabilidad en el dashboard | Mantiene el alcance del MVP cerrado y evita construir observabilidad de notificaciones antes de tener operación real | Un aseo confirmado que nunca llega al aseador no lo detecta nadie hasta que el huésped entra a un apartamento sucio. Si pasa en el piloto de Bogotá, entra el semáforo |
 | Sin exportación ni vista imprimible del cierre mensual | El cálculo es visible en pantalla y el snapshot mensual persiste más allá de la retención | El admin vuelve a Excel a mano en cada cierre de mes |
+| Evidencia fotográfica solo de 30 días | Es la única forma de que el MVP quepa en el free tier de Storage; el registro del aseo sí dura 6 meses | Una disputa sobre daños de hace 2 meses se queda sin foto |
+| Vercel Hobby en uso comercial durante el piloto | El piloto es corto y el costo de migrar es bajo | Suspensión de cuenta por violación de términos |
 | Estabilidad del `UID` de Airbnb no verificada contra feeds propios | Se instrumenta desde el primer sync en vez de apostarle a un supuesto | Cancelaciones o duplicados silenciosos de aseos confirmados si el UID no es estable |
 
 ## Key Decisions
@@ -144,6 +152,9 @@ Que ningún aseo se pierda: todo checkout detectado en calendario termina en un 
 | El aseo se agenda por fin de bloqueo del calendario, no por checkout real | El iCal no expone el checkout real; el bloqueo es la única señal confiable | — Pending |
 | Push como único canal, sin WhatsApp | Evita depender de API no oficial y mantiene la trazabilidad dentro del sistema | — Pending |
 | Checklist global fijo, cuartos configurables por apartamento | Permite armar el checklist dinámicamente sin construir un editor de checklists en el MVP | — Pending |
+| Google Calendar como fuente de solo lectura, vía su URL `.ics` | Entra al mismo pipeline que Airbnb sin OAuth ni escritura; el costo extra es manejar `VTIMEZONE`, `RRULE` y eventos con hora, que Airbnb no emite | — Pending |
+| Free tier durante todo el desarrollo, con retención de fotos a 30 días | Sin recortar la retención de fotos el free tier de Storage revienta en el primer mes de operación real | — Pending |
+| El job de borrado se mueve después del piloto | No tiene nada que borrar hasta el mes 7, así que construirlo antes no se puede validar | — Pending |
 | Solo Airbnb en el MVP, sin Booking | Booking no expone código de reserva ni distingue bloqueos de reservas, así que obligaba a una segunda ruta de parseo con heurística de menor confianza para una fracción del portafolio | — Pending |
 | Bogotá 2 pasa a `gestion_vivaguest = false` | La empresa externa no va a operar la PWA; marcarlo `true` obligaba a inventar un tercer modo de asignación sin responsable ni destinatario de push | — Pending |
 | `contacto_externo` como texto libre | No hay operación sobre ese dato en el MVP; las 5 unidades informativas solo muestran fecha y a cargo de quién | — Pending |
