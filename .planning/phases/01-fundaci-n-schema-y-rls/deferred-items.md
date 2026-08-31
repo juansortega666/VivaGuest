@@ -47,6 +47,33 @@ Cosas detectadas durante la ejecución que **no** pertenecen al plan que las enc
 - **Resolución sugerida:** la regla de la fase es que la suite gana, así que `calendar_feeds` lleva `url`. Si se quiere conservar el argumento de seguridad de la corrección 2 (que `calendar_feeds` no porte credenciales), la salida limpia es que `url` sea **derivada o nula** y que el worker resuelva la URL efectiva desde `property_secrets.ical_url`; pero la columna tiene que existir. Cambiar el test para quitar `url` del fixture es la otra opción, y exige justificarlo como desviación en el plan 04.
 - **Dueño:** plan 01-04.
 
+## 5. `alter default privileges` NO puede quitarle `EXECUTE` a PUBLIC sobre funciones futuras
+
+- **Encontrado en:** plan 01-07, escribiendo la migración de grants.
+- **Qué pasa:** el hallazgo 3 de este documento asignaba al plan 01-07 el cierre del ACL `f` (`anon=X` sobre toda función nueva de `public`). Se intentó con la vía limpia, `alter default privileges … revoke execute on functions from public, anon`, y **no funciona en PG 17.6**. Postgres fusiona `acldefault('f', owner)` — que siempre trae la entrada `=X` de PUBLIC — con el ACL almacenado en `pg_default_acl`, así que la entrada de PUBLIC reaparece en cada función nueva. Medido dos veces y por dos caminos sobre la base de la fase:
+  ```
+  defaclacl tras el revoke      : {postgres=X, authenticated=X, service_role=X}
+  proacl de una función posterior: {=X/postgres, postgres=X, authenticated=X, service_role=X}
+  has_function_privilege('anon', <nueva>, 'execute') -> t
+  ```
+  Hacer primero `grant execute on functions to public` para materializar la entrada y después revocarla da exactamente el mismo resultado: `t`.
+- **Qué SÍ se cerró en el plan 01-07:** el revoke explícito sobre las 5 funciones que ya existían (`revoke execute on all functions in schema public from public, anon`). Ahí sí funciona, porque opera sobre un ACL materializado. Verificado: `has_function_privilege('anon', …)` pasó de `t` a `f` en las cinco.
+- **Qué queda pendiente y NO se puede heredar:** **toda función nueva de `public`, y muy en particular todo RPC `SECURITY DEFINER`, necesita su propio par de líneas al lado de la definición**:
+  ```sql
+  revoke all    on function public.<f>(<args>) from public, anon;
+  grant  execute on function public.<f>(<args>) to authenticated;
+  ```
+  Sin ellas, `reveal_access_code()` sería invocable por `anon`, es decir por cualquiera con la publishable key. Hoy devolvería `42501` porque `auth.uid()` es NULL, pero la función corre como `postgres`: convertirla en fuga solo requiere un bug en su guarda.
+- **Dueño:** plan 01-08 (los RPC) y toda migración de las Fases 2 a 9 que cree funciones en `public`. Vale una aserción de guardarraíl propia en el plan 01-09: *ninguna función de `public` es ejecutable por `anon`*.
+
+## 6. `results_eq` sobre una función inexistente aborta el archivo pgTAP entero
+
+- **Encontrado en:** plan 01-07, al correr `00_rls_aseos.test.sql` con las policies ya puestas.
+- **Qué pasa:** de las 16 aserciones del archivo, 4 dependen de `public.reveal_access_code()` (7, 11, 12 y 13), que es del plan 01-08. Las que usan `throws_ok` degradan bien: capturan el `42883` y reportan un `not ok` legible. Pero la 11 usa `results_eq`, que abre un cursor con `EXECUTE` sin manejador de excepciones: el error se propaga, aborta la transacción y **las aserciones 12 a 16 no llegan a correr**. Salida: `Bad plan. You planned 16 tests but ran 10`.
+- **Impacto:** las aserciones 14, 15 y 16 son de RLS pura (UPDATE directo denegado, el admin ve los 2 aseos, el aseador no lee la bitácora) y ya están en verde, pero el archivo no lo puede demostrar mientras falte el RPC. El plan 01-07 lo verificó con una copia temporal sin las 4 aserciones del RPC: **12/12 en verde**.
+- **Qué NO hacer:** reordenar el archivo para poner el `results_eq` al final, ni cambiarlo por `throws_ok`. Es un artefacto de secuencia, no un defecto del test, y desaparece solo en cuanto exista la función.
+- **Dueño:** plan 01-08. En cuanto `reveal_access_code()` exista, el archivo corre las 16 sin tocarlo.
+
 ## Ejecución paralela y base local compartida (orquestador, 2026-08-31)
 
 `supabase/config.toml` tiene un único `project_id` versionado, así que **todos los worktrees
