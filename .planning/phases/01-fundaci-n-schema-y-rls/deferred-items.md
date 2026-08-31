@@ -46,3 +46,23 @@ Cosas detectadas durante la ejecución que **no** pertenecen al plan que las enc
 - **Impacto:** bloqueante para el plan 04 en el momento en que escriba `calendar_feeds`. No es opinable: son dos artefactos versionados que se contradicen.
 - **Resolución sugerida:** la regla de la fase es que la suite gana, así que `calendar_feeds` lleva `url`. Si se quiere conservar el argumento de seguridad de la corrección 2 (que `calendar_feeds` no porte credenciales), la salida limpia es que `url` sea **derivada o nula** y que el worker resuelva la URL efectiva desde `property_secrets.ical_url`; pero la columna tiene que existir. Cambiar el test para quitar `url` del fixture es la otra opción, y exige justificarlo como desviación en el plan 04.
 - **Dueño:** plan 01-04.
+
+## Ejecución paralela y base local compartida (orquestador, 2026-08-31)
+
+`supabase/config.toml` tiene un único `project_id` versionado, así que **todos los worktrees
+resuelven al mismo contenedor de Supabase local**. Un `supabase db reset --local` desde un
+worktree recrea la base que otro worktree está usando en vivo.
+
+- Detectado por el ejecutor del plan 01-05, que verificó en una instancia aislada en vez de
+  arriesgarse. El `project_id` quedaba además apuntando a `agent-a77b9e39ec453293b`, un worktree
+  ya eliminado. Corregido a `vivaguest`.
+- Las waves 5 a 8 de esta fase son de un solo plan, así que no hay colisión intra-wave.
+- **Para fases futuras con waves paralelas que toquen la base:** o se serializa el acceso, o cada
+  worktree necesita su propio `project_id` y bloque de puertos vía `--workdir` sobre una copia.
+
+## Regla de planificación pendiente
+
+Dos veces apareció el mismo patrón: un comentario que cita el nombre literal de la cosa prohibida
+hace fallar el propio grep que la prohíbe (`service_role` en 01-01, `gen_random_uuid` en 01-05).
+Vale la pena volverlo regla explícita al planear: los guardarraíles por grep obligan a que los
+comentarios no citen el token vetado.

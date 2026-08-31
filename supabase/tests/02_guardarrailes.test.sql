@@ -16,7 +16,7 @@
 -- ============================================================================
 
 begin;
-select plan(8);
+select plan(9);
 
 -- 1  RLS sin excepciones. Una tabla de `public` sin RLS es una tabla pública.
 select is_empty($q$
@@ -61,6 +61,23 @@ select is_empty($q$
    where table_schema = 'public'
      and grantee = 'anon'
 $q$, 'guardarraíl: anon no conserva ningún privilegio sobre public, ni TRUNCATE');
+
+-- 4b El pg_default_acl de la CLI 2.116.0 cubre SECUENCIAS, no solo tablas: una
+--    tabla con bigserial nace con USAGE/UPDATE para anon sobre su secuencia.
+--    El guardarraíl 4 no lo ve nunca porque information_schema.role_table_grants
+--    excluye secuencias. Sin esta aserción, toda tabla futura con bigserial
+--    reintroduce el hueco de forma invisible para la suite.
+--    Detectado en el plan 01-04 sobre access_code_reads_id_seq.
+select is_empty($q$
+  select c.relname || ':' || a.privilege_type
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+   cross join lateral aclexplode(coalesce(c.relacl, acldefault('s', c.relowner))) a
+    join pg_roles r on r.oid = a.grantee
+   where n.nspname = 'public'
+     and c.relkind = 'S'
+     and r.rolname in ('anon', 'authenticated')
+$q$, 'guardarraíl: anon ni authenticated conservan privilegios sobre secuencias de public');
 
 -- 5  Sin `set search_path = ''` el privilegio elevado de una función
 --    SECURITY DEFINER es un vector de escalada. Redundante a propósito con el
