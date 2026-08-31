@@ -12,7 +12,7 @@ El proyecto se construye de adentro hacia afuera. Primero la base de datos: sche
 
 - [ ] **Fase 1: Fundación, schema y RLS** - La base de datos impone las reglas del negocio y aísla a cada aseador antes de que exista una sola pantalla
 - [ ] **Fase 2: Acceso y administración del catálogo** - Login por rol y CRUD de apartamentos y aseadores para montar la operación real
-- [ ] **Fase 3: Motor de sincronización iCal** - Todo checkout publicado en Airbnb/Booking se convierte en un aseo pendiente, sin duplicados ni cancelaciones falsas
+- [ ] **Fase 3: Motor de sincronización iCal** - Todo checkout publicado en Airbnb se convierte en un aseo pendiente, sin duplicados ni cancelaciones falsas
 - [ ] **Fase 4: Notificaciones push e instalación de la PWA** - El aseador instala la PWA y recibe cada asignación en el teléfono; el admin recibe cada evento de campo
 - [ ] **Fase 5: PWA del aseador, offline-first** - El aseador ejecuta el aseo completo con o sin señal y nada del trabajo de campo se pierde
 - [ ] **Fase 6: Dashboard operativo del admin** - Toda la operación del día en una pantalla, con confirmación en un paso y alertas de una sola jerarquía
@@ -65,7 +65,7 @@ El proyecto se construye de adentro hacia afuera. Primero la base de datos: sche
   5. El admin queda alertado cuando un link deja de responder, cuando el propio job de sincronización deja de correr, cuando checkout y checkin caen el mismo día, y cuando una reserva parece una extensión creada como reserva nueva
 **Plans**: TBD
 
-**Prerequisito humano (bloqueante, no es una tarea de la fase):** hay que capturar y versionar un `.ics` real de Airbnb y uno de Booking de la cuenta propia de VivaGuest antes de planear esta fase. Las muestras públicas están desactualizadas y la más citada en GitHub es falsa. Sin esos archivos no hay fixtures de test ni forma de resolver empíricamente la estabilidad del `UID`.
+**Prerequisito humano (bloqueante, no es una tarea de la fase):** hay que capturar y versionar un `.ics` real de Airbnb de la cuenta propia de VivaGuest antes de planear esta fase. Las muestras públicas están desactualizadas y la más citada en GitHub es falsa. Sin esos archivos no hay fixtures de test ni forma de resolver empíricamente la estabilidad del `UID`.
 
 ### Phase 4: Notificaciones push e instalación de la PWA
 **Goal**: El aseador instala la PWA y recibe en el teléfono cada aseo que se le asigna; el admin recibe cada evento de campo
@@ -159,7 +159,7 @@ Fase 1 (Fundación, schema, RLS)  ← estrictamente secuencial, bloquea todo
 ## Research adicional en planning
 
 Fases que necesitan `--research-phase`:
-- **Fase 3 (motor iCal):** el comportamiento del iCal de Airbnb/Booking no tiene especificación pública y la estabilidad del `UID` está en contradicción directa entre documentos de research
+- **Fase 3 (motor iCal):** el comportamiento del iCal de Airbnb no tiene especificación pública y la estabilidad del `UID` está en contradicción directa entre documentos de research
 - **Fase 4 (push):** el comportamiento de Web Push en iOS (expiración de suscripciones, `pushsubscriptionchange`) requiere validación en dispositivos físicos
 - **Fase 8 (piloto):** no hay patrón estándar de rollout de PWA a una fuerza laboral con dispositivos heterogéneos
 

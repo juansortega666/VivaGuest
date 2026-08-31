@@ -19,7 +19,7 @@
 
 - [ ] **APTO-01**: Admin crea, edita, activa y desactiva apartamentos
 - [ ] **APTO-02**: Admin configura tarifa al huésped y pago al aseador, y el sistema impide activar el apartamento sin ambas
-- [ ] **APTO-03**: Admin registra uno o más links de calendario (Airbnb, Booking) y el sistema valida que respondan al guardar
+- [ ] **APTO-03**: Admin registra uno o más links de calendario de Airbnb y el sistema valida que respondan al guardar
 - [ ] **APTO-04**: Admin registra ubicación de Google Maps y código de acceso del apartamento
 - [ ] **APTO-05**: Admin configura la hora límite del aseo por apartamento, con default 11:30
 - [ ] **APTO-06**: Admin define la lista de cuartos del apartamento, que determina qué checklist se arma
@@ -143,7 +143,8 @@
 
 | Feature | Reason |
 |---------|--------|
-| API oficial de Airbnb/Booking | No existe API pública; iCal es la única vía |
+| API oficial de Airbnb | No existe API pública; iCal es la única vía |
+| Integración con Booking.com | El MVP lee únicamente calendarios de Airbnb; Booking no expone código de reserva en su iCal |
 | Checklist configurable por apartamento | Biblioteca fija y global en el MVP; los cuartos sí son configurables |
 | Estados de pago por gasto individual | El reembolso se gestiona fuera del sistema |
 | Alerta de ventana de tiempo insuficiente | Descartada explícitamente; se gestiona con el huésped por fuera |
