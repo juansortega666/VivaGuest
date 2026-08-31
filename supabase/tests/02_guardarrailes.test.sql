@@ -65,13 +65,34 @@ $q$, 'guardarraíl: anon no conserva ningún privilegio sobre public, ni TRUNCAT
 -- 5  Sin `set search_path = ''` el privilegio elevado de una función
 --    SECURITY DEFINER es un vector de escalada. Redundante a propósito con el
 --    WARN function_search_path_mutable del advisor, que no es bloqueante.
+--
+--    El literal almacenado NO es 'search_path='. Postgres serializa proconfig
+--    con flatten_set_variable_args, y `search_path` es GUC_LIST_QUOTE, así que
+--    la cadena vacía se guarda entrecomillada. Medido en la base de la fase
+--    (PG 17.6, CLI 2.116.0):
+--
+--      create function f() ... set search_path = ''  ->  {"search_path=\"\""}
+--      alter function f() set search_path = ''       ->  {"search_path=\"\""}
+--
+--    y las propias funciones SECURITY DEFINER que Supabase trae de fábrica
+--    (vault.create_secret, vault.update_secret, auth.get_auth) también guardan
+--    `search_path=""`. Con el literal sin comillas la aserción era
+--    insatisfacible: ninguna DDL válida la puede poner en verde.
+--
+--    La lista acepta las DOS formas para no depender de la versión (Postgres
+--    más viejos guardan `search_path=`) y NO acepta ninguna otra: un
+--    `search_path=public` sigue siendo un fallo, que es lo que esta aserción
+--    existe para atrapar.
 select is_empty($q$
   select n.nspname || '.' || p.proname
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
    where n.nspname in ('public', 'private')
      and p.prosecdef
-     and not coalesce(p.proconfig, '{}'::text[]) @> array['search_path=']
+     and not exists (
+       select 1
+         from unnest(coalesce(p.proconfig, '{}'::text[])) as cfg
+        where cfg in ('search_path=', 'search_path=""'))
 $q$, 'guardarraíl: toda función SECURITY DEFINER fija search_path = ''''');
 
 -- 6  El DDL de ARCHITECTURE.md usa numeric(12,2) y contradice a CONTEXT.md,
