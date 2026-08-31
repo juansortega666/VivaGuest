@@ -16,7 +16,7 @@
 -- ============================================================================
 
 begin;
-select plan(9);
+select plan(10);
 
 -- 1  RLS sin excepciones. Una tabla de `public` sin RLS es una tabla pública.
 select is_empty($q$
@@ -157,6 +157,45 @@ select is_empty($q$
      and grantee = 'authenticated'
      and table_name in ('property_secrets', 'storage_deletion_queue')
 $q$, 'guardarraíl: property_secrets y storage_deletion_queue no tienen ningún privilegio para authenticated');
+
+-- 9  El sustituto del default privilege que Postgres NO permite.
+--
+--    Medido en el plan 01-07 sobre esta misma base (PG 17.6):
+--    `alter default privileges ... revoke execute on functions from public,
+--    anon` NO funciona. Postgres refusiona acldefault('f', owner) — que
+--    siempre trae la entrada `=X` de PUBLIC — con lo almacenado en
+--    pg_default_acl, así que PUBLIC recupera EXECUTE en CADA función nueva:
+--
+--      defaclacl tras el revoke        : {postgres=X, authenticated=X, service_role=X}
+--      proacl de una función posterior : {=X/postgres, postgres=X, authenticated=X, ...}
+--      has_function_privilege('anon', <nueva>, 'execute') -> t
+--
+--    Consecuencia: cada función nueva de `public` necesita su propio
+--    `revoke all on function ... from public, anon` AL LADO de la definición,
+--    y no hay ningún mecanismo que lo imponga. Esta aserción es ese mecanismo.
+--
+--    Importa sobre todo para los RPC SECURITY DEFINER: corren como `postgres`,
+--    que es owner de las 22 tablas y por tanto exento de su RLS. Una función
+--    olvidada aquí es `reveal_access_code()` — el código que abre físicamente
+--    un apartamento — al alcance de cualquiera con la publishable key, que es
+--    pública por diseño.
+--
+--    `has_function_privilege` y no un LEFT JOIN contra
+--    information_schema.routine_privileges: esa vista NO lista los privilegios
+--    de PUBLIC como tales, así que una función con `proacl` NULL (el caso por
+--    defecto, y el peligroso) le sale limpia. `has_function_privilege`
+--    resuelve la herencia y el default, que es justo lo que hay que medir.
+--
+--    prokind = 'f': agregados y funciones de ventana quedan fuera; ninguna es
+--    una ruta de escritura.
+select is_empty($q$
+  select n.nspname || '.' || p.proname
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname in ('public', 'private')
+     and p.prokind = 'f'
+     and has_function_privilege('anon', p.oid, 'execute')
+$q$, 'guardarraíl: ninguna función de public ni private es ejecutable por anon');
 
 select * from finish();
 rollback;

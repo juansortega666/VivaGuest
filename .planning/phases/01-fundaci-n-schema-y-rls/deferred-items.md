@@ -74,6 +74,23 @@ Cosas detectadas durante la ejecución que **no** pertenecen al plan que las enc
 - **Qué NO hacer:** reordenar el archivo para poner el `results_eq` al final, ni cambiarlo por `throws_ok`. Es un artefacto de secuencia, no un defecto del test, y desaparece solo en cuanto exista la función.
 - **Dueño:** plan 01-08. En cuanto `reveal_access_code()` exista, el archivo corre las 16 sin tocarlo.
 
+## 7. Una foto puede colgar de un `checklist_item` de otro aseo
+
+- **Encontrado en:** plan 01-08, razonando el cierre del `threat_flag: file-access` del plan 01-04.
+- **Qué pasa:** el plan 01-08 sí cerró el hueco de la ruta (`CHECK photo_path_bajo_su_aseo`: el `storage_path` tiene que vivir bajo `{cleaning_id}/{kind}/`). Pero queda un invariante hermano sin imponer: nada obliga a que `cleaning_photos.checklist_item_id` pertenezca al mismo aseo que `cleaning_photos.cleaning_id`. La policy `photos_cleaner_insert` solo valida `cleaning_id in my_writable_cleaning_ids()`; los cuatro punteros de dueño no se validan contra él.
+- **Impacto:** no es explotable para saltarse el guard de `finish_cleaning()` sobre el propio aseo — para cerrar el aseo propio la ruta legítima es la única útil, porque el guard busca fotos *de los items de ese aseo*. Lo que sí permite es escribir filas incoherentes que ensucian la vista de detalle de la Fase 6 y el conteo de evidencia.
+- **Por qué no se cerró aquí:** un `CHECK` no puede expresarlo, necesita subconsulta. Haría falta un trigger `BEFORE INSERT`, y los otros tres punteros (`damage_id`, `expense_id`, `missing_report_id`) todavía no tienen ninguna ruta de escritura: `authenticated` no tiene `INSERT` sobre `damages`, `expenses` ni `missing_item_reports` (verificado: `permission denied for table damages`). El trigger completo se escribe una sola vez, cuando existan las tres funciones de reporte.
+- **Dueño:** Fase 6, junto con `report_damage()`, `report_expense()` y `report_missing_items()`.
+
+## 8. Objetos de Storage huérfanos: nada los ata a una fila de `cleaning_photos`
+
+- **Encontrado en:** plan 01-08, escribiendo las policies del bucket.
+- **Qué pasa:** las policies autorizan la subida a `storage.objects` y, por separado, `photos_cleaner_insert` autoriza la fila en `cleaning_photos`. Son dos operaciones independientes y ninguna exige la otra. Un aseador puede subir objetos a la carpeta de su propio aseo sin registrar nunca la fila.
+- **Impacto:** un objeto sin fila queda fuera de `storage_deletion_queue` y por tanto fuera de la purga de retención: se factura para siempre y conserva el dato sensible dentro, alcanzable con cualquier signed URL emitida antes. Es la misma clase de problema que la tabla `storage_deletion_queue` existe para resolver, pero por el extremo contrario.
+- **Nota:** no es cerrable con una FK. `storage.objects` es de `supabase_storage_admin` y la subida real la hace la Storage API, no un `INSERT` que podamos envolver en una transacción con el `INSERT` de `cleaning_photos`.
+- **Sugerencia:** un job de reconciliación en la Fase 9 que liste el bucket y encole en `storage_deletion_queue` todo objeto sin fila con más de N horas de antigüedad.
+- **Dueño:** Fase 9 (RET-06).
+
 ## Ejecución paralela y base local compartida (orquestador, 2026-08-31)
 
 `supabase/config.toml` tiene un único `project_id` versionado, así que **todos los worktrees
