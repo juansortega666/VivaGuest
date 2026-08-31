@@ -34,7 +34,18 @@ El equipo son dos personas, así que **las fases corren en secuencia estricta**.
   3. El código de acceso de un apartamento solo se obtiene vía RPC, solo para el aseador con un aseo vigente, y cada consulta queda registrada en `access_code_reads`
   4. Intentar crear un segundo aseo activo para el mismo apartamento y la misma fecha falla a nivel de base de datos
   5. Editar la tarifa de un apartamento no altera el margen ya congelado en un aseo generado antes de la edición
-**Plans**: TBD
+**Plans:** 9 plans en 8 waves
+
+Plans:
+- [ ] 01-01-PLAN.md — Scaffolding de Next.js sin Turbopack, `supabase init` con `config.toml` endurecido, `lib/domain/errors.ts` (ASEO-07) y las dos puertas de CI de arquitectura
+- [ ] 01-02-PLAN.md — Wave 0: la suite pgTAP completa (5 archivos, 45 aserciones) escrita en rojo antes del schema
+- [ ] 01-03-PLAN.md — Migraciones 01–03: `today_bog()`, los 6 enums y el catálogo (identidad, apartamentos, secretos, cuartos, faltantes, ajustes)
+- [ ] 01-04-PLAN.md — Migración 04: núcleo operativo `cleanings` con sus índices únicos parciales, `legal_hold`/`deleted_at`, checklist, evidencia y reportes
+- [ ] 01-05-PLAN.md — Seed: 8 clusters, 39 unidades (34 gestionadas + 5 externas), catálogo provisional de cuartos y tareas
+- [ ] 01-06-PLAN.md — Migraciones 05–06: snapshot financiero (FIN-01), máquina de estados con log de auditoría, notificaciones y cola de borrado de Storage
+- [ ] 01-07-PLAN.md — Migraciones 07–08: los grants (el hallazgo que rompería la fase), esquema `private`, helpers definer, RLS y todas las policies
+- [ ] 01-08-PLAN.md — Migraciones 09–10: RPC de credencial y de transiciones, bucket privado `evidencia` con sus policies
+- [ ] 01-09-PLAN.md — Cierre: `database.types.ts`, CI en verde, sign-off de validación y checkpoint humano de link a Supabase dev
 
 **Alcance no capturado por REQ-IDs pero obligatorio en esta fase:**
 - `legal_hold` y `deleted_at` en el schema inicial aunque el job de borrado llegue en la Fase 9
@@ -181,7 +192,7 @@ Fases con patrón ya documentado en el research (se puede saltar):
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Fundación, schema y RLS | 0/TBD | Not started | - |
+| 1. Fundación, schema y RLS | 0/9 | Planned | - |
 | 2. Acceso y administración del catálogo | 0/TBD | Not started | - |
 | 3. Motor de sincronización iCal | 0/TBD | Not started | - |
 | 4. Dashboard operativo del admin | 0/TBD | Not started | - |
