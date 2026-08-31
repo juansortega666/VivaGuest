@@ -306,3 +306,293 @@ comment on function public.confirm_cleaning(uuid, smallint, text) is
 revoke all     on function public.confirm_cleaning(uuid, smallint, text) from public, anon;
 grant  execute on function public.confirm_cleaning(uuid, smallint, text) to authenticated;
 
+
+-- ===========================================================================
+-- 3/6 — start_cleaning()
+--
+-- pendiente -> en_curso. Exige `confirmado_at is not null`: no se empieza un
+-- aseo que el admin todavia no confirmo, porque es justo en la confirmacion
+-- donde se materializa el checklist que el aseador va a marcar.
+--
+-- `cl_en_curso_shape` exige confirmado_at, aseador_id y started_at no nulos y
+-- finished_at nulo. El CHECK y este RPC se refuerzan mutuamente: si alguien
+-- editara esta funcion para saltarse el `confirmado_at is not null`, el CHECK
+-- lo para igual, pero con 23514 en vez de 42501.
+-- ===========================================================================
+create or replace function public.start_cleaning(p_cleaning uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform 1
+     from public.cleanings c
+    where c.id            = p_cleaning
+      and c.aseador_id    = (select auth.uid())
+      and c.is_managed
+      and c.state         = 'pendiente'
+      and c.confirmado_at is not null
+      for update;
+
+  if not found then
+    raise exception 'no_autorizado' using errcode = '42501';
+  end if;
+
+  update public.cleanings
+     set state      = 'en_curso',
+         started_at = now()
+   where id = p_cleaning;
+end;
+$$;
+
+comment on function public.start_cleaning(uuid) is
+  'pendiente -> en_curso. Solo el aseador asignado y solo si el aseo esta confirmado. Escribe started_at; la transicion la registra el trigger cleanings_log_transition.';
+
+revoke all     on function public.start_cleaning(uuid) from public, anon;
+grant  execute on function public.start_cleaning(uuid) to authenticated;
+
+
+-- ===========================================================================
+-- 4/6 — finish_cleaning() — PWA-07
+--
+-- en_curso -> completada, con el guard agregado que ES el requisito
+-- "'Terminé' queda bloqueado mientras falte una tarea o la foto de algun
+-- cuarto", impuesto en la base y no en el cliente.
+--
+-- Un `grant update (state, finished_at)` NO podria expresarlo: el invariante
+-- es multi-fila (recorre todo el checklist del aseo y, por cada tarea que
+-- exige foto, todas las fotos que cuelgan de ella). Este es el argumento
+-- entero de por que existe el patron RPC. Mitiga T-01-51.
+-- ===========================================================================
+create or replace function public.finish_cleaning(p_cleaning uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_property uuid;
+begin
+  select c.property_id
+    into v_property
+    from public.cleanings c
+   where c.id         = p_cleaning
+     and c.aseador_id = (select auth.uid())
+     and c.is_managed
+     and c.state      = 'en_curso'
+     for update;
+
+  if not found then
+    raise exception 'no_autorizado' using errcode = '42501';
+  end if;
+
+  -- El guard. `exists` sobre la negacion y no `not exists` sobre la
+  -- conjuncion: asi la consulta corta en el primer item incompleto en vez de
+  -- recorrer el checklist entero.
+  if exists (
+    select 1
+      from public.cleaning_checklist_items i
+     where i.cleaning_id = p_cleaning
+       and ( i.done_at is null
+          or ( i.requiere_foto
+               and not exists (select 1
+                                 from public.cleaning_photos ph
+                                where ph.checklist_item_id = i.id)))
+  ) then
+    raise exception 'checklist_incompleto'
+      using errcode = 'P0001',
+            hint    = 'Falta marcar alguna tarea o subir la foto de una tarea que la exige.';
+  end if;
+
+  update public.cleanings
+     set state       = 'completada',
+         finished_at = now()
+   where id = p_cleaning;
+
+  -- Outbox para los admins. Mismo razonamiento que en confirm_cleaning: se
+  -- escribe la intencion, el worker de la Fase 5 la drena.
+  insert into public.notifications
+    (recipient_id, type, title, body, url, cleaning_id, property_id, dedupe_key)
+  select pr.id,
+         'aseo_completado'::public.notification_type,
+         'Aseo completado',
+         'Se completo el aseo de ' || p.nombre || '.',
+         '/aseos/' || p_cleaning::text,
+         p_cleaning,
+         v_property,
+         'done:' || p_cleaning::text
+    from public.profiles   pr
+    cross join public.properties p
+   where pr.role = 'admin'
+     and pr.is_active
+     and p.id = v_property
+  on conflict (recipient_id, dedupe_key) where dedupe_key is not null do nothing;
+end;
+$$;
+
+comment on function public.finish_cleaning(uuid) is
+  'PWA-07. en_curso -> completada. Rechaza con P0001 checklist_incompleto si queda una tarea sin marcar o una tarea con requiere_foto sin ninguna foto. El invariante es multi-fila y por eso no puede vivir en un grant de columna.';
+
+revoke all     on function public.finish_cleaning(uuid) from public, anon;
+grant  execute on function public.finish_cleaning(uuid) to authenticated;
+
+
+-- ===========================================================================
+-- 5/6 — decline_cleaning() — el "no puedo"
+--
+-- El caso que justifica el patron RPC entero, porque son DOS efectos que
+-- tienen que ocurrir ATOMICAMENTE o el aseo se pierde:
+--
+--   1. el aseo vuelve a 'pendiente' SIN aseador
+--   2. la alerta al admin queda encolada
+--
+-- Si el paso 2 fallara despues de un paso 1 ya comprometido, quedaria un aseo
+-- huerfano que nadie sabe que esta huerfano. En una sola transaccion, o pasan
+-- los dos o no pasa ninguno.
+--
+-- CONSERVA `confirmado_at` A PROPOSITO. El admin ya puso numero de huespedes e
+-- instrucciones y el checklist ya esta materializado; ese trabajo no se
+-- pierde. `cl_pendiente_shape` deja pasar `confirmado_at` no nulo justamente
+-- por este flujo, y lo dice en su comentario de la migracion 04.
+--
+-- La transicion en_curso -> pendiente la registra SOLA el trigger
+-- `cleanings_log_transition` (migracion 05). NO se inserta a mano en
+-- `cleaning_state_transitions`: hacerlo produciria dos filas para el mismo
+-- movimiento, y la de mano seria la mentirosa (el trigger escribe lo que
+-- efectivamente quedo, despues de los CHECK).
+--
+-- El `update ... returning into` hace de guarda y de escritura a la vez: si el
+-- aseo no es del caller, o ya no esta vivo, o es de gestion externa, no
+-- afecta ninguna fila y `v_property` se queda NULL.
+-- ===========================================================================
+create or replace function public.decline_cleaning(p_cleaning uuid, p_motivo text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_property uuid;
+  v_actor    uuid := (select auth.uid());
+begin
+  update public.cleanings
+     set state      = 'pendiente',
+         aseador_id = null,
+         started_at = null
+   where id         = p_cleaning
+     and aseador_id = v_actor
+     and is_managed
+     and state in ('pendiente', 'en_curso')
+  returning property_id into v_property;
+
+  if v_property is null then
+    raise exception 'no_autorizado' using errcode = '42501';
+  end if;
+
+  insert into public.notifications
+    (recipient_id, type, title, body, url, cleaning_id, property_id, dedupe_key, payload)
+  select pr.id,
+         'no_puedo'::public.notification_type,
+         'Una aseadora no puede tomar un aseo',
+         coalesce(quien.full_name, 'Una aseadora') || ' no puede hacer el aseo de ' ||
+           p.nombre || '. Motivo: ' ||
+           coalesce(nullif(btrim(p_motivo), ''), 'sin especificar'),
+         '/aseos/' || p_cleaning::text,
+         p_cleaning,
+         v_property,
+         'decline:' || p_cleaning::text,
+         jsonb_build_object('motivo', p_motivo, 'declined_by', v_actor)
+    from public.profiles pr
+    cross join public.properties p
+    left join public.profiles quien on quien.id = v_actor
+   where pr.role = 'admin'
+     and pr.is_active
+     and p.id = v_property
+  on conflict (recipient_id, dedupe_key) where dedupe_key is not null do nothing;
+end;
+$$;
+
+comment on function public.decline_cleaning(uuid, text) is
+  'El "no puedo" del aseador. Devuelve el aseo a pendiente sin aseador y sin started_at, CONSERVANDO confirmado_at, y encola la alerta a los admins en la misma transaccion. La transicion la registra el trigger, no esta funcion.';
+
+revoke all     on function public.decline_cleaning(uuid, text) from public, anon;
+grant  execute on function public.decline_cleaning(uuid, text) to authenticated;
+
+
+-- ===========================================================================
+-- 6/6 — toggle_checklist_item()
+--
+-- Existe en ESTA fase y no en la 6 por una razon concreta: sin ella,
+-- finish_cleaning() no tiene forma de llegar a su condicion de salida desde el
+-- cliente, y anadirla despues obligaria a repensar los grants de
+-- `cleaning_checklist_items`, que ya quedaron cerrados en `select` a secas en
+-- la migracion 07.
+--
+-- `private.my_writable_cleaning_ids()` (solo `state = 'en_curso'`) y no
+-- `my_cleaning_ids()`: no se marca una tarea de un aseo que todavia no empezo
+-- ni de uno que ya se entrego.
+-- ===========================================================================
+create or replace function public.toggle_checklist_item(
+  p_item uuid,
+  p_done boolean,
+  p_nota text
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform 1
+     from public.cleaning_checklist_items i
+    where i.id = p_item
+      and i.cleaning_id in (select private.my_writable_cleaning_ids())
+      for update;
+
+  if not found then
+    raise exception 'no_autorizado' using errcode = '42501';
+  end if;
+
+  update public.cleaning_checklist_items
+     set done_at = case when p_done then now()               else null end,
+         done_by = case when p_done then (select auth.uid()) else null end,
+         nota    = p_nota
+   where id = p_item;
+end;
+$$;
+
+comment on function public.toggle_checklist_item(uuid, boolean, text) is
+  'Marca o desmarca una tarea del checklist. Solo items de un aseo propio EN CURSO. Desmarcar limpia done_at y done_by: un item a medias no deja rastro de quien lo marco.';
+
+revoke all     on function public.toggle_checklist_item(uuid, boolean, text) from public, anon;
+grant  execute on function public.toggle_checklist_item(uuid, boolean, text) to authenticated;
+
+
+-- ===========================================================================
+-- EXPLICITAMENTE FUERA DE ALCANCE DE LA FASE 1, Y POR QUE
+--
+-- Para que en la Fase 6 nadie lo redescubra ni lo tome por un olvido:
+--
+--   report_damage()         REPORT-01  -> Fase 6
+--   report_expense()        REPORT-02  -> Fase 6
+--   report_missing_items()  REPORT-03  -> Fase 6
+--
+-- Sus requisitos estan mapeados a la Fase 6 en REQUIREMENTS.md, y su forma
+-- depende del payload de notificacion y del flujo de subida de foto que se
+-- definen ahi. Las tablas (`damages`, `expenses`, `missing_item_reports`,
+-- `missing_item_lines`, `cleaning_photos`), sus grants y sus policies YA
+-- EXISTEN: la Fase 6 solo anade las tres funciones, con el mismo patron de
+-- este archivo, sin tocar el modelo de autorizacion.
+--
+--   cancel_cleaning()       ASEO-06, ASEO-09  -> Fase 4
+--   reschedule_cleaning()   ASEO-08           -> Fase 4
+--
+-- Misma razon. La guarda de transiciones de `tg_cleanings_snapshot()` ya
+-- admite pendiente|en_curso -> cancelada, asi que la Fase 4 no toca la maquina
+-- de estados tampoco.
+--
+-- LA UNICA REGLA QUE NO SE PUEDE OLVIDAR AL ANADIRLAS: cada una necesita su
+-- propio `revoke all on function ... from public, anon`. No se hereda. El
+-- guardarrail 9 de `02_guardarrailes.test.sql` falla si se olvida.
+-- ===========================================================================
