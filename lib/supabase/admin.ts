@@ -2,6 +2,7 @@ import 'server-only';
 
 import { createClient } from '@supabase/supabase-js';
 
+import type { Database } from '@/lib/database.types';
 import { publicEnv, readServerSecret } from '@/lib/env';
 
 /**
@@ -21,11 +22,19 @@ import { publicEnv, readServerSecret } from '@/lib/env';
  */
 const SECRET_KEY_VAR = 'SUPABASE_SECRET_KEY';
 
-// TODO(plan 09): tipar con `createClient<Database>` cuando exista lib/database.types.ts
+/**
+ * El genérico `Database` viene de `lib/database.types.ts`, generado con
+ * `npm run db:types` y commiteado. La puerta `typegen drift` del workflow `db`
+ * falla si ese archivo se desincroniza del schema, así que el tipo que ve el
+ * compilador es siempre el schema real, no una copia que envejeció.
+ *
+ * Solo se emite el esquema `public`: `private` no es parte del contrato del
+ * cliente y `gen types --schema public` no lo incluye.
+ */
 export function createAdminClient() {
   const { NEXT_PUBLIC_SUPABASE_URL } = publicEnv();
 
-  return createClient(NEXT_PUBLIC_SUPABASE_URL, readServerSecret(SECRET_KEY_VAR), {
+  return createClient<Database>(NEXT_PUBLIC_SUPABASE_URL, readServerSecret(SECRET_KEY_VAR), {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
