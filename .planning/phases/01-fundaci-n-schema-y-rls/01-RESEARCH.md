@@ -1518,7 +1518,17 @@ Auditado en la máquina de desarrollo el 2026-08-31.
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> Las 5 preguntas quedaron resueltas por los planes de la fase. Resolución verificada por `gsd-plan-checker` el 2026-08-31.
+>
+> 1. **RESOLVED** — "39 unidades reales": se verifica por estructura (39 unidades / 8 clusters / 5 externas), no por nombres. Placeholders marcados en el dato → plan `01-05`.
+> 2. **RESOLVED** — Grants del aseador: matriz completa en `01-07`. `property_secrets` y `storage_deletion_queue` con cero grant; `cleanings` solo `select`; catálogos y satélites del aseo con `select`; `push_subscriptions` con DML completo.
+> 3. **RESOLVED** — `legal_hold`: modelado como `legal_hold` + `legal_hold_reason` + `deleted_at` con índice parcial en `cleanings` → plan `01-04`.
+> 4. **RESOLVED** — Log de transiciones: tabla `cleaning_state_transitions` más guard que rechaza transiciones desde estados terminales con `P0001` → plan `01-06`.
+> 5. **RESOLVED como checkpoint humano** — El link a los proyectos Supabase queda como `checkpoint:human-action` bloqueante en `01-09`, aislado en la wave 8. Las waves 1 a 7 corren contra Docker local y no dependen de él.
+
+### Detalle original
 
 1. **El criterio de éxito 1 dice "las 39 unidades **reales**"; `CONTEXT.md` dice que los nombres reales no existen todavía.**
    - Lo que sabemos: la distribución sí es real y verificable (8 clusters, 34 gestionadas + 5 externas, y las 5 externas están nombradas: Bogotá 2 con 2 aptos, Santa Marta 2, Santa Marta 3, Chinauta).

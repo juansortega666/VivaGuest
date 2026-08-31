@@ -12,7 +12,7 @@ El equipo son dos personas, así que **las fases corren en secuencia estricta**.
 - Fases enteras (1, 2, 3): trabajo planeado del milestone
 - Fases decimales (2.1, 2.2): inserciones urgentes (marcadas con INSERTED)
 
-- [ ] **Fase 1: Fundación, schema y RLS** - La base de datos impone las reglas del negocio y aísla a cada aseador antes de que exista una sola pantalla
+- [~] **Fase 1: Fundación, schema y RLS** - La base de datos impone las reglas del negocio y aísla a cada aseador antes de que exista una sola pantalla
 - [ ] **Fase 2: Acceso y administración del catálogo** - Login por rol y CRUD de apartamentos y aseadores para montar la operación real
 - [ ] **Fase 3: Motor de sincronización iCal** - Todo checkout publicado en Airbnb se convierte en un aseo pendiente, sin duplicados ni cancelaciones falsas
 - [ ] **Fase 4: Dashboard operativo del admin** - Toda la operación del día en una pantalla, con confirmación en un paso y alertas de una sola jerarquía
@@ -25,6 +25,7 @@ El equipo son dos personas, así que **las fases corren en secuencia estricta**.
 ## Phase Details
 
 ### Phase 1: Fundación, schema y RLS
+**Status**: Planned — 9 planes en 8 waves, verificados sin bloqueantes (2026-08-31)
 **Goal**: La base de datos existe, impone las reglas del negocio por sí sola y ningún aseador puede ver datos ajenos
 **Depends on**: Nada (primera fase)
 **Requirements**: PLAT-03, PLAT-05, PLAT-06, ASEO-07, FIN-01
