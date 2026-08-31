@@ -59,15 +59,16 @@ El equipo son dos personas, así que **las fases corren en secuencia estricta**.
 ### Phase 3: Motor de sincronización iCal
 **Goal**: Todo checkout publicado en los calendarios se convierte en un aseo pendiente, sin duplicados y sin cancelaciones falsas
 **Depends on**: Fases 1 y 2
-**Requirements**: SYNC-01, SYNC-02, SYNC-03, SYNC-04, SYNC-05, SYNC-06, SYNC-07, SYNC-08, SYNC-09, SYNC-10, SYNC-11, SYNC-12, SYNC-13, SYNC-14
+**Requirements**: SYNC-01, SYNC-02, SYNC-03, SYNC-04, SYNC-05, SYNC-06, SYNC-07, SYNC-08, SYNC-09, SYNC-10, SYNC-11, SYNC-12, SYNC-13, SYNC-14, SYNC-15, SYNC-16
 **Success Criteria** (qué debe ser VERDAD):
   1. Cada feed configurado se lee cada 30 minutos en una invocación aislada, y un feed caído no impide que los demás corran
   2. Un fin de bloqueo genera exactamente un aseo `normal` en la fecha correcta, corridas sucesivas sobre el mismo feed no crean duplicados, y los apartamentos con `gestion_vivaguest = false` generan un aseo informativo sin estado ni asignación
   3. Los bloqueos del propietario no generan aseos, y un feed vacío, inválido o truncado no cancela ningún aseo existente y queda registrado como intento fallido
   4. Cuando la reserva se mueve o desaparece, el aseo viejo se cancela y aparece uno nuevo sin confirmar, salvo que el aseo ya tenga `started_at`
   5. El admin queda alertado cuando un link deja de responder, cuando el propio job de sincronización deja de correr, cuando checkout y checkin caen el mismo día, y cuando una reserva parece una extensión creada como reserva nueva
-  6. Airbnb y Google Calendar pasan la misma batería de tests contra fixtures reales de cada uno: el core del pipeline no contiene ninguna rama por proveedor, solo el adaptador de normalización la tiene
-  7. Un evento con hora y uno recurrente (`RRULE`) de Google Calendar generan el aseo en la fecha correcta, y el admin ve de qué proveedor viene cada feed y cada aseo
+  6. Un apartamento con feed de Airbnb y de Google Calendar a la vez genera **un solo aseo** por checkout, aunque los dos feeds reporten la misma reserva con `UID` distintos
+  7. Una reserva que desaparece del feed espejo pero sigue en el autoritativo no cancela nada, y con el feed autoritativo caído ningún espejo puede cancelar ni reprogramar
+  8. Un evento con hora y uno recurrente (`RRULE`) de Google Calendar generan el aseo en la fecha correcta, y el admin ve de qué proveedor viene cada feed y cada aseo
 
 **Prerequisito humano (bloqueante, no es una tarea de la fase):** hay que capturar y versionar dos archivos, bloqueantes por igual: un `.ics` real de Airbnb y un `.ics` real de Google Calendar, de las cuentas propias de VivaGuest, antes de planear esta fase. Las muestras públicas están desactualizadas y la más citada en GitHub es falsa. Sin esos archivos no hay fixtures de test ni forma de resolver empíricamente la estabilidad del `UID`.
 **Plans**: TBD
@@ -184,7 +185,7 @@ Fases con patrón ya documentado en el research (se puede saltar):
 |-------|----------------|--------|-----------|
 | 1. Fundación, schema y RLS | 0/TBD | Not started | - |
 | 2. Acceso y administración del catálogo | 0/TBD | Not started | - |
-| 3. Motor de sincronización iCal (14 reqs) | 0/TBD | Not started | - |
+| 3. Motor de sincronización iCal (16 reqs) | 0/TBD | Not started | - |
 | 4. Dashboard operativo del admin | 0/TBD | Not started | - |
 | 5. Notificaciones push e instalación de la PWA | 0/TBD | Not started | - |
 | 6. PWA del aseador, offline-first | 0/TBD | Not started | - |
@@ -194,7 +195,7 @@ Fases con patrón ya documentado en el research (se puede saltar):
 
 ## Cobertura de requisitos
 
-85 de 85 requisitos v1 mapeados, cada uno a exactamente una fase. Sin huérfanos ni duplicados. Ver la tabla de trazabilidad en `.planning/REQUIREMENTS.md`.
+87 de 87 requisitos v1 mapeados, cada uno a exactamente una fase. Sin huérfanos ni duplicados. Ver la tabla de trazabilidad en `.planning/REQUIREMENTS.md`.
 
 ---
 *Roadmap creado: 2026-08-31. Resecuenciado el 2026-08-31 para equipo de dos, con el job de borrado movido después del piloto y Google Calendar añadido como fuente.*

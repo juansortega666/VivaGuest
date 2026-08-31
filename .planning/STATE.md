@@ -12,7 +12,7 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 Phase: 1 de 9 (Fundación, schema y RLS)
 Plan: — (fase sin planear)
 Status: Ready to plan
-Last activity: 2026-08-31 — Roadmap resecuenciado para equipo de dos (9 fases secuenciales); 85/85 requisitos v1 mapeados
+Last activity: 2026-08-31 — Roadmap resecuenciado para equipo de dos (9 fases secuenciales); 87/87 requisitos v1 mapeados
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -64,7 +64,8 @@ Ninguno.
 - **Free tier de Vercel y Supabase durante todo el desarrollo.** Obliga a retención de fotos de 30 días (no 6 meses), compresión a ~200 KB con lado largo de 1280 px y una foto por cuarto. El cron de 30 min vive en `pg_cron`, así que el tope de 1 corrida diaria de Vercel Hobby no aplica
 - **Vercel Hobby prohíbe uso comercial.** El piloto de la Fase 8 en operación real cruza esa línea y obliga a migrar a plan pago
 - **Equipo de dos personas.** Ejecución secuencial estricta; el grafo de paralelización queda documentado en ROADMAP.md pero no se asume
-- **Airbnb y Google Calendar son proveedores equivalentes**, no uno principal y otro secundario. Ambos de solo lectura vía `.ics`, sin OAuth ni escritura. El core del pipeline es agnóstico al proveedor; cada uno aporta solo su adaptador de normalización
+- **Airbnb es el feed autoritativo de reservas; Google Calendar es un espejo** de esas mismas reservas, con latencia acumulada. Un apartamento puede tener los dos a la vez. El core del pipeline es agnóstico al proveedor, pero el diff no: la autoridad del feed decide quién puede cancelar
+- **La identidad de reserva se resuelve entre feeds antes de insertar.** El índice único de un aseo activo por apartamento y fecha taparía el duplicado en silencio
 - **[Fase 4] Costura conocida:** confirmar un aseo lo asigna pero no notifica a nadie hasta que exista la Fase 5. El evento se encola y se drena después
 
 ## Deferred Items
