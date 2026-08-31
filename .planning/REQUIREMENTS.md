@@ -165,16 +165,106 @@
 
 ## Traceability
 
-Se llena durante la creación del roadmap.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| — | — | Pending |
+| PLAT-01 | Fase 2 | Pending |
+| PLAT-02 | Fase 2 | Pending |
+| PLAT-03 | Fase 1 | Pending |
+| PLAT-04 | Fase 2 | Pending |
+| PLAT-05 | Fase 1 | Pending |
+| PLAT-06 | Fase 1 | Pending |
+| PLAT-07 | Fase 2 | Pending |
+| APTO-01 | Fase 2 | Pending |
+| APTO-02 | Fase 2 | Pending |
+| APTO-03 | Fase 2 | Pending |
+| APTO-04 | Fase 2 | Pending |
+| APTO-05 | Fase 2 | Pending |
+| APTO-06 | Fase 2 | Pending |
+| APTO-07 | Fase 2 | Pending |
+| APTO-08 | Fase 2 | Pending |
+| APTO-09 | Fase 2 | Pending |
+| APTO-10 | Fase 2 | Pending |
+| APTO-11 | Fase 2 | Pending |
+| ASEADOR-01 | Fase 2 | Pending |
+| ASEADOR-02 | Fase 2 | Pending |
+| ASEADOR-03 | Fase 2 | Pending |
+| SYNC-01 | Fase 3 | Pending |
+| SYNC-02 | Fase 3 | Pending |
+| SYNC-03 | Fase 3 | Pending |
+| SYNC-04 | Fase 3 | Pending |
+| SYNC-05 | Fase 3 | Pending |
+| SYNC-06 | Fase 3 | Pending |
+| SYNC-07 | Fase 3 | Pending |
+| SYNC-08 | Fase 3 | Pending |
+| SYNC-09 | Fase 3 | Pending |
+| SYNC-10 | Fase 3 | Pending |
+| SYNC-11 | Fase 3 | Pending |
+| ASEO-01 | Fase 6 | Pending |
+| ASEO-02 | Fase 6 | Pending |
+| ASEO-03 | Fase 6 | Pending |
+| ASEO-04 | Fase 6 | Pending |
+| ASEO-05 | Fase 6 | Pending |
+| ASEO-06 | Fase 6 | Pending |
+| ASEO-07 | Fase 1 | Pending |
+| ASEO-08 | Fase 6 | Pending |
+| ASEO-09 | Fase 6 | Pending |
+| PWA-01 | Fase 5 | Pending |
+| PWA-02 | Fase 4 | Pending |
+| PWA-03 | Fase 4 | Pending |
+| PWA-04 | Fase 5 | Pending |
+| PWA-05 | Fase 5 | Pending |
+| PWA-06 | Fase 5 | Pending |
+| PWA-07 | Fase 5 | Pending |
+| PWA-08 | Fase 5 | Pending |
+| PWA-09 | Fase 5 | Pending |
+| PWA-10 | Fase 5 | Pending |
+| CHECK-01 | Fase 5 | Pending |
+| CHECK-02 | Fase 5 | Pending |
+| CHECK-03 | Fase 5 | Pending |
+| CHECK-04 | Fase 5 | Pending |
+| REPORT-01 | Fase 5 | Pending |
+| REPORT-02 | Fase 5 | Pending |
+| REPORT-03 | Fase 5 | Pending |
+| REPORT-04 | Fase 6 | Pending |
+| NOTIF-01 | Fase 4 | Pending |
+| NOTIF-02 | Fase 4 | Pending |
+| NOTIF-03 | Fase 4 | Pending |
+| NOTIF-04 | Fase 4 | Pending |
+| DASH-01 | Fase 6 | Pending |
+| DASH-02 | Fase 6 | Pending |
+| DASH-03 | Fase 6 | Pending |
+| DASH-04 | Fase 6 | Pending |
+| DASH-05 | Fase 6 | Pending |
+| DASH-06 | Fase 6 | Pending |
+| DASH-07 | Fase 6 | Pending |
+| FIN-01 | Fase 1 | Pending |
+| FIN-02 | Fase 7 | Pending |
+| FIN-03 | Fase 7 | Pending |
+| FIN-04 | Fase 7 | Pending |
+| FIN-05 | Fase 7 | Pending |
+| RET-01 | Fase 7 | Pending |
+| RET-02 | Fase 7 | Pending |
+| RET-03 | Fase 7 | Pending |
+| RET-04 | Fase 7 | Pending |
+| RET-05 | Fase 7 | Pending |
 
 **Coverage:**
 - v1 requirements: 80 total
-- Mapped to phases: 0
-- Unmapped: 80 ⚠️
+- Mapped to phases: 80 ✓
+- Unmapped: 0
+
+**Por fase:**
+
+| Fase | Requisitos |
+|------|------------|
+| 1. Fundación, schema y RLS | 5 |
+| 2. Acceso y administración del catálogo | 18 |
+| 3. Motor de sincronización iCal | 11 |
+| 4. Notificaciones push e instalación de la PWA | 6 |
+| 5. PWA del aseador, offline-first | 15 |
+| 6. Dashboard operativo del admin | 16 |
+| 7. Financiero y retención | 9 |
+| 8. Piloto en Bogotá 1 | 0 (fase de validación operativa) |
 
 ---
-*Requirements defined: 2026-08-31*
+*Requirements defined: 2026-08-31 — trazabilidad mapeada al roadmap 2026-08-31*
