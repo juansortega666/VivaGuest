@@ -229,3 +229,9 @@ Ninguna para esta fase. Dos avisos para cuando toque:
 ---
 *Phase: 01-fundaci-n-schema-y-rls*
 *Completed: 2026-08-31*
+
+## Self-Check: PASSED
+
+- 11 archivos declarados verificados en disco.
+- 6 commits verificados en el log: eb16ffa, 8d8f8a6, 6887895, 69f1c0e, 86ea563, 773279d.
+- Arbol de trabajo limpio.
