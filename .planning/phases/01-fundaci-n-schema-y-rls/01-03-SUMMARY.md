@@ -271,3 +271,12 @@ Ninguna.
 ---
 *Phase: 01-fundaci-n-schema-y-rls*
 *Completed: 2026-08-31*
+
+## Self-Check: PASSED
+
+- 6 archivos declarados verificados en disco: las 3 migraciones, `02_guardarrailes.test.sql`, este SUMMARY y `deferred-items.md`.
+- 4 commits verificados en el log: `f00d813`, `6131296`, `6f8ccf6`, `f9f1994`.
+- `git diff --diff-filter=D --name-only d38a06f..HEAD` devuelve exactamente `supabase/migrations/.gitkeep`: el único borrado es el intencional que pedía la nota del plan 01-01.
+- Árbol de trabajo limpio.
+- `supabase/migrations/.gitkeep` ya no existe; `db reset` dejó de emitir `Skipping migration .gitkeep...`.
+- `STATE.md` y `ROADMAP.md` sin tocar, como exige la ejecución en worktree paralelo.
