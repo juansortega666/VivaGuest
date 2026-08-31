@@ -12,7 +12,7 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 Phase: 1 de 9 (Fundación, schema y RLS)
 Plan: — (fase sin planear)
 Status: Ready to plan
-Last activity: 2026-08-31 — Roadmap resecuenciado para equipo de dos (9 fases secuenciales); 87/87 requisitos v1 mapeados
+Last activity: 2026-08-31 — Roadmap resecuenciado para equipo de dos (9 fases secuenciales); 83/83 requisitos v1 mapeados
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -54,7 +54,7 @@ Ninguno.
 
 ### Blockers/Concerns
 
-- **[Fase 3] Bloqueante humano:** faltan dos archivos bloqueantes por igual: un `.ics` real de Airbnb y uno real de Google Calendar, de las cuentas de VivaGuest. Es prerequisito para planear la fase, no una tarea dentro de ella. Sin esos archivos no hay fixtures ni forma de resolver la estabilidad del `UID`
+- **[Fase 3] Bloqueante humano:** falta capturar un `.ics` real de Airbnb de la cuenta de VivaGuest. Es prerequisito para planear la fase, no una tarea dentro de ella. Sin esos archivos no hay fixtures ni forma de resolver la estabilidad del `UID`
 - **[Fase 3] Conflicto de research sin resolver:** la estabilidad del `UID` de Airbnb está en contradicción directa entre documentos; se resuelve empíricamente contra los feeds propios, con instrumentación desde el primer sync
 - **[Fase 1] Abierto de producto:** la lista definitiva de tareas del checklist bloquea el seed del catálogo, no el schema. Se arranca con el catálogo provisional (máximo 3 tareas por tipo de cuarto), editable sin migración
 - **[Fase 5] Riesgo aceptado:** push como único canal, sin semáforo de entregabilidad. Si en el piloto de Bogotá un aseo confirmado nunca llega al aseador, entra el semáforo (NOTIF-V2-01)
@@ -64,8 +64,9 @@ Ninguno.
 - **Free tier de Vercel y Supabase durante todo el desarrollo.** Obliga a retención de fotos de 30 días (no 6 meses), compresión a ~200 KB con lado largo de 1280 px y una foto por cuarto. El cron de 30 min vive en `pg_cron`, así que el tope de 1 corrida diaria de Vercel Hobby no aplica
 - **Vercel Hobby prohíbe uso comercial.** El piloto de la Fase 8 en operación real cruza esa línea y obliga a migrar a plan pago
 - **Equipo de dos personas.** Ejecución secuencial estricta; el grafo de paralelización queda documentado en ROADMAP.md pero no se asume
-- **Airbnb es el feed autoritativo de reservas; Google Calendar es un espejo** de esas mismas reservas, con latencia acumulada. Un apartamento puede tener los dos a la vez. El core del pipeline es agnóstico al proveedor, pero el diff no: la autoridad del feed decide quién puede cancelar
-- **La identidad de reserva se resuelve entre feeds antes de insertar.** El índice único de un aseo activo por apartamento y fecha taparía el duplicado en silencio
+- **Airbnb es la única fuente de calendario**, vía su exportación iCal: un `GET` a una URL secreta, sin API key ni OAuth. La API oficial de Airbnb es cerrada y de partners. Google Calendar quedó descartado porque es otro suscriptor del mismo archivo, con retraso de polling propio
+- **La URL de exportación es la credencial** (secreta e inadivinable), así que vive en `property_secrets` igual que el código de acceso
+- **El feed no trae número de huéspedes ni nombre**, solo 6 campos. Por eso el paso de confirmación del admin es el único punto por donde entra ese dato
 - **[Fase 4] Costura conocida:** confirmar un aseo lo asigna pero no notifica a nadie hasta que exista la Fase 5. El evento se encola y se drena después
 
 ## Deferred Items
@@ -77,11 +78,11 @@ Ninguno.
 | Desempeño | Scorecard por aseador (PERF-V2-01) | v2 | 2026-08-31 |
 | Propietarios | Dashboard de propietarios (OWNER-V2-01) | v2 | 2026-08-31 |
 | Calendario | Integración con Booking.com | Fuera de MVP | 2026-08-31 |
-| Calendario | Escritura hacia Google Calendar (publicar aseos) | Fuera de MVP | 2026-08-31 |
+| Calendario | Google Calendar como fuente (es suscriptor del mismo .ics) | Descartado | 2026-08-31 |
 | Piloto | Métrica de éxito del piloto sin definir | Abierto | 2026-08-31 |
 
 ## Session Continuity
 
 Last session: 2026-08-31
-Stopped at: Roadmap resecuenciado a 9 fases secuenciales; alcance ajustado a free tier, Google Calendar y equipo de dos
+Stopped at: Alcance cerrado en Airbnb como única fuente vía exportación iCal; agregado onboarding visual del feed (APTO-12)
 Resume file: None

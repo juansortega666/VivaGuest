@@ -19,7 +19,7 @@
 
 - [ ] **APTO-01**: Admin crea, edita, activa y desactiva apartamentos
 - [ ] **APTO-02**: Admin configura tarifa al huésped y pago al aseador, y el sistema impide activar el apartamento sin ambas
-- [ ] **APTO-03**: Admin registra uno o más links de calendario por apartamento, marca cuál es el autoritativo, y el sistema valida que respondan al guardar
+- [ ] **APTO-03**: Admin registra el link de exportación iCal de Airbnb del apartamento y el sistema valida que responda al guardar
 - [ ] **APTO-04**: Admin registra ubicación de Google Maps y código de acceso del apartamento
 - [ ] **APTO-05**: Admin configura la hora límite del aseo por apartamento, con default 11:30
 - [ ] **APTO-06**: Admin define la lista de cuartos del apartamento, que determina qué checklist se arma
@@ -28,6 +28,7 @@
 - [ ] **APTO-09**: Admin registra el contacto externo (nombre + contacto, texto libre) cuando `gestion_vivaguest` es false
 - [ ] **APTO-10**: Admin marca si el fee va discriminado o incluido en el precio total (informativo)
 - [ ] **APTO-11**: Admin busca apartamentos desde el dashboard
+- [ ] **APTO-12**: Al conectar el calendario, el admin ve una guía visual paso a paso de dónde sacar el link de exportación en Airbnb, y al pegarlo el sistema le confirma en pantalla que el feed sirve, cuántas reservas encontró y cuál es el próximo checkout detectado
 
 ### Aseadores
 
@@ -48,11 +49,6 @@
 - [ ] **SYNC-09**: El sistema alerta al admin cuando un link de calendario deja de responder
 - [ ] **SYNC-10**: El sistema alerta al admin cuando el propio job de sincronización deja de correr
 - [ ] **SYNC-11**: El sistema genera un aseo informativo, sin estado ni asignación, para apartamentos con `gestion_vivaguest = false`
-- [ ] **SYNC-12**: El sistema resuelve como una sola reserva la que llega por varios feeds del mismo apartamento, y genera un único aseo aunque Airbnb y Google la reporten con `UID` distintos
-- [ ] **SYNC-15**: El sistema solo cancela un aseo cuando la reserva desaparece del feed autoritativo; que desaparezca de un feed espejo no cancela nada
-- [ ] **SYNC-16**: Cuando el feed autoritativo de un apartamento está caído, ningún feed espejo puede cancelar ni reprogramar aseos de ese apartamento
-- [ ] **SYNC-13**: El sistema procesa eventos con hora y eventos recurrentes (`RRULE`, `VTIMEZONE`), que Google Calendar emite y Airbnb no
-- [ ] **SYNC-14**: El admin ve de qué proveedor viene cada feed y cada aseo generado
 
 ### Ciclo de vida del aseo
 
@@ -151,8 +147,9 @@
 | Feature | Reason |
 |---------|--------|
 | API oficial de Airbnb | No existe API pública; iCal es la única vía |
-| Integración con Booking.com | El MVP lee únicamente calendarios de Airbnb y Google Calendar; Booking no expone código de reserva en su iCal |
-| Escritura hacia Google Calendar | Google entra solo como fuente de lectura vía `.ics`; publicar aseos exigiría OAuth y reconciliación bidireccional |
+| Integración con Booking.com | El MVP lee únicamente calendarios de Airbnb; Booking no expone código de reserva en su iCal |
+| Google Calendar como fuente | Google es un suscriptor del mismo `.ics` de Airbnb, no una fuente distinta. Añade latencia de polling y regenera los `UID` que necesitamos para detectar reservas movidas |
+| API oficial de Airbnb | Cerrada, solo para partners aprobados. La exportación iCal es la única vía disponible |
 | Checklist configurable por apartamento | Biblioteca fija y global en el MVP; los cuartos sí son configurables |
 | Estados de pago por gasto individual | El reembolso se gestiona fuera del sistema |
 | Alerta de ventana de tiempo insuficiente | Descartada explícitamente; se gestiona con el huésped por fuera |
@@ -194,6 +191,7 @@
 | APTO-09 | Fase 2 | Pending |
 | APTO-10 | Fase 2 | Pending |
 | APTO-11 | Fase 2 | Pending |
+| APTO-12 | Fase 2 | Pending |
 | ASEADOR-01 | Fase 2 | Pending |
 | ASEADOR-02 | Fase 2 | Pending |
 | ASEADOR-03 | Fase 2 | Pending |
@@ -208,11 +206,6 @@
 | SYNC-09 | Fase 3 | Pending |
 | SYNC-10 | Fase 3 | Pending |
 | SYNC-11 | Fase 3 | Pending |
-| SYNC-12 | Fase 3 | Pending |
-| SYNC-13 | Fase 3 | Pending |
-| SYNC-14 | Fase 3 | Pending |
-| SYNC-15 | Fase 3 | Pending |
-| SYNC-16 | Fase 3 | Pending |
 | ASEO-01 | Fase 4 | Pending |
 | ASEO-02 | Fase 4 | Pending |
 | ASEO-03 | Fase 4 | Pending |
@@ -265,8 +258,8 @@
 | RET-07 | Fase 7 | Pending |
 
 **Coverage:**
-- v1 requirements: 87 total
-- Mapped to phases: 87 ✓
+- v1 requirements: 83 total
+- Mapped to phases: 83 ✓
 - Unmapped: 0
 
 **Por fase:**
@@ -274,8 +267,8 @@
 | Fase | Requisitos |
 |------|------------|
 | 1. Fundación, schema y RLS | 5 |
-| 2. Acceso y administración del catálogo | 18 |
-| 3. Motor de sincronización iCal | 16 |
+| 2. Acceso y administración del catálogo | 19 |
+| 3. Motor de sincronización iCal | 11 |
 | 4. Dashboard operativo del admin | 16 |
 | 5. Notificaciones push e instalación de la PWA | 6 |
 | 6. PWA del aseador, offline-first | 15 |
@@ -284,4 +277,4 @@
 | 9. Borrado automático y retención | 5 |
 
 ---
-*Requirements defined: 2026-08-31. Actualizado 2026-08-31: alcance a solo Airbnb + Google Calendar, retención de fotos a 30 días, resecuenciado para equipo de dos.*
+*Requirements defined: 2026-08-31. Actualizado 2026-08-31: alcance a solo Airbnb vía exportación iCal, retención de fotos a 30 días, resecuenciado para equipo de dos.*
