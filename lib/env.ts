@@ -3,8 +3,8 @@ import { z } from 'zod';
 /**
  * Parseo de variables de entorno con zod.
  *
- * Nomenclatura nueva de Supabase (`sb_publishable_…` / `sb_secret_…`): las claves
- * `anon` / `service_role` quedan deprecadas a fin de 2026.
+ * Se usa la nomenclatura nueva de claves de Supabase (publishable / secret); las
+ * claves `anon` / `service_role` quedan deprecadas a fin de 2026.
  *
  * Este módulo expone DOS superficies separadas a propósito:
  *   - `publicEnv()`: seguro en el bundle del cliente. Solo variables `NEXT_PUBLIC_`.
