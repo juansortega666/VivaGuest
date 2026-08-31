@@ -329,21 +329,248 @@ create trigger cleanings_set_updated_at
 
 
 -- ===========================================================================
+-- CHECKLIST EJECUTADO
+-- ===========================================================================
+
+-- El checklist se materializa AL CONFIRMAR, no al crear el aseo: un aseo sin
+-- confirmar puede ser cancelado por el sync, y los cuartos del apartamento
+-- pueden editarse entre la detección y la confirmación. Quien lo materializa
+-- es confirm_cleaning() (plan 01-08). Por eso room_label, task_label y
+-- requiere_foto son SNAPSHOT: la biblioteca global de tareas puede cambiar y
+-- un checklist ya ejecutado no debe reescribirse.
+create table public.cleaning_checklist_items (
+  id                uuid primary key default gen_random_uuid(),
+  cleaning_id       uuid not null references public.cleanings(id) on delete cascade,
+  property_room_id  uuid not null references public.property_rooms(id) on delete restrict,
+  checklist_task_id uuid not null references public.checklist_tasks(id) on delete restrict,
+  room_label        text not null,     -- snapshot
+  task_label        text not null,     -- snapshot
+  requiere_foto     boolean not null,  -- snapshot
+  sort_order        int not null default 0,
+  done_at           timestamptz,
+  done_by           uuid references public.profiles(id),
+  nota              text,
+  constraint cci_cleaning_room_task_uniq unique (cleaning_id, property_room_id, checklist_task_id)
+);
+
+comment on table public.cleaning_checklist_items is
+  'Checklist ejecutado de un aseo. Se materializa al CONFIRMAR (confirm_cleaning), no al crear el aseo. Las etiquetas son snapshot de la biblioteca global.';
+
+create index cci_cleaning_idx on public.cleaning_checklist_items (cleaning_id);
+
+
+-- ===========================================================================
+-- REPORTES DE CAMPO: daños, gastos y faltantes
+-- ===========================================================================
+
+create table public.damages (
+  id          uuid primary key default gen_random_uuid(),
+  cleaning_id uuid not null references public.cleanings(id) on delete cascade,
+  property_id uuid not null references public.properties(id) on delete restrict,
+  descripcion text not null check (length(btrim(descripcion)) > 0),
+  reported_by uuid not null references public.profiles(id),
+  created_at  timestamptz not null default now(),
+  resolved_at timestamptz,
+  resolved_by uuid references public.profiles(id),
+  nota_admin  text
+);
+
+create index damages_cleaning_idx on public.damages (cleaning_id);
+create index damages_open_idx on public.damages (property_id, created_at desc)
+  where resolved_at is null;
+
+
+create table public.expenses (
+  id          uuid primary key default gen_random_uuid(),
+  cleaning_id uuid not null references public.cleanings(id) on delete cascade,
+  property_id uuid not null references public.properties(id) on delete restrict,
+  concepto    text not null check (length(btrim(concepto)) > 0),
+  -- DIVERGENCIA 3: bigint de pesos enteros, no numeric(12,2).
+  monto       bigint not null check (monto > 0),
+  reported_by uuid not null references public.profiles(id),
+  created_at  timestamptz not null default now()
+);
+
+create index expenses_cleaning_idx on public.expenses (cleaning_id);
+
+
+create table public.missing_item_reports (
+  id          uuid primary key default gen_random_uuid(),
+  cleaning_id uuid not null references public.cleanings(id) on delete cascade,
+  property_id uuid not null references public.properties(id) on delete restrict,
+  reported_by uuid not null references public.profiles(id),
+  created_at  timestamptz not null default now()
+);
+
+create index mir_cleaning_idx on public.missing_item_reports (cleaning_id);
+
+
+create table public.missing_item_lines (
+  id              uuid primary key default gen_random_uuid(),
+  report_id       uuid not null references public.missing_item_reports(id) on delete cascade,
+  catalog_item_id uuid references public.missing_item_catalog(id) on delete set null,
+  nombre_libre    text,            -- rama "Otros"
+  nombre_snapshot text not null,   -- lo que se le mostró al aseador al reportar
+  cantidad        smallint not null default 1 check (cantidad > 0),
+
+  -- "Otros" NO es una fila del catálogo: es la rama de texto libre. O la línea
+  -- viene del catálogo, o es texto libre; nunca ambas ni ninguna.
+  constraint mil_exactly_one_source check (
+       (catalog_item_id is not null and nombre_libre is null)
+    or (catalog_item_id is null and nombre_libre is not null
+        and length(btrim(nombre_libre)) > 0)
+  )
+);
+
+comment on column public.missing_item_lines.nombre_snapshot is
+  'Lo que se mostró al reportar. Sobrevive a que el ítem del catálogo se renombre o se borre (catalog_item_id es on delete set null).';
+
+create index mil_report_idx on public.missing_item_lines (report_id);
+
+
+-- ===========================================================================
+-- EVIDENCIA FOTOGRÁFICA
+--
+-- Va DESPUÉS de damages, expenses, missing_item_reports y
+-- cleaning_checklist_items porque tiene FK a las cuatro. La alternativa es
+-- crearla sin FK y añadirlas con `alter table … add constraint`; se prefiere
+-- el orden correcto.
+--
+-- CONVENCIÓN DE RUTA EN STORAGE: {cleaning_id}/{kind}/{uuid}.{ext}
+-- El primer segmento DEBE ser el cleaning_id: las policies de storage.objects
+-- del plan 01-08 autorizan comparando
+--   (storage.foldername(name))[1]::uuid  contra el aseo del aseador.
+-- Cambiar la convención rompe la autorización de Storage en silencio.
+--
+-- La evidencia es INMUTABLE: una foto subida no se reemplaza. Eso se impone
+-- por AUSENCIA de grant de UPDATE/DELETE al aseador (migración 07) y por
+-- ausencia de policy de UPDATE/DELETE en storage.objects (migración 08), más
+-- el `unique` de storage_path de aquí. Mitiga T-01-25.
+-- ===========================================================================
+
+create table public.cleaning_photos (
+  id                uuid primary key default gen_random_uuid(),
+  cleaning_id       uuid not null references public.cleanings(id) on delete cascade,
+  kind              text not null check (kind in ('checklist','dano','gasto','faltante')),
+
+  checklist_item_id uuid references public.cleaning_checklist_items(id) on delete cascade,
+  damage_id         uuid references public.damages(id) on delete cascade,
+  expense_id        uuid references public.expenses(id) on delete cascade,
+  missing_report_id uuid references public.missing_item_reports(id) on delete cascade,
+
+  storage_bucket    text not null default 'evidencia',
+  -- unique: una ruta de Storage pertenece a una sola fila, para siempre.
+  storage_path      text not null unique,
+  mime_type         text not null check (mime_type in ('image/jpeg','image/png','image/webp')),
+  bytes             int not null check (bytes > 0),
+  width             int,
+  height            int,
+  taken_at          timestamptz,
+  captured_lat      numeric(9,6),   -- coordenadas, no dinero: numeric es correcto
+  captured_lng      numeric(9,6),
+  uploaded_by       uuid not null references public.profiles(id),
+  created_at        timestamptz not null default now(),
+
+  -- DIVERGENCIA 4: purga de fotos a 30 días (RET-06). Misma razón que en
+  -- cleanings: la columna se crea ahora, el job llega en la Fase 9.
+  deleted_at        timestamptz,
+
+  -- Exactamente un dueño entre los cuatro punteros nullable. Sin esto, una
+  -- foto puede quedar colgada de nada (y desaparecer de toda vista) o de dos
+  -- cosas a la vez (y contarse dos veces).
+  constraint photo_exactly_one_owner check (
+    (checklist_item_id is not null)::int + (damage_id is not null)::int
+  + (expense_id is not null)::int + (missing_report_id is not null)::int = 1
+  )
+);
+
+comment on column public.cleaning_photos.storage_path is
+  'Ruta en el bucket. Convención: {cleaning_id}/{kind}/{uuid}.{ext}. El primer segmento DEBE ser el cleaning_id: las policies de storage.objects autorizan por ahí.';
+comment on column public.cleaning_photos.deleted_at is
+  'Soft delete de la purga de fotos a 30 días (RET-06, Fase 9). El objeto se encola en storage_deletion_queue; borrar la fila sin borrar el objeto lo deja huérfano facturando.';
+
+create index cleaning_photos_cleaning_idx on public.cleaning_photos (cleaning_id);
+create index cleaning_photos_checklist_idx on public.cleaning_photos (checklist_item_id)
+  where checklist_item_id is not null;
+
+
+-- ===========================================================================
+-- AUDITORÍA DE LECTURA DEL CÓDIGO DE ACCESO
+--
+-- Esta tabla es el log de acceso a una credencial que abre una puerta física
+-- con huéspedes y pertenencias adentro. La escribe reveal_access_code()
+-- (plan 01-08) ANTES del `return query`, en la MISMA transacción: no puede
+-- existir lectura sin rastro. Mitiga T-01-23.
+--
+-- `on delete set null` en cleaning_id y NO cascade: si la purga de la Fase 9
+-- borra el aseo, el rastro de quién vio el código debe sobrevivir. Un cascade
+-- aquí convertiría la retención en un borrador de evidencia de acceso.
+-- ===========================================================================
+
+create table public.access_code_reads (
+  id          bigserial primary key,
+  property_id uuid not null references public.properties(id) on delete cascade,
+  cleaning_id uuid references public.cleanings(id) on delete set null,
+  read_by     uuid not null references public.profiles(id),
+  read_at     timestamptz not null default now(),
+  ip          inet,
+  user_agent  text
+);
+
+comment on table public.access_code_reads is
+  'Bitácora de lecturas del código de acceso. La escribe reveal_access_code() en la misma transacción que la lectura. cleaning_id es on delete SET NULL a propósito: el rastro sobrevive a la purga del aseo.';
+
+create index access_code_reads_prop_idx on public.access_code_reads (property_id, read_at desc);
+
+
+-- ===========================================================================
 -- CIERRE DEL AGUJERO DE PRIVILEGIOS POR DEFECTO
 --
 -- Mismo problema medido y documentado en la migración 03: con la CLI 2.116.0
 -- que pinea este repo, toda tabla creada en `public` por `postgres` nace con
 -- arwdDxtm — SELECT, INSERT, UPDATE, DELETE, TRUNCATE — para `anon` y
--- `authenticated`, vía pg_default_acl. Sin este bloque, las tablas de arriba
--- quedan escribibles por cualquiera SIN AUTENTICAR y sin RLS que las frene,
--- porque la RLS la habilita la migración 07.
+-- `authenticated`, vía pg_default_acl. Sin este bloque, las 10 tablas de
+-- arriba quedan escribibles por cualquiera SIN AUTENTICAR y sin RLS que las
+-- frene, porque la RLS la habilita la migración 07.
+--
+-- Concretamente, sin este REVOKE: `anon` podría leer la agenda completa con
+-- direcciones e instrucciones, insertar aseos, y TRUNCAR access_code_reads,
+-- que es la bitácora de acceso a las cerraduras. TRUNCATE ignora la RLS por
+-- completo, así que ni siquiera la migración 07 lo taparía por sí sola.
 --
 -- No es un GRANT: la migración 07 sigue siendo la dueña de decidir quién lee
 -- qué. Guardarraíl 4 de 02_guardarrailes.test.sql.
+--
+-- ⚠️ SIGUE PENDIENTE para el plan 01-07, y este bloque NO lo cubre:
+--   1. Revocar los DEFAULT PRIVILEGES, o toda tabla de las migraciones 05 y 06
+--      y de las Fases 2 a 9 reintroduce el agujero:
+--        alter default privileges for role postgres in schema public
+--          revoke all on tables from anon, authenticated;
+--        alter default privileges for role postgres in schema public
+--          revoke all on sequences from anon, authenticated;
+--      Ojo con `authenticated`: la migración propuesta en 01-RESEARCH.md §3.1
+--      solo contempla `anon` porque se escribió con la medición vieja.
+--   2. `revoke all on function … from public, anon` en cada RPC: el ACL por
+--      defecto de funciones es anon=X.
+--   3. `grant select on public.access_code_reads to authenticated` + policy
+--      solo-admin: lo exige la aserción 16 de 00_rls_aseos.test.sql.
 -- ===========================================================================
 
 revoke all on table
   public.calendar_feeds,
   public.calendar_reservations,
-  public.cleanings
+  public.cleanings,
+  public.cleaning_checklist_items,
+  public.damages,
+  public.expenses,
+  public.missing_item_reports,
+  public.missing_item_lines,
+  public.cleaning_photos,
+  public.access_code_reads
 from anon, authenticated;
+
+-- `access_code_reads.id` es bigserial: crea una secuencia que también nace con
+-- privilegios por defecto. Una secuencia legible no filtra datos, pero
+-- `USAGE`/`UPDATE` para anon permite quemar el contador y es superficie que no
+-- tiene por qué existir.
+revoke all on sequence public.access_code_reads_id_seq from anon, authenticated;
