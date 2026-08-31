@@ -6,7 +6,16 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:start": "supabase db start",
+    "db:reset": "supabase db reset --local",
+    "db:test": "supabase test db --local",
+    "db:lint": "supabase db lint --local",
+    "db:advisors": "supabase db advisors --local --type security --fail-on error",
+    "db:types": "supabase gen types typescript --local --schema public > lib/database.types.ts",
+    "db:types:check": "supabase gen types typescript --local --schema public > /tmp/vg.types.gen.ts && diff -u lib/database.types.ts /tmp/vg.types.gen.ts",
+    "test:unit": "vitest run",
+    "ci:arch": "bash scripts/ci/check-service-role.sh"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.5",
