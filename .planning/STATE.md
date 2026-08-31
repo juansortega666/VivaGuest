@@ -12,7 +12,7 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 Phase: 1 de 9 (Fundación, schema y RLS)
 Plan: — (fase sin planear)
 Status: Ready to plan
-Last activity: 2026-08-31 — Roadmap resecuenciado para equipo de dos (9 fases secuenciales); 83/83 requisitos v1 mapeados
+Last activity: 2026-08-31 — Roadmap resecuenciado para equipo de dos (9 fases secuenciales); 85/85 requisitos v1 mapeados
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -54,7 +54,7 @@ Ninguno.
 
 ### Blockers/Concerns
 
-- **[Fase 3] Bloqueante humano:** falta capturar un `.ics` real de Airbnb y uno de Google Calendar de la cuenta de VivaGuest. Es prerequisito para planear la fase, no una tarea dentro de ella. Sin esos archivos no hay fixtures ni forma de resolver la estabilidad del `UID`
+- **[Fase 3] Bloqueante humano:** faltan dos archivos bloqueantes por igual: un `.ics` real de Airbnb y uno real de Google Calendar, de las cuentas de VivaGuest. Es prerequisito para planear la fase, no una tarea dentro de ella. Sin esos archivos no hay fixtures ni forma de resolver la estabilidad del `UID`
 - **[Fase 3] Conflicto de research sin resolver:** la estabilidad del `UID` de Airbnb está en contradicción directa entre documentos; se resuelve empíricamente contra los feeds propios, con instrumentación desde el primer sync
 - **[Fase 1] Abierto de producto:** la lista definitiva de tareas del checklist bloquea el seed del catálogo, no el schema. Se arranca con el catálogo provisional (máximo 3 tareas por tipo de cuarto), editable sin migración
 - **[Fase 5] Riesgo aceptado:** push como único canal, sin semáforo de entregabilidad. Si en el piloto de Bogotá un aseo confirmado nunca llega al aseador, entra el semáforo (NOTIF-V2-01)
@@ -64,7 +64,7 @@ Ninguno.
 - **Free tier de Vercel y Supabase durante todo el desarrollo.** Obliga a retención de fotos de 30 días (no 6 meses), compresión a ~200 KB con lado largo de 1280 px y una foto por cuarto. El cron de 30 min vive en `pg_cron`, así que el tope de 1 corrida diaria de Vercel Hobby no aplica
 - **Vercel Hobby prohíbe uso comercial.** El piloto de la Fase 8 en operación real cruza esa línea y obliga a migrar a plan pago
 - **Equipo de dos personas.** Ejecución secuencial estricta; el grafo de paralelización queda documentado en ROADMAP.md pero no se asume
-- **Google Calendar entra como fuente de solo lectura** vía su URL `.ics`, sin OAuth ni escritura
+- **Airbnb y Google Calendar son proveedores equivalentes**, no uno principal y otro secundario. Ambos de solo lectura vía `.ics`, sin OAuth ni escritura. El core del pipeline es agnóstico al proveedor; cada uno aporta solo su adaptador de normalización
 - **[Fase 4] Costura conocida:** confirmar un aseo lo asigna pero no notifica a nadie hasta que exista la Fase 5. El evento se encola y se drena después
 
 ## Deferred Items

@@ -19,7 +19,7 @@
 
 - [ ] **APTO-01**: Admin crea, edita, activa y desactiva apartamentos
 - [ ] **APTO-02**: Admin configura tarifa al huésped y pago al aseador, y el sistema impide activar el apartamento sin ambas
-- [ ] **APTO-03**: Admin registra uno o más links de calendario (Airbnb o Google Calendar) y el sistema valida que respondan al guardar
+- [ ] **APTO-03**: Admin registra uno o más links de calendario, de Airbnb o de Google Calendar indistintamente, y el sistema valida que respondan al guardar
 - [ ] **APTO-04**: Admin registra ubicación de Google Maps y código de acceso del apartamento
 - [ ] **APTO-05**: Admin configura la hora límite del aseo por apartamento, con default 11:30
 - [ ] **APTO-06**: Admin define la lista de cuartos del apartamento, que determina qué checklist se arma
@@ -48,7 +48,9 @@
 - [ ] **SYNC-09**: El sistema alerta al admin cuando un link de calendario deja de responder
 - [ ] **SYNC-10**: El sistema alerta al admin cuando el propio job de sincronización deja de correr
 - [ ] **SYNC-11**: El sistema genera un aseo informativo, sin estado ni asignación, para apartamentos con `gestion_vivaguest = false`
-- [ ] **SYNC-12**: El sistema procesa feeds de Google Calendar además de Airbnb, incluyendo eventos con hora y eventos recurrentes
+- [ ] **SYNC-12**: El sistema trata Airbnb y Google Calendar como proveedores equivalentes: un mismo pipeline ingiere ambos y cada proveedor aporta solo su adaptador de normalización
+- [ ] **SYNC-13**: El sistema procesa eventos con hora y eventos recurrentes (`RRULE`, `VTIMEZONE`), que Google Calendar emite y Airbnb no
+- [ ] **SYNC-14**: El admin ve de qué proveedor viene cada feed y cada aseo generado
 
 ### Ciclo de vida del aseo
 
@@ -205,6 +207,8 @@
 | SYNC-10 | Fase 3 | Pending |
 | SYNC-11 | Fase 3 | Pending |
 | SYNC-12 | Fase 3 | Pending |
+| SYNC-13 | Fase 3 | Pending |
+| SYNC-14 | Fase 3 | Pending |
 | ASEO-01 | Fase 4 | Pending |
 | ASEO-02 | Fase 4 | Pending |
 | ASEO-03 | Fase 4 | Pending |
@@ -257,8 +261,8 @@
 | RET-07 | Fase 7 | Pending |
 
 **Coverage:**
-- v1 requirements: 83 total
-- Mapped to phases: 83 ✓
+- v1 requirements: 85 total
+- Mapped to phases: 85 ✓
 - Unmapped: 0
 
 **Por fase:**
@@ -267,7 +271,7 @@
 |------|------------|
 | 1. Fundación, schema y RLS | 5 |
 | 2. Acceso y administración del catálogo | 18 |
-| 3. Motor de sincronización iCal | 12 |
+| 3. Motor de sincronización iCal | 14 |
 | 4. Dashboard operativo del admin | 16 |
 | 5. Notificaciones push e instalación de la PWA | 6 |
 | 6. PWA del aseador, offline-first | 15 |

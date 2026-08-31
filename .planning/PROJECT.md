@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Plataforma que automatiza la asignación y ejecución de aseos en propiedades de renta corta (STR). Lee los calendarios de Airbnb y de Google Calendar vía iCal, genera el aseo al detectar el fin del bloqueo, pasa por confirmación humana del admin (número de huéspedes + instrucciones), lo asigna en firme al aseador responsable fijo del apartamento, y el aseador lo ejecuta desde una PWA con checklist por cuarto y evidencia fotográfica. Reemplaza la coordinación actual por WhatsApp y Excel sobre 39 unidades reales en 8 clusters de Colombia, de las cuales 34 se gestionan dentro del sistema y 5 son informativas.
+Plataforma que automatiza la asignación y ejecución de aseos en propiedades de renta corta (STR). Lee calendarios iCal de Airbnb y de Google Calendar, tratados como proveedores equivalentes, genera el aseo al detectar el fin del bloqueo, pasa por confirmación humana del admin (número de huéspedes + instrucciones), lo asigna en firme al aseador responsable fijo del apartamento, y el aseador lo ejecuta desde una PWA con checklist por cuarto y evidencia fotográfica. Reemplaza la coordinación actual por WhatsApp y Excel sobre 39 unidades reales en 8 clusters de Colombia, de las cuales 34 se gestionan dentro del sistema y 5 son informativas.
 
 ## Core Value
 
@@ -102,7 +102,9 @@ Que ningún aseo se pierda: todo checkout detectado en calendario termina en un 
 - Mínimo 1 noche de reserva → máximo 1 aseo activo por apartamento por fecha.
 - Airbnb refresca su iCal cada ~3 horas (los channel managers reportan hasta 1 vez al día en el peor caso): latencia conocida y aceptada.
 - Airbnb solo exporta fechas futuras. La reserva que termina hoy desaparece del feed, así que el diff no puede tratar "ya no está" como "cancelada".
-- El `SUMMARY` de Airbnb distingue reserva (`Reserved`) de bloqueo del propietario (`Airbnb (Not available)`), y es el único discriminador disponible.
+- El `SUMMARY` de Airbnb distingue reserva (`Reserved`) de bloqueo del propietario (`Airbnb (Not available)`), y es el único discriminador disponible en ese proveedor.
+- Google Calendar emite `VTIMEZONE`, `RRULE` y eventos con hora, que Airbnb nunca emite. Airbnb solo emite 6 propiedades y ninguna `X-`. Los dos adaptadores normalizan hacia la misma forma interna.
+- El código de reserva solo existe en Airbnb, dentro de la URL del `DESCRIPTION`. En Google Calendar la detección de extensión mal creada se apoya en continuidad de `UID` y adyacencia de fechas.
 - Cerradura inteligente en ~90% de los casos, llave física en el 10% restante.
 - Cierre de mes = último día laboral del mes calendario, excluyendo solo fines de semana (no festivos).
 
@@ -110,14 +112,14 @@ Que ningún aseo se pierda: todo checkout detectado en calendario termina en un 
 
 **Abiertos de producto (no bloquean el arranque):** lista definitiva de tareas del checklist; enum de tipo de gestión externa; corrección del deck (dice "50+ propiedades", el número real es 39).
 
-**Bloqueante técnico para la fase de sync:** hace falta capturar un `.ics` real de Airbnb de la cuenta de VivaGuest antes de fijar el parser. Las muestras públicas están desactualizadas y la más citada en GitHub es falsa (expone nombre, email y teléfono en el `SUMMARY`, formato que Airbnb retiró en 2019).
+**Bloqueante técnico para la fase de sync:** hacen falta dos archivos, ambos bloqueantes por igual: un `.ics` real de Airbnb y un `.ics` real de Google Calendar, de las cuentas de VivaGuest antes de fijar el parser. Las muestras públicas están desactualizadas y la más citada en GitHub es falsa (expone nombre, email y teléfono en el `SUMMARY`, formato que Airbnb retiró en 2019).
 
 ## Constraints
 
 - **Tech stack**: Next.js 15 (App Router) + TypeScript + Tailwind + Supabase (Postgres, Auth, Storage, RLS), deploy en Vercel — un solo proyecto sirve dashboard admin y PWA del aseador
 - **Tech stack**: PWA instalable con Web Push (VAPID) — push es el único canal de notificación al aseador; en iOS exige PWA instalada en pantalla de inicio y una denegación de permiso es irreversible sin reinstalar
 - **Tech stack**: la PWA es offline-first con cola de mutaciones en IndexedDB e idempotencia por `client_event_id` — iOS Safari no tiene Background Sync, así que la cola drena en foreground con contador visible de pendientes
-- **Integración**: iCal de Airbnb y de Google Calendar como fuentes de calendario, ambas de solo lectura — no hay API oficial pública y Booking queda fuera del MVP
+- **Integración**: Airbnb y Google Calendar son proveedores de calendario de primera clase, equivalentes entre sí, ambos de solo lectura vía iCal. El pipeline de ingesta es agnóstico al proveedor y cada uno aporta solo su adaptador de normalización — no hay API oficial pública y Booking queda fuera del MVP
 - **Integración**: Google Calendar entra por su URL `.ics` privada, no por la API de Google — sin OAuth, sin tokens, sin escritura
 - **Scheduler**: `pg_cron` dispara y hace fan-out con `pg_net`, una invocación por feed — aísla feeds caídos por construcción y evita depender del cron de Vercel, que en Hobby está capado a 1 corrida diaria
 - **Timezone**: UTC-5 (Bogotá) fijo en todo el sistema, sin DST — `fecha_aseo` se modela como `date`, no `timestamptz`
@@ -138,6 +140,7 @@ Que ningún aseo se pierda: todo checkout detectado en calendario termina en un 
 |---|---|---|
 | Push como único canal, sin semáforo de entregabilidad en el dashboard | Mantiene el alcance del MVP cerrado y evita construir observabilidad de notificaciones antes de tener operación real | Un aseo confirmado que nunca llega al aseador no lo detecta nadie hasta que el huésped entra a un apartamento sucio. Si pasa en el piloto de Bogotá, entra el semáforo |
 | Sin exportación ni vista imprimible del cierre mensual | El cálculo es visible en pantalla y el snapshot mensual persiste más allá de la retención | El admin vuelve a Excel a mano en cada cierre de mes |
+| Detección de extensión mal creada sin código de reserva en Google Calendar | Google no tiene equivalente al código de Airbnb, así que ahí la detección se apoya solo en continuidad de `UID` y adyacencia de fechas; la confirmación humana del admin amortigua | Un aseador entra a un apartamento con el huésped todavía adentro |
 | Evidencia fotográfica solo de 30 días | Es la única forma de que el MVP quepa en el free tier de Storage; el registro del aseo sí dura 6 meses | Una disputa sobre daños de hace 2 meses se queda sin foto |
 | Vercel Hobby en uso comercial durante el piloto | El piloto es corto y el costo de migrar es bajo | Suspensión de cuenta por violación de términos |
 | Estabilidad del `UID` de Airbnb no verificada contra feeds propios | Se instrumenta desde el primer sync en vez de apostarle a un supuesto | Cancelaciones o duplicados silenciosos de aseos confirmados si el UID no es estable |
@@ -152,7 +155,7 @@ Que ningún aseo se pierda: todo checkout detectado en calendario termina en un 
 | El aseo se agenda por fin de bloqueo del calendario, no por checkout real | El iCal no expone el checkout real; el bloqueo es la única señal confiable | — Pending |
 | Push como único canal, sin WhatsApp | Evita depender de API no oficial y mantiene la trazabilidad dentro del sistema | — Pending |
 | Checklist global fijo, cuartos configurables por apartamento | Permite armar el checklist dinámicamente sin construir un editor de checklists en el MVP | — Pending |
-| Google Calendar como fuente de solo lectura, vía su URL `.ics` | Entra al mismo pipeline que Airbnb sin OAuth ni escritura; el costo extra es manejar `VTIMEZONE`, `RRULE` y eventos con hora, que Airbnb no emite | — Pending |
+| Airbnb y Google Calendar como proveedores equivalentes, no uno principal y otro secundario | Ninguno de los dos es el caso por defecto: el pipeline se diseña agnóstico desde el principio y cada proveedor aporta un adaptador. Diseñar para Airbnb y parchar Google después habría dejado supuestos de Airbnb incrustados en el core | — Pending |
 | Free tier durante todo el desarrollo, con retención de fotos a 30 días | Sin recortar la retención de fotos el free tier de Storage revienta en el primer mes de operación real | — Pending |
 | El job de borrado se mueve después del piloto | No tiene nada que borrar hasta el mes 7, así que construirlo antes no se puede validar | — Pending |
 | Solo Airbnb en el MVP, sin Booking | Booking no expone código de reserva ni distingue bloqueos de reservas, así que obligaba a una segunda ruta de parseo con heurística de menor confianza para una fracción del portafolio | — Pending |

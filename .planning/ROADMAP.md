@@ -14,7 +14,7 @@ El equipo son dos personas, así que **las fases corren en secuencia estricta**.
 
 - [ ] **Fase 1: Fundación, schema y RLS** - La base de datos impone las reglas del negocio y aísla a cada aseador antes de que exista una sola pantalla
 - [ ] **Fase 2: Acceso y administración del catálogo** - Login por rol y CRUD de apartamentos y aseadores para montar la operación real
-- [ ] **Fase 3: Motor de sincronización iCal** - Todo checkout publicado en Airbnb o Google Calendar se convierte en un aseo pendiente, sin duplicados ni cancelaciones falsas
+- [ ] **Fase 3: Motor de sincronización iCal** - Todo checkout publicado en cualquiera de los proveedores se convierte en un aseo pendiente, sin duplicados ni cancelaciones falsas
 - [ ] **Fase 4: Dashboard operativo del admin** - Toda la operación del día en una pantalla, con confirmación en un paso y alertas de una sola jerarquía
 - [ ] **Fase 5: Notificaciones push e instalación de la PWA** - El aseador instala la PWA y recibe cada asignación en el teléfono; el admin recibe cada evento de campo
 - [ ] **Fase 6: PWA del aseador, offline-first** - El aseador ejecuta el aseo completo con o sin señal y nada del trabajo de campo se pierde
@@ -59,16 +59,17 @@ El equipo son dos personas, así que **las fases corren en secuencia estricta**.
 ### Phase 3: Motor de sincronización iCal
 **Goal**: Todo checkout publicado en los calendarios se convierte en un aseo pendiente, sin duplicados y sin cancelaciones falsas
 **Depends on**: Fases 1 y 2
-**Requirements**: SYNC-01, SYNC-02, SYNC-03, SYNC-04, SYNC-05, SYNC-06, SYNC-07, SYNC-08, SYNC-09, SYNC-10, SYNC-11, SYNC-12
+**Requirements**: SYNC-01, SYNC-02, SYNC-03, SYNC-04, SYNC-05, SYNC-06, SYNC-07, SYNC-08, SYNC-09, SYNC-10, SYNC-11, SYNC-12, SYNC-13, SYNC-14
 **Success Criteria** (qué debe ser VERDAD):
   1. Cada feed configurado se lee cada 30 minutos en una invocación aislada, y un feed caído no impide que los demás corran
   2. Un fin de bloqueo genera exactamente un aseo `normal` en la fecha correcta, corridas sucesivas sobre el mismo feed no crean duplicados, y los apartamentos con `gestion_vivaguest = false` generan un aseo informativo sin estado ni asignación
   3. Los bloqueos del propietario no generan aseos, y un feed vacío, inválido o truncado no cancela ningún aseo existente y queda registrado como intento fallido
   4. Cuando la reserva se mueve o desaparece, el aseo viejo se cancela y aparece uno nuevo sin confirmar, salvo que el aseo ya tenga `started_at`
   5. El admin queda alertado cuando un link deja de responder, cuando el propio job de sincronización deja de correr, cuando checkout y checkin caen el mismo día, y cuando una reserva parece una extensión creada como reserva nueva
-  6. Un feed de Google Calendar se procesa igual que uno de Airbnb, incluyendo eventos con hora y eventos recurrentes, que Airbnb nunca emite
+  6. Airbnb y Google Calendar pasan la misma batería de tests contra fixtures reales de cada uno: el core del pipeline no contiene ninguna rama por proveedor, solo el adaptador de normalización la tiene
+  7. Un evento con hora y uno recurrente (`RRULE`) de Google Calendar generan el aseo en la fecha correcta, y el admin ve de qué proveedor viene cada feed y cada aseo
 
-**Prerequisito humano (bloqueante, no es una tarea de la fase):** hay que capturar y versionar un `.ics` real de Airbnb de la cuenta propia de VivaGuest antes de planear esta fase, y uno de Google Calendar. Las muestras públicas están desactualizadas y la más citada en GitHub es falsa. Sin esos archivos no hay fixtures de test ni forma de resolver empíricamente la estabilidad del `UID`.
+**Prerequisito humano (bloqueante, no es una tarea de la fase):** hay que capturar y versionar dos archivos, bloqueantes por igual: un `.ics` real de Airbnb y un `.ics` real de Google Calendar, de las cuentas propias de VivaGuest, antes de planear esta fase. Las muestras públicas están desactualizadas y la más citada en GitHub es falsa. Sin esos archivos no hay fixtures de test ni forma de resolver empíricamente la estabilidad del `UID`.
 **Plans**: TBD
 
 ### Phase 4: Dashboard operativo del admin
@@ -170,7 +171,7 @@ Equipo de dos personas, ejecución secuencial estricta:
 ## Research adicional en planning
 
 Fases que necesitan `--research-phase`:
-- **Fase 3 (motor iCal):** el comportamiento del iCal de Airbnb no tiene especificación pública, la estabilidad del `UID` está en contradicción directa entre documentos de research, y Google Calendar añade `VTIMEZONE`, `RRULE` y eventos con hora que Airbnb nunca emite
+- **Fase 3 (motor iCal):** el comportamiento del iCal de Airbnb no tiene especificación pública y la estabilidad del `UID` está en contradicción directa entre documentos de research. Google Calendar es el proveedor mejor especificado de los dos (RFC 5545 completo) pero emite `VTIMEZONE`, `RRULE` y eventos con hora que el research no cubrió porque solo miró Airbnb
 - **Fase 5 (push):** el comportamiento de Web Push en iOS (expiración de suscripciones, `pushsubscriptionchange`) requiere validación en dispositivos físicos
 - **Fase 8 (piloto):** no hay patrón estándar de rollout de PWA a una fuerza laboral con dispositivos heterogéneos
 
@@ -183,7 +184,7 @@ Fases con patrón ya documentado en el research (se puede saltar):
 |-------|----------------|--------|-----------|
 | 1. Fundación, schema y RLS | 0/TBD | Not started | - |
 | 2. Acceso y administración del catálogo | 0/TBD | Not started | - |
-| 3. Motor de sincronización iCal | 0/TBD | Not started | - |
+| 3. Motor de sincronización iCal (14 reqs) | 0/TBD | Not started | - |
 | 4. Dashboard operativo del admin | 0/TBD | Not started | - |
 | 5. Notificaciones push e instalación de la PWA | 0/TBD | Not started | - |
 | 6. PWA del aseador, offline-first | 0/TBD | Not started | - |
@@ -193,7 +194,7 @@ Fases con patrón ya documentado en el research (se puede saltar):
 
 ## Cobertura de requisitos
 
-83 de 83 requisitos v1 mapeados, cada uno a exactamente una fase. Sin huérfanos ni duplicados. Ver la tabla de trazabilidad en `.planning/REQUIREMENTS.md`.
+85 de 85 requisitos v1 mapeados, cada uno a exactamente una fase. Sin huérfanos ni duplicados. Ver la tabla de trazabilidad en `.planning/REQUIREMENTS.md`.
 
 ---
 *Roadmap creado: 2026-08-31. Resecuenciado el 2026-08-31 para equipo de dos, con el job de borrado movido después del piloto y Google Calendar añadido como fuente.*
