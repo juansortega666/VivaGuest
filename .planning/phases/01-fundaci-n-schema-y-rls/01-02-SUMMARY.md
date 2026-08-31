@@ -204,3 +204,12 @@ Ninguna.
 ---
 *Phase: 01-fundaci-n-schema-y-rls*
 *Completed: 2026-08-31*
+
+## Self-Check: PASSED
+
+- 7 archivos declarados verificados en disco: los 5 de `supabase/tests/`, `01-02-SUMMARY.md` y `deferred-items.md`.
+- 3 commits verificados en el log: `a3e423f`, `b28a985`, `359afb7`.
+- `git diff --diff-filter=D f6999ec..HEAD` vacío: cero borrados de archivos versionados.
+- Árbol de trabajo limpio.
+- Conteos verificados: `plan(16)`/16, `plan(11)`/11, `plan(8)`/8, `plan(5)`/5, `plan(5)`/5.
+- `STATE.md` y `ROADMAP.md` sin tocar, como exige la ejecución en worktree paralelo.
