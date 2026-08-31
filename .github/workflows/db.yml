@@ -1,0 +1,85 @@
+name: db
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  # Las 4 puertas de base de datos.
+  #
+  # Este job queda EN ROJO al terminar el plan 01-01 y eso es correcto: todavia no
+  # existen migraciones, ni tests pgTAP, ni lib/database.types.ts. Lo pone en verde el
+  # plan 01-09. No relajar el workflow para "arreglarlo".
+  database:
+    runs-on: ubuntu-latest # Docker viene preinstalado; macOS/Windows no
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: supabase/setup-cli@v3
+        with:
+          # Pinear la version. Sin esto lee la del lockfile o usa latest.
+          # La doc de CI de Supabase todavia dice @v1: esta desactualizada frente al
+          # README del repo de la action.
+          version: 2.116.0
+
+      # Arranca SOLO Postgres (18 s contra 1m50s del stack completo) y ya aplica
+      # migraciones y seeds. `test db`, `db advisors` y `gen types` funcionan todos
+      # con solo la base arriba.
+      - name: supabase db start
+        run: supabase db start
+
+      # 1) puerta de tipado del schema
+      - name: db lint
+        run: supabase db lint --local
+
+      # 2) puerta de seguridad
+      # El umbral es error, nunca WARN: este diseno de policies emite 3 WARN
+      # multiple_permissive_policies inherentes sobre cleanings, profiles y properties
+      # (una policy para admin + una para aseador, mismo rol, misma accion), asi que
+      # bajar el umbral a WARN dejaria el job rojo siempre. Deuda aceptada y registrada.
+      - name: db advisors (security)
+        run: supabase db advisors --local --type security --fail-on error
+
+      # 3) puerta de comportamiento: RLS, invariantes y guardarrailes
+      - name: pgTAP
+        run: supabase test db --local
+
+      # 4) puerta de contrato: lib/database.types.ts sincronizado con el schema
+      # Se usa diff contra un temporal y no `git diff --exit-code`: este ultimo
+      # funciona en CI con el arbol limpio pero falla en local si hay cambios
+      # pendientes. El diff contra /tmp es determinista en los dos entornos.
+      - name: typegen drift
+        run: |
+          supabase gen types typescript --local --schema public > /tmp/types.gen.ts
+          diff -u lib/database.types.ts /tmp/types.gen.ts || {
+            echo "::error::database.types.ts desincronizado. Corre 'npm run db:types'."; exit 1; }
+
+  # Invariantes estructurales del repo. No depende de la base: corre en paralelo.
+  arquitectura:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      # service_role aislada, sin NEXT_PUBLIC_ en secretos, server-only en admin.ts,
+      # y prohibicion de current_date en migraciones y seeds.
+      - name: test de arquitectura
+        run: bash scripts/ci/check-service-role.sh
+
+      - name: tsc
+        run: npx tsc --noEmit
+
+      - name: tests unitarios
+        run: npm run test:unit
+
+      # Tambien verifica que ningun script reintrodujo --turbopack.
+      - name: build
+        run: npm run build
