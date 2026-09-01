@@ -95,5 +95,16 @@ jobs:
         run: npm run test:unit
 
       # Tambien verifica que ningun script reintrodujo --turbopack.
+      #
+      # Las dos variables son PLACEHOLDERS, no secretos, y no hace falta que
+      # apunten a nada real: el build no llama a Supabase. Lo unico que necesitan
+      # es que el parseo de zod de `lib/env.ts` pase durante el prerender. Sin
+      # ellas, en cuanto exista /login (Client Component que instancia
+      # createBrowserClient -> publicEnv()) el build revienta con
+      # "Variables de entorno invalidas (cliente): NEXT_PUBLIC_SUPABASE_URL".
+      # La clave secreta NO se inyecta aqui: ninguna pagina la necesita en build.
       - name: build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
         run: npm run build

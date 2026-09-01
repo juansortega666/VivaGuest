@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# .env.example es el contrato de variables de entorno y SI se versiona: no lleva
+# ningun valor real. La excepcion va despues del patron o `.env*` la vuelve a tragar.
+!.env.example
 
 # vercel
 .vercel
