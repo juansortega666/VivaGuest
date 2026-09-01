@@ -274,6 +274,16 @@
   --spacing-toque:           44px;  /* minimo de Apple HIG; SOLO dentro de app/(cleaner)/ */
 }
 
+/* ── Anchos de contenedor ─────────────────────────────────────────────────────
+   Tailwind v4 resuelve las utilidades `max-w-*` con nombre desde el namespace
+   `--container-*`, no desde `--spacing-*`. Van aqui por la misma razon que las
+   excepciones de espaciado: existen como token para que nadie escriba
+   `max-w-[400px]`, que es el valor arbitrario que §2 prohibe.                 */
+@theme {
+  --container-login:   400px;  /* card de /login (UI-SPEC §12.1) */
+  --container-aseador: 480px;  /* columna de app/(cleaner)/ (UI-SPEC §12.2) */
+}
+
 /* ── Tipografia — 02-UI-SPEC.md §3 ────────────────────────────────────────────
    Exactamente 4 tamanos y 2 pesos (400 y 600). Nada de 500, 700 ni 800.
    `micro` no fija peso porque se usa en 400 (ayuda, contadores) y en 600
