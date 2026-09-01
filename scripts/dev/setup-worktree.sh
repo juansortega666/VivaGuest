@@ -24,10 +24,34 @@ if [ ! -f .env.local ]; then
   if [ -f "$PRIMARY/.env.local" ] && [ "$PRIMARY" != "$(pwd -P)" ]; then
     cp "$PRIMARY/.env.local" .env.local
     echo "→ .env.local copiado desde el worktree principal"
+  elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q supabase_db; then
+    # El stack local ya publica los tres valores. Generarlo es mas fiable que
+    # copiarlo: el principal puede no tenerlo, como paso en la Fase 2.
+    echo "→ .env.local ausente, generandolo desde 'supabase status'"
+    npx supabase status --output json | node -e '
+      let raw = "";
+      process.stdin.on("data", c => raw += c);
+      process.stdin.on("end", () => {
+        const s = JSON.parse(raw);
+        const need = ["API_URL", "PUBLISHABLE_KEY", "SECRET_KEY"];
+        const missing = need.filter(k => !s[k]);
+        if (missing.length) {
+          console.error("Faltan claves en supabase status: " + missing.join(", "));
+          process.exit(1);
+        }
+        // La secreta NUNCA lleva NEXT_PUBLIC_: ese prefijo la manda al bundle
+        // del navegador y con ella se saltan todas las policies de RLS.
+        process.stdout.write(
+          "NEXT_PUBLIC_SUPABASE_URL=" + s.API_URL + "\n" +
+          "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=" + s.PUBLISHABLE_KEY + "\n" +
+          "SUPABASE_SECRET_KEY=" + s.SECRET_KEY + "\n"
+        );
+      });
+    ' > .env.local
+    echo "  escrito con $(grep -c = .env.local) variables"
   else
-    echo "⚠ .env.local ausente y no hay uno en $PRIMARY."
-    echo "  Sacalo de 'npx supabase status' y escribelo a mano."
-    echo "  La clave secreta NUNCA lleva el prefijo NEXT_PUBLIC_."
+    echo "⚠ .env.local ausente y el stack local esta abajo."
+    echo "  Levanta Supabase y vuelve a correr este script."
   fi
 else
   echo "✓ .env.local presente"
