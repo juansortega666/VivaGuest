@@ -25,7 +25,7 @@ El equipo son dos personas, así que **las fases corren en secuencia estricta**.
 ## Phase Details
 
 ### Phase 1: Fundación, schema y RLS
-**Status**: Planned — 9 planes en 8 waves, verificados sin bloqueantes (2026-08-31)
+**Status**: Executed 2026-08-31 — 9/9 planes, suite pgTAP 47/47 en verde desde `db reset` limpio. Bloqueado el cierre en el checkpoint humano: crear y linkear los proyectos Supabase dev y prod
 **Goal**: La base de datos existe, impone las reglas del negocio por sí sola y ningún aseador puede ver datos ajenos
 **Depends on**: Nada (primera fase)
 **Requirements**: PLAT-03, PLAT-05, PLAT-06, ASEO-07, FIN-01
@@ -193,7 +193,7 @@ Fases con patrón ya documentado en el research (se puede saltar):
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Fundación, schema y RLS | 0/9 | Planned | - |
+| 1. Fundación, schema y RLS | 9/9 | Executed — checkpoint humano pendiente | 2026-08-31 |
 | 2. Acceso y administración del catálogo | 0/TBD | Not started | - |
 | 3. Motor de sincronización iCal | 0/TBD | Not started | - |
 | 4. Dashboard operativo del admin | 0/TBD | Not started | - |

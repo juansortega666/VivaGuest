@@ -1,0 +1,99 @@
+name: db
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  # Las 4 puertas de base de datos.
+  #
+  # Este job estuvo EN ROJO a proposito desde el plan 01-01 hasta el 01-09: no existian
+  # migraciones, ni tests pgTAP, ni lib/database.types.ts. El plan 01-09 lo puso en
+  # verde generando y commiteando los tipos. Medido en local sobre un `db start` en
+  # frio: 10 migraciones, 6 seeds, `Files=5, Tests=47, Result: PASS`.
+  database:
+    runs-on: ubuntu-latest # Docker viene preinstalado; macOS/Windows no
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: supabase/setup-cli@v3
+        with:
+          # Pinear la version. Sin esto lee la del lockfile o usa latest.
+          # La doc de CI de Supabase todavia dice @v1: esta desactualizada frente al
+          # README del repo de la action.
+          version: 2.116.0
+
+      # Arranca SOLO Postgres (18 s contra 1m50s del stack completo) y ya aplica
+      # migraciones y seeds. `test db`, `db advisors` y `gen types` funcionan todos
+      # con solo la base arriba.
+      - name: supabase db start
+        run: supabase db start
+
+      # 1) puerta de tipado del schema
+      - name: db lint
+        run: supabase db lint --local
+
+      # 2) puerta de seguridad
+      #
+      # Medicion del plan 01-09 sobre el schema completo, que corrige lo que decia el
+      # comentario anterior: `--type security` hoy sale **sin ningun hallazgo**, ni
+      # ERROR ni WARN. Los 14 WARN `multiple_permissive_policies` que emite este diseno
+      # (una policy de admin + una de aseador sobre el mismo rol y la misma accion, en
+      # 14 tablas) son de categoria PERFORMANCE, asi que no aparecen bajo este `--type`.
+      # Deuda aceptada y registrada: consolidarlas en un OR haria el modelo ilegible.
+      #
+      # El umbral se queda en `error` de todas formas. Es deliberado y no es porque hoy
+      # haga falta: los lints de seguridad que solo existen en hosted (configuracion de
+      # `[auth]`, extensiones en `public`) llegan como WARN, y no se quiere que el job
+      # de PR se ponga rojo por un hallazgo de plataforma que no se arregla con una
+      # migracion. Subirlo a `warn` es una decision de la fase que linkee el proyecto.
+      #
+      # Este advisor NO ve tablas sin grants: durante el plan 01-07 reporto 20 tablas
+      # con RLS deshabilitada y no 22, porque property_secrets y storage_deletion_queue
+      # no tienen ningun grant. Ese punto ciego lo cubren los guardarrailes de pgTAP.
+      - name: db advisors (security)
+        run: supabase db advisors --local --type security --fail-on error
+
+      # 3) puerta de comportamiento: RLS, invariantes y guardarrailes
+      - name: pgTAP
+        run: supabase test db --local
+
+      # 4) puerta de contrato: lib/database.types.ts sincronizado con el schema
+      # Se usa diff contra un temporal y no `git diff --exit-code`: este ultimo
+      # funciona en CI con el arbol limpio pero falla en local si hay cambios
+      # pendientes. El diff contra /tmp es determinista en los dos entornos.
+      - name: typegen drift
+        run: |
+          supabase gen types typescript --local --schema public > /tmp/types.gen.ts
+          diff -u lib/database.types.ts /tmp/types.gen.ts || {
+            echo "::error::database.types.ts desincronizado. Corre 'npm run db:types'."; exit 1; }
+
+  # Invariantes estructurales del repo. No depende de la base: corre en paralelo.
+  arquitectura:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      # service_role aislada, sin NEXT_PUBLIC_ en secretos, server-only en admin.ts,
+      # y prohibicion de current_date en migraciones y seeds.
+      - name: test de arquitectura
+        run: bash scripts/ci/check-service-role.sh
+
+      - name: tsc
+        run: npx tsc --noEmit
+
+      - name: tests unitarios
+        run: npm run test:unit
+
+      # Tambien verifica que ningun script reintrodujo --turbopack.
+      - name: build
+        run: npm run build
