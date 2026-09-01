@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
+import { RAIZ, type Rol } from '@/lib/auth/routing';
 import type { ResultadoAccion } from '@/lib/domain/acciones';
 import { mapAuthError } from '@/lib/domain/errors';
 import { createClient } from '@/lib/supabase/server';
@@ -52,7 +53,7 @@ export async function entrar(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword(parseado.data);
+  const { data, error } = await supabase.auth.signInWithPassword(parseado.data);
 
   if (error) {
     // SIEMPRE por `mapAuthError`. NUNCA `error.message`: los mensajes de GoTrue
@@ -67,8 +68,30 @@ export async function entrar(
   // antes de navegar, o la primera pantalla se pinta con el arbol de invitado.
   revalidatePath('/', 'layout');
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // Se redirige a la raiz DEL ROL, no a `/`, y esto es una correccion medida.
+  //
+  // Lo natural seria `redirect('/')` y dejar que el middleware eligiera. MEDIDO
+  // en esta wave con Playwright: no funciona. Un `redirect` de Server Action no
+  // provoca una navegacion normal, sino un fetch RSC del router de Next; el
+  // middleware responde con un 307 a la raiz del rol, y `fetch` SIGUE ese
+  // redirect de forma transparente. El router pinta el arbol del destino pero la
+  // barra de direcciones se queda en `/`. El sintoma es cruel: el usuario ve la
+  // pantalla correcta con la URL equivocada, y solo se nota al recargar.
+  //
+  // Esto NO reintroduce una segunda tabla de ruteo: `RAIZ` es exactamente la
+  // misma constante que consume `resolverRedireccion()`, importada de
+  // `lib/auth/routing.ts`. La fuente de verdad sigue siendo una sola, y el
+  // middleware sigue siendo la autoridad: si este destino no le cuadrara al rol,
+  // rebotaria en la peticion siguiente.
+  //
+  // El rol sale de `app_metadata`, igual que en el middleware, y NUNCA de
+  // `user_metadata`, que el propio usuario puede escribir.
+  // ───────────────────────────────────────────────────────────────────────────
+  const rol = data.user?.app_metadata?.role as Rol | undefined;
+
   // Fuera del try/catch de arriba a proposito: `redirect` funciona lanzando una
   // excepcion de control que Next atrapa. Envolverla en un catch la convierte en
   // un error de verdad y el usuario se queda en el login tras entrar bien.
-  redirect('/');
+  redirect(rol ? RAIZ[rol] : '/');
 }
