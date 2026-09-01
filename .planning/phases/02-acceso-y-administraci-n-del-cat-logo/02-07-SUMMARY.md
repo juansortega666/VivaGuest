@@ -303,3 +303,7 @@ No hay ningún otro stub: la tabla se alimenta de datos reales leídos con el JW
 - **Cuando un test tiene un doble, auditar también el doble.** Este plan encontró un test correcto vuelto decoración por un doble permisivo. Cuesta lo mismo que romper el código: dos minutos.
 - **`npm run setup:worktree` funciona pero no escribe `.env.local`.** Quinta vez que se paga a mano. El JSON de `npx supabase status` ya trae los tres valores.
 - **Bloqueante residual heredado de 02-01, 02-04, 02-05 y 02-06:** sigue pendiente un `npx supabase stop && npx supabase start` al cierre de la fase para confirmar en frío que el `config.toml` commiteado reproduce el entorno.
+
+## Self-Check: PASSED
+
+Los 11 archivos que este resumen declara creados o modificados existen en disco, y los 5 hashes de commit (`c725695`, `bab06ce`, `8517a79`, `2119a3d`, `e9860d3`) resuelven a objetos de tipo `commit` en el historial de la rama. Ni `STATE.md` ni `ROADMAP.md` aparecen en el diff del plan.
