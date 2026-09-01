@@ -25,8 +25,10 @@ import { TopNav } from './_components/TopNav';
  * usuario, y una respuesta cacheada se sirve a otro usuario: es la fuga de
  * informacion mas barata de provocar y la mas cara de detectar. Con 39
  * apartamentos y ~8 aseadores no hay ningun beneficio de rendimiento que
- * justifique `unstable_cache` ni la directiva de cache de React sobre estos
- * arboles, asi que ninguna de las dos aparece en este subarbol.
+ * justifique memoizar la lectura entre peticiones, ni con el helper de cache de
+ * Next ni con la directiva de cache de React. Ninguno de los dos aparece en este
+ * subarbol, y el nombre literal de ninguno se escribe aqui: en este repo ya han
+ * mordido cuatro veces los comentarios que citan el token que un grep vigila.
  */
 export const dynamic = 'force-dynamic';
 

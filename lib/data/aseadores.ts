@@ -17,9 +17,14 @@ import type { Database } from '@/lib/database.types';
  * por `anon` salvo que se revoque explicitamente.
  * ────────────────────────────────────────────────────────────────────────────
  *
- * Ninguna llamada a `unstable_cache` ni directiva de cache de React: son datos
- * por usuario y una entrada de cache compartida se sirve a otro usuario. Con ~8
- * aseadores y 39 apartamentos no hay beneficio que lo justifique.
+ * Esta lectura NO se memoiza entre peticiones, ni con el helper de cache de Next
+ * ni con la directiva de cache de React: son datos por usuario, y una entrada de
+ * cache compartida se le sirve a otro usuario. Con ~8 aseadores y 39
+ * apartamentos no hay ningun beneficio que lo justifique.
+ *
+ * El nombre literal de ninguno de los dos se escribe aqui a proposito: un
+ * comentario que cita el token que un grep vigila hace que el guardarrail se
+ * atrape a si mismo, y en este repo ya paso cuatro veces.
  */
 
 /** Un apartamento tal como aparece dentro de la asignacion de un aseador. */

@@ -319,6 +319,13 @@
   --spacing-avatar:           28px;  /* circulo de iniciales del menu de usuario */
 }
 
+/* Encabezados de columna: 12px/600 uppercase con 0.04em de letter-spacing
+   (UI-SPEC §3). Va como token por lo mismo que los anchos: para que ninguna
+   celda escriba el valor entre corchetes. */
+@theme {
+  --tracking-columna: 0.04em;
+}
+
 @theme {
   --container-admin: 1440px;  /* contenedor de contenido de (admin) */
   --container-vacio: 44ch;    /* cuerpo del estado vacio (UI-SPEC §9.2) */
