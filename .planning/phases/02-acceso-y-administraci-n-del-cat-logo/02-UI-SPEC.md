@@ -227,7 +227,7 @@ Lo que sí es obligatorio: **eliminar el `@media (prefers-color-scheme: dark)` q
 
 ### 4.6 El choque coral ↔ destructivo, y cómo se resuelve
 
-`--primary` es rojo y `--destructive` es rojo. Su contraste entre sí es 1.66:1: a la carrera no se distinguen por luminancia. Esta es la **cuarta** razón por la que el coral es placeholder.
+`--primary` es rojo y `--destructive` es rojo. Su contraste entre sí es 1.72:1: a la carrera no se distinguen por luminancia. Esta es la **cuarta** razón por la que el coral es placeholder.
 
 Mitigación, obligatoria mientras el placeholder siga vivo:
 
@@ -372,7 +372,14 @@ Reglas:
 3. Encima de los botones, 12px `--muted-foreground`: "Puedes guardar este apartamento incompleto. No se puede activar hasta completar lo que falta."
 4. Un `Tooltip` en el botón deshabilitado repite la primera carencia. Un botón deshabilitado sin explicación es un callejón sin salida.
 5. Al activar: toast `Apartamento activado.` Al guardar borrador: toast `Cambios guardados.`
-6. Para una unidad **informativa** (`gestion_vivaguest = false`) el botón dice `Guardar y activar` sin condiciones de tarifa ni responsable: `props_active_requires_rates` y `props_active_requires_owner` solo aplican cuando la unidad es gestionada. La lista de faltantes no se muestra.
+6. Para una unidad **informativa** (`gestion_vivaguest = false`) no aplican `props_active_requires_rates` ni `props_active_requires_owner`, así que no se piden tarifas ni responsable. Pero **sí tiene su propia puerta**: `Guardar y activar` está deshabilitado hasta que `contacto_externo` tenga contenido, y el bloque de faltantes se muestra con un solo ítem:
+
+   > **Para activar falta:**
+   > ☐ Contacto externo
+
+   Lo exige el criterio de éxito 3 del ROADMAP, que pide responsable cuando `gestion_vivaguest` es true **y contacto externo cuando es false**, y APTO-09. Es el mismo patrón simétrico de la regla 2, no una excepción.
+
+   **Por qué la UI aprieta acá también:** el CHECK `props_active_requires_owner` solo se activa cuando `gestion_vivaguest AND is_active`, así que la base **no** impide activar una unidad informativa con `contacto_externo` vacío. Sin esta regla, una de las 5 unidades externas podría quedar activa sin que nadie sepa a quién llamar, y el dato faltante no se descubriría hasta el primer aseo. Es una puerta de UI sin respaldo en base: el executor no puede asumir que el 23514 la cubre.
 
 **Nota de precisión, que el executor no debe "corregir":** el CHECK `props_active_requires_owner` acepta `responsable_id IS NOT NULL OR contacto_externo IS NOT NULL`. La UI es **más estricta** para unidades gestionadas y exige `responsable_id`, porque eso es lo que piden APTO-08 y el criterio de éxito 3 del ROADMAP. La divergencia es deliberada: la UI aprieta, la base no se toca.
 
@@ -692,6 +699,7 @@ Por superficie, no en un directorio compartido.
 | `EditorFaltantes` | Filas de `missing_item_catalog` | APTO-07 |
 | `ConectarCalendario` | Guía + campo + los 7 estados | APTO-03, APTO-12 |
 | `TablaAseadores` | Lista con conteos y popovers | ASEADOR-03 |
+| `DialogoDesactivarApartamento` | Confirmación de baja. `Cancelar` outline · `Desactivar` destructive, **nunca dos rellenos rojos** (§4.6) | APTO-01 |
 | `DialogoCrearAseador` | Alta + entrega de contraseña de una sola vez | ASEADOR-01 |
 | `DialogoDesactivarAseador` | Confirmación con consecuencias calculadas | ASEADOR-02, PLAT-04 |
 | `EstadoVacio` | Encabezado + cuerpo + acción | §9.2 |
