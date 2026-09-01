@@ -57,9 +57,14 @@ export async function iniciarSesionPorUI(page: Page, clave: string): Promise<str
   }
 
   await page.goto('/login');
-  await page.getByLabel(/correo|email/i).fill(usuario.email);
-  await page.getByLabel(/contrase/i).fill(usuario.password);
-  await page.getByRole('button', { name: /entrar|iniciar sesi/i }).click();
+  // Selectores por etiqueta EXACTA, y la razon no es estilistica: la pantalla
+  // (plan 02-06) tiene un boton de mostrar/ocultar contrasena cuyo `aria-label`
+  // es "Mostrar contraseña". Un `getByLabel(/contrase/i)` casa con el input Y con
+  // ese boton, y Playwright falla por strict mode. El nombre accesible del boton
+  // no se puede quitar: va sin texto visible y lo exige UI-SPEC §13.
+  await page.getByLabel('Email').fill(usuario.email);
+  await page.getByLabel('Contraseña', { exact: true }).fill(usuario.password);
+  await page.getByRole('button', { name: 'Entrar' }).click();
 
   // No basta con que el click no falle: hay que esperar a que el middleware haya
   // ruteado fuera de /login, o se guardaría un storageState sin sesión.

@@ -1,6 +1,27 @@
+import { fileURLToPath } from 'node:url';
+
 import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      // La mayoria de los unitarios importan por ruta relativa, pero
+      // `lib/auth/guards.ts` importa la fabrica de servidor por `@/` (es codigo
+      // de aplicacion, no de prueba) y su test la sustituye con `vi.mock` usando
+      // ese mismo especificador. Sin replicar aqui el `paths` de tsconfig.json,
+      // Vitest no resuelve ninguno de los dos.
+      '@': fileURLToPath(new URL('./', import.meta.url)),
+
+      // `server-only` es un paquete centinela: su `index.js` es literalmente un
+      // `throw`, y solo la condicion de exports `react-server` lo resuelve al
+      // `empty.js` inocuo. Vitest no activa esa condicion, asi que sin este alias
+      // cualquier import de un modulo que lo declare revienta antes de correr.
+      // Misma solucion y misma razon que en `vitest.integration.config.ts`.
+      'server-only': fileURLToPath(
+        new URL('./node_modules/server-only/empty.js', import.meta.url),
+      ),
+    },
+  },
   test: {
     environment: 'node',
     include: ['lib/**/*.test.ts'],
