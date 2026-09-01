@@ -76,19 +76,38 @@ describe('contarActivos', () => {
  * AGRUPADO en memoria, no la RLS. La RLS ya tiene sus pruebas de pgTAP, y un test
  * que sembrara con el mismo cliente con el que comprueba pasaria igual con la
  * policy mal escrita.
+ *
+ * ATENCION AL DETALLE QUE PARECE DE ADORNO: el doble APLICA de verdad los `.eq()`
+ * que reciba, en vez de ignorarlos y devolver siempre la semilla entera. La
+ * primera version los ignoraba y el test "un aseador desactivado sigue en la
+ * lista" era un FALSO VERDE: pasaba igual con un `.eq('is_active', true)` metido
+ * en la consulta, que es exactamente el bug que dice vigilar. Comprobado con
+ * senuelo en los dos sentidos antes de darlo por bueno.
  */
 function clienteFalso(datos: {
-  profiles: unknown[];
-  properties: unknown[];
+  profiles: Record<string, unknown>[];
+  properties: Record<string, unknown>[];
 }): Parameters<typeof listarAseadoresConAsignaciones>[0] {
   const constructor = (tabla: 'profiles' | 'properties') => {
-    const resultado = Promise.resolve({ data: datos[tabla], error: null });
+    let filas = datos[tabla];
+
+    const resolver = () => Promise.resolve({ data: filas, error: null });
+
     const encadenable = {
       select: () => encadenable,
-      eq: () => encadenable,
-      order: () => resultado,
-      then: resultado.then.bind(resultado),
+      eq: (columna: string, valor: unknown) => {
+        filas = filas.filter((f) => f[columna] === valor);
+        return encadenable;
+      },
+      order: (columna: string) => {
+        filas = [...filas].sort((a, b) =>
+          String(a[columna]).localeCompare(String(b[columna]), 'es'),
+        );
+        return resolver();
+      },
+      then: (...args: Parameters<Promise<unknown>['then']>) => resolver().then(...args),
     };
+
     return encadenable;
   };
 
@@ -105,9 +124,13 @@ describe('listarAseadoresConAsignaciones', () => {
     { id: 'p4', nombre: 'Sin asignar', is_active: true, responsable_id: null, suplente_id: null },
   ];
 
+  // El admin entra en la semilla A PROPOSITO: la consulta tiene que filtrarlo por
+  // `role`, y el doble aplica los `.eq()` de verdad, asi que si el filtro
+  // desaparece este test se pone rojo.
   const PERFILES = [
-    { id: 'a1', full_name: 'Ana Ruiz', phone: '3001234567', is_active: true },
-    { id: 'a2', full_name: 'Beto Páez', phone: null, is_active: false },
+    { id: 'a1', full_name: 'Ana Ruiz', phone: '3001234567', is_active: true, role: 'aseador' },
+    { id: 'a2', full_name: 'Beto Páez', phone: null, is_active: false, role: 'aseador' },
+    { id: 'ad', full_name: 'Álvaro Admin', phone: null, is_active: true, role: 'admin' },
   ];
 
   it('agrupa cada apartamento bajo su responsable y su suplente', async () => {
@@ -130,6 +153,22 @@ describe('listarAseadoresConAsignaciones', () => {
     expect(aseadores.find((a) => a.id === 'a2')?.is_active).toBe(false);
   });
 
+  it('deja fuera a quien no tiene rol de aseador', async () => {
+    const aseadores = await listarAseadoresConAsignaciones(
+      clienteFalso({ profiles: PERFILES, properties: APARTAMENTOS }),
+    );
+
+    expect(aseadores.map((a) => a.id)).not.toContain('ad');
+  });
+
+  it('ordena por nombre', async () => {
+    const aseadores = await listarAseadoresConAsignaciones(
+      clienteFalso({ profiles: PERFILES, properties: APARTAMENTOS }),
+    );
+
+    expect(aseadores.map((a) => a.full_name)).toEqual(['Ana Ruiz', 'Beto Páez']);
+  });
+
   it('conserva los nombres de los apartamentos, no solo el conteo', async () => {
     // El Popover de UI-SPEC §11.1 lista los nombres al hacer clic. Devolver un
     // numero obligaria a una segunda consulta por aseador para poder abrirlo.
@@ -146,7 +185,9 @@ describe('listarAseadoresConAsignaciones', () => {
   it('deja las listas vacías para un aseador sin ninguna asignación', async () => {
     const aseadores = await listarAseadoresConAsignaciones(
       clienteFalso({
-        profiles: [{ id: 'a9', full_name: 'Zoe Nieto', phone: null, is_active: true }],
+        profiles: [
+          { id: 'a9', full_name: 'Zoe Nieto', phone: null, is_active: true, role: 'aseador' },
+        ],
         properties: APARTAMENTOS,
       }),
     );
