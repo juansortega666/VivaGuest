@@ -42,3 +42,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# playwright
+# e2e/.auth/ guarda storageState con cookies de sesion y las contrasenas generadas
+# por corrida. Son usuarios de prueba contra la base local, pero no tienen por que
+# viajar en el historial.
+/e2e/.auth/
+/playwright-report/
+/test-results/
