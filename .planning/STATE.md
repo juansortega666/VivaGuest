@@ -21,16 +21,16 @@ progress:
 Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 
 **Core value:** Que ningún aseo se pierda: todo checkout detectado en calendario termina en un aseo confirmado, asignado y ejecutado con evidencia, sin coordinación manual por WhatsApp.
-**Current focus:** Phase 01 — fundaci-n-schema-y-rls
+**Current focus:** Fase 2 — Acceso y administración del catálogo
 
 ## Current Position
 
 Phase: 01 (fundaci-n-schema-y-rls) — EXECUTING
 Plan: 1 of 9
 Status: Executing Phase 01
-Last activity: 2026-08-31 — Fase 1 ejecutada: 10 migraciones, 22 tablas, 37 policies, 6 RPC, seed de 39 unidades, suite pgTAP 47/47 en verde
+Last activity: 2026-09-01 — Fase 1 cerrada (passed_with_gaps) y mergeada en PR #1. Arrancando Fase 2
 
-Progress: [█░░░░░░░░░] 11% (1 de 9 fases)
+Progress: [█░░░░░░░░░] 11% (1 de 9 fases completas)
 
 ## Performance Metrics
 
@@ -111,5 +111,5 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 ## Session Continuity
 
 Last session: 2026-08-31
-Stopped at: Fase 1 ejecutada, esperando checkpoint humano (crear y linkear proyectos Supabase dev y prod)
+Stopped at: Fase 1 cerrada y mergeada. Siguiente: contrato de UI de la Fase 2
 Resume file: None
