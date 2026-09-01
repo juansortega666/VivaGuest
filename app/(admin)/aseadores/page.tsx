@@ -1,11 +1,11 @@
 import { CircleDashed } from 'lucide-react';
 import type { Metadata } from 'next';
 
-import { Button } from '@/components/ui/button';
 import { listarAseadoresConAsignaciones } from '@/lib/data/aseadores';
 import { createClient } from '@/lib/supabase/server';
 
 import { EstadoVacio } from '../_components/EstadoVacio';
+import { DialogoCrearAseador } from './_components/DialogoCrearAseador';
 import { TablaAseadores } from './_components/TablaAseadores';
 
 export const metadata: Metadata = {
@@ -34,15 +34,11 @@ export default async function AseadoresPage() {
         <h1 className="text-display text-foreground">Aseadores</h1>
 
         {/*
-          EL BOTON QUEDA MONTADO Y SIN DIALOGO EN ESTE PLAN. El diálogo de alta
-          (ASEADOR-01) llega en el 02-08 y ahi se cablea, con su propio guard: la
-          Server Action que cree la cuenta es un endpoint HTTP publico y no la
-          autoriza el hecho de renderizarse aqui dentro.
-
-          Que hoy no haga nada es aceptable dentro de la fase; que no exista
-          rompería el layout que el 02-08 espera encontrar.
+          El diálogo trae su propio disparador con el copy `Crear aseador` de §15.
+          La autorización NO la da renderizarlo aquí: `crearAseador()` arranca con
+          `exigirAdmin()` porque una Server Action es un endpoint HTTP público.
         */}
-        <Button type="button">Crear aseador</Button>
+        <DialogoCrearAseador />
       </div>
 
       {aseadores.length === 0 ? (
@@ -55,7 +51,10 @@ export default async function AseadoresPage() {
           icono={CircleDashed}
           encabezado="Todavía no hay aseadores."
           cuerpo="Las cuentas las creas tú: el aseador no puede registrarse por su cuenta."
-          accion={<Button type="button">Crear aseador</Button>}
+          // El de la cabecera y este son mutuamente excluyentes: nunca se
+          // renderizan los dos a la vez, así que no hay dos disparadores
+          // compitiendo por el mismo nombre accesible.
+          accion={<DialogoCrearAseador />}
         />
       ) : (
         <TablaAseadores aseadores={aseadores} />
