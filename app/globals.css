@@ -304,3 +304,57 @@
   --text-micro: 0.75rem;                 /* 12px — ayuda, contadores, encabezados */
   --text-micro--line-height: 1.4;
 }
+/* ── Anchos de columna y contenedor del admin — 02-UI-SPEC.md §6.2 y §11.1 ────
+   Mismo motivo que las excepciones de espaciado de arriba: existen como token
+   para que ningun componente escriba el valor entre corchetes, que es lo que §2
+   prohibe. Tailwind v4 resuelve `w-*`, `h-*` y `top-*` desde el namespace
+   `--spacing-*`, y `max-w-*` desde `--container-*` (medido en el plan 02-06). */
+@theme {
+  --spacing-col-estado:       96px;  /* ESTADO en la lista de aseadores */
+  --spacing-col-telefono:    140px;  /* TELEFONO */
+  --spacing-col-responsable: 200px;  /* RESPONSABLE DE */
+  --spacing-col-suplente:    160px;  /* SUPLENTE EN */
+  --spacing-col-menu:         48px;  /* columna del menu de acciones */
+  --spacing-col-nombre:      200px;  /* minimo de NOMBRE, que es la columna flexible */
+  --spacing-avatar:           28px;  /* circulo de iniciales del menu de usuario */
+}
+
+@theme {
+  --container-admin: 1440px;  /* contenedor de contenido de (admin) */
+  --container-vacio: 44ch;    /* cuerpo del estado vacio (UI-SPEC §9.2) */
+}
+
+/* ── Movimiento — 02-UI-SPEC.md §6.4 ──────────────────────────────────────────
+   Transiciones SOLO de color, background-color, border-color y opacity, 120ms
+   ease-out. Nada de `transition: all` ni animaciones de layout: en una tabla de
+   39 filas una transicion de layout es un salto visible en cada hover.
+
+   Se declara como utilidad y no como clase suelta para que el valor de 120ms
+   viva en un unico sitio; `transition-colors` de Tailwind trae 150ms y no
+   coincide con el contrato.                                                   */
+@utility transicion {
+  transition-property: color, background-color, border-color, opacity;
+  transition-timing-function: ease-out;
+  transition-duration: 120ms;
+}
+
+@layer base {
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0s !important;
+      animation-duration: 0s !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+    }
+
+    /* La UNICA excepcion del contrato: el giro del spinner de carga es
+       informacion de estado, no decoracion. Congelarlo deja al usuario mirando
+       un icono quieto sin saber si la operacion sigue viva. */
+    .animate-spin {
+      animation-duration: 1s !important;
+      animation-iteration-count: infinite !important;
+    }
+  }
+}
