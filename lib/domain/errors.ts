@@ -1,8 +1,19 @@
 import {
+  CHK_PROFILES_DEACTIVATION_COHERENT,
+  CHK_PROPERTY_SECRETS_TIPO_CERRADURA_VALIDO,
+  CHK_PROPS_ACTIVE_REQUIRES_OWNER,
+  CHK_PROPS_ACTIVE_REQUIRES_RATES,
+  CHK_PROPS_ASSIGNEES_ONLY_WHEN_MANAGED,
+  CHK_PROPS_RATES_NONNEG,
+  CHK_PROPS_SUPLENTE_DISTINCT,
   CHK_UNMANAGED_IS_INERT,
+  IDX_CALENDAR_FEEDS_PROP_PROVIDER_UNIQ,
+  IDX_MIC_GLOBAL_UNIQ,
+  IDX_MIC_PROP_UNIQ,
   IDX_ONE_ACTIVE_PER_PROPERTY_DATE,
   IDX_ONE_LIVE_PER_RESERVATION,
   IDX_PROPERTIES_NOMBRE_UNIQ,
+  IDX_PROPERTY_ROOMS_ETIQUETA_UNIQ,
 } from './constants';
 
 /**
@@ -35,6 +46,16 @@ const MENSAJES_UNIQUE: ReadonlyArray<readonly [string, string]> = [
     'Ya existe un aseo vigente para esa reserva.',
   ],
   [IDX_PROPERTIES_NOMBRE_UNIQ, 'Ya existe un apartamento con ese nombre.'],
+  [
+    IDX_PROPERTY_ROOMS_ETIQUETA_UNIQ,
+    'Ya existe un cuarto con esa etiqueta en este apartamento.',
+  ],
+  [IDX_MIC_PROP_UNIQ, 'Ya existe un faltante con ese nombre.'],
+  [IDX_MIC_GLOBAL_UNIQ, 'Ya existe un faltante con ese nombre.'],
+  [
+    IDX_CALENDAR_FEEDS_PROP_PROVIDER_UNIQ,
+    'Este apartamento ya tiene un calendario de ese proveedor.',
+  ],
 ];
 
 /** Mapeo de nombre de CHECK constraint → mensaje de negocio. */
@@ -43,6 +64,55 @@ const MENSAJES_CHECK: ReadonlyArray<readonly [string, string]> = [
     CHK_UNMANAGED_IS_INERT,
     'Esa unidad es de gestión externa: no admite estado, aseador, instrucciones ni tarifas.',
   ],
+  // Los tres primeros son el paracaídas, no la red: `apartamento.schema.ts`
+  // (UI-SPEC §8.2) impide que se disparen desde la pantalla. Si un usuario ve
+  // alguno de estos mensajes, hay un hueco en la validación del formulario.
+  [
+    CHK_PROPS_ACTIVE_REQUIRES_RATES,
+    'No se puede activar sin tarifa al huésped y pago al aseador.',
+  ],
+  [
+    CHK_PROPS_ACTIVE_REQUIRES_OWNER,
+    'No se puede activar sin un aseador responsable.',
+  ],
+  [
+    CHK_PROPS_ASSIGNEES_ONLY_WHEN_MANAGED,
+    'Una unidad de gestión externa no lleva responsable ni suplente.',
+  ],
+  [
+    CHK_PROPS_SUPLENTE_DISTINCT,
+    'El suplente no puede ser la misma persona que el responsable.',
+  ],
+  [CHK_PROPS_RATES_NONNEG, 'Las tarifas no pueden ser negativas.'],
+  // Bug interno: no debería verse nunca. Se mapea igual para que, si aparece, al
+  // menos no aparezca en inglés y con el nombre del constraint dentro.
+  [CHK_PROFILES_DEACTIVATION_COHERENT, 'Estado de activación incoherente.'],
+  [CHK_PROPERTY_SECRETS_TIPO_CERRADURA_VALIDO, 'Tipo de cerradura inválido.'],
+];
+
+/**
+ * Mapeo de nombre de constraint → clave del campo del formulario.
+ *
+ * Es lo que permite que una Server Action devuelva `{ ok:false, error, campo }` y
+ * que react-hook-form haga `setError(campo, …)` en vez de lanzar un toast
+ * (UI-SPEC §9.4: "Error de base ligado a un campo → inline bajo ese campo, no en
+ * toast"). Un constraint que no tiene un input al que apuntar NO se lista aquí:
+ * su error va a toast, que es lo correcto.
+ */
+const CAMPOS_POR_CONSTRAINT: ReadonlyArray<readonly [string, string]> = [
+  [IDX_PROPERTIES_NOMBRE_UNIQ, 'nombre'],
+  [CHK_PROPS_ACTIVE_REQUIRES_RATES, 'tarifa_huesped'],
+  [CHK_PROPS_RATES_NONNEG, 'tarifa_huesped'],
+  [CHK_PROPS_ACTIVE_REQUIRES_OWNER, 'responsable_id'],
+  [CHK_PROPS_ASSIGNEES_ONLY_WHEN_MANAGED, 'responsable_id'],
+  [CHK_PROPS_SUPLENTE_DISTINCT, 'suplente_id'],
+  [IDX_PROPERTY_ROOMS_ETIQUETA_UNIQ, 'etiqueta'],
+  [IDX_MIC_PROP_UNIQ, 'nombre'],
+  [IDX_MIC_GLOBAL_UNIQ, 'nombre'],
+  [CHK_PROPERTY_SECRETS_TIPO_CERRADURA_VALIDO, 'tipo_cerradura'],
+  [IDX_CALENDAR_FEEDS_PROP_PROVIDER_UNIQ, 'ical_url'],
+  // `profiles_deactivation_coherent` y `cl_unmanaged_is_inert` quedan FUERA a
+  // propósito: no hay campo en pantalla al que anclarlos.
 ];
 
 function buscar(
@@ -100,4 +170,71 @@ export function mapDbError(e: DbErrorLike): string {
     default:
       return MENSAJE_GENERICO;
   }
+}
+
+/**
+ * Forma mínima de un `AuthError` de GoTrue tal como lo devuelve supabase-js.
+ * Trae `status` HTTP y un `code` propio del servicio, no un SQLSTATE.
+ */
+export type AuthErrorLike = {
+  code?: string;
+  status?: number;
+  message?: string;
+};
+
+/**
+ * Traduce un error de GoTrue a un mensaje en español listo para mostrar.
+ *
+ * Es un mapa SEPARADO de `mapDbError` y no una rama suya: `mapDbError` conmuta
+ * sobre códigos de Postgres y estos son códigos de otro servicio, con otro
+ * espacio de nombres. Fundirlos haría que un `code` colisionara con un SQLSTATE
+ * el día que GoTrue añada uno numérico.
+ *
+ * Garantías:
+ *  - Siempre devuelve un string. Nunca lanza.
+ *  - NUNCA devuelve `e.message`: los mensajes de GoTrue vienen en inglés.
+ */
+export function mapAuthError(e: AuthErrorLike): string {
+  switch (e?.code) {
+    case 'invalid_credentials':
+      // Password mala o email inexistente dan el MISMO código y el MISMO
+      // mensaje. Ahí no hay enumeración de usuarios (UI-SPEC §12.1).
+      return 'Email o contraseña incorrectos.';
+
+    case 'user_banned':
+      // NOTA DE SEGURIDAD, MEDIDA. `02-UI-SPEC.md` §12.1 justifica este copy
+      // diciendo que GoTrue emite `user_banned` DESPUÉS de validar la contraseña
+      // y que por eso "no enumera nada". Eso es FALSO: se midió contra un GoTrue
+      // vivo y el código se emite ANTES de verificar la contraseña, así que este
+      // mensaje SÍ es un oráculo de enumeración de cuentas desactivadas.
+      //
+      // El copy se mantiene igual; lo que se corrige es la razón. Se ACEPTA el
+      // riesgo porque: es una herramienta interna de ~10 cuentas, no hay
+      // registro público (`enable_signup = false`), hay rate limit de 30
+      // intentos por 5 minutos por IP, y un aseador dado de baja tiene derecho a
+      // entender por qué no entra en vez de creer que olvidó la contraseña.
+      //
+      // No citar la razón del UI-SPEC como si fuera un hecho medido.
+      return 'Tu cuenta está desactivada. Contacta al administrador.';
+
+    case 'email_exists':
+      return 'Ya existe una cuenta con ese email.';
+
+    case 'over_request_rate_limit':
+      return 'Demasiados intentos. Espera unos minutos.';
+
+    default:
+      return MENSAJE_GENERICO;
+  }
+}
+
+/**
+ * Del nombre del constraint que viene en el mensaje de Postgres a la clave del
+ * campo del formulario, para `setError(campo, …)` de react-hook-form.
+ *
+ * `undefined` significa "este error no tiene campo": la UI lo manda a toast y el
+ * formulario conserva todo lo escrito (UI-SPEC §9.4).
+ */
+export function campoDeConstraint(message: string | undefined): string | undefined {
+  return buscar(CAMPOS_POR_CONSTRAINT, message);
 }
