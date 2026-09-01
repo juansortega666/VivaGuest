@@ -31,11 +31,19 @@ export default function RootLayout({
   //
   // Sin ThemeProvider, sin clase `dark` y sin toggle: la fase es solo clara
   // (§4.5). El bloque `.dark` de globals.css existe pero no se usa.
+  // Las variables de fuente van en <html>, NO en <body>, y no es cosmetico.
+  // `globals.css` aplica `html { @apply font-sans }`, que resuelve a
+  // `var(--font-geist-sans)`. `next/font` define esa variable mediante la clase
+  // que genera, asi que si la clase vive en <body> la variable NO existe en
+  // <html>: la declaracion es invalida, <html> cae a Times y <body> hereda
+  // Times. Medido en el navegador con next start. Arreglar la circularidad de
+  // `--font-sans` en globals.css es necesario pero NO suficiente.
   return (
-    <html lang="es">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+    <html
+      lang="es"
+      className={`${geistSans.variable} ${geistMono.variable}`}
+    >
+      <body className="antialiased">
         <TooltipProvider>{children}</TooltipProvider>
         <Toaster />
       </body>
