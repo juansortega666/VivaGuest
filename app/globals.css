@@ -1,26 +1,273 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  /* El init escribe `--font-sans: var(--font-sans)`, que es una referencia
+     circular invalida: el `html { @apply font-sans }` de abajo cae al fallback
+     del navegador y Geist no se renderiza nunca. `app/layout.tsx` declara la
+     fuente como `variable: "--font-geist-sans"`, que es a lo que hay que
+     apuntar. `--font-mono` ya venia correcto. */
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  html {
+    @apply font-sans;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ═══════════════════════════════════════════════════════════════════════════
+   CAPA DE TOKENS DE VIVAGUEST — 02-UI-SPEC.md §4.3
+
+   Todo lo que sigue va DESPUES de lo que genero `shadcn init` y lo pisa por
+   orden de cascada. Este es el unico archivo del repo autorizado a nombrar un
+   valor de color literal; el guardarrail 6 de scripts/ci/check-service-role.sh
+   lo excluye a proposito y atrapa cualquier hex o clase arbitraria que se
+   escape a app/ o components/.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ─────────────────────────────────────────────────────────────
+     MARCA — PLACEHOLDER. Coral de Airbnb oscurecido a AA.
+     Al definir la identidad real de VivaGuest se cambian ESTAS DOS
+     LÍNEAS y nada más. Ningún componente conoce el valor literal.
+     ───────────────────────────────────────────────────────────── */
+  --brand:       oklch(0.5837 0.1961 23.31);  /* #D7373F */
+  --brand-hover: oklch(0.5197 0.1771 23.57);  /* #B92C33 */
+  --brand-foreground: oklch(1 0 0);
+
+  /* Todo lo que es "de marca" deriva. Nunca al revés. */
+  --primary:            var(--brand);
+  --primary-foreground: var(--brand-foreground);
+  --ring:               var(--brand);
+  --sidebar-primary:    var(--brand);
+  --sidebar-ring:       var(--brand);
+
+  /* Estados operativos: NO son de marca y NO cambian con el rebrand. */
+  --status-ok:   oklch(0.5273 0.1371 150.07);
+  --status-warn: oklch(0.5553 0.1455 49.00);
+  --status-idle: oklch(0.4455 0.0374 257.28);
+  --status-info: oklch(0.5510 0.0234 264.36);
+  --surface-ok:   oklch(0.9788 0.0221 160.24);
+  --surface-warn: oklch(0.9810 0.0187 83.06);
+  --surface-destructive: oklch(0.9708 0.0130 11.54);
+
+  --input: oklch(0.6411 0.0216 260.16);
+  --radius: 0.375rem;
+}
+
+@theme inline {
+  --color-status-ok:   var(--status-ok);
+  --color-status-warn: var(--status-warn);
+  --color-status-idle: var(--status-idle);
+  --color-status-info: var(--status-info);
+  --color-surface-ok:   var(--surface-ok);
+  --color-surface-warn: var(--surface-warn);
+  --color-surface-destructive: var(--surface-destructive);
+}
+
+/* ── Resto de la paleta medida de §4.2 ────────────────────────────────────────
+   El preset `nova` trae una escala de grises neutra; estos son los valores que
+   el UI-SPEC midio con la formula WCAG 2.1 contra la superficie donde cada
+   token se usa. No son de marca y no cambian con el rebrand.
+
+   `--input` (arriba, en el bloque de §4.3) es mas oscuro que `--border` A
+   PROPOSITO: WCAG 1.4.11 exige 3:1 para el limite de un control y `--border`
+   da 1.25:1. No unificarlos.
+
+   `--destructive` es un rojo distinto del coral. Su contraste con `--primary`
+   es 1.72:1, asi que la distincion NO puede quedar en el color: §4.6 obliga a
+   que todo destructivo lleve icono y a que nunca haya un primario relleno
+   adyacente a un destructivo relleno.                                        */
+:root {
+  --background: oklch(1 0 0);                    /* #FFFFFF */
+  --foreground: oklch(0.2101 0.0318 264.66);     /* #111827 */
+  --canvas: oklch(0.9757 0.0017 247.84);         /* #F6F7F8 — secundario 30% */
+  --muted: oklch(0.9632 0.0034 247.86);          /* #F1F3F5 */
+  --muted-foreground: oklch(0.5006 0.0216 258.37); /* #5C6470 */
+  --border: oklch(0.9235 0.0052 247.88);         /* #E3E6E9 */
+  --destructive: oklch(0.4546 0.1713 13.70);     /* #9F1239 */
+
+  --card: var(--background);
+  --card-foreground: var(--foreground);
+  --popover: var(--background);
+  --popover-foreground: var(--foreground);
+  --secondary: var(--canvas);
+  --secondary-foreground: var(--foreground);
+  --accent: var(--canvas);
+  --accent-foreground: var(--foreground);
+  --sidebar: var(--canvas);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-accent: var(--muted);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-primary-foreground: var(--brand-foreground);
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+}
+
+/* ── Escala de espaciado — 02-UI-SPEC.md §2 ───────────────────────────────────
+   Todos multiplos de 4. Se usan POR TOKEN. Prohibido `p-[13px]`, `gap-[7px]` y
+   cualquier valor arbitrario de espaciado en un componente: si hace falta un
+   valor nuevo, se anade aqui.                                                */
+@theme {
+  --spacing-xs:  4px;   /* icono↔texto, padding inline de badges */
+  --spacing-sm:  8px;   /* padding vertical de celda, gap en grupo de botones */
+  --spacing-md:  12px;  /* padding horizontal de celda, gap de la toolbar */
+  --spacing-lg:  16px;  /* entre campos de formulario, padding de card */
+  --spacing-xl:  24px;  /* padding de pagina, entre secciones del formulario */
+  --spacing-2xl: 32px;  /* entre bloques mayores de una pantalla */
+  --spacing-3xl: 48px;  /* nivel de pagina (cabecera ↔ contenido vacio) */
+
+  /* Excepciones declaradas de §2. Existen como token justamente para que nadie
+     tenga que escribirlas como valor arbitrario. */
+  --spacing-fila:            40px;  /* alto de fila de tabla; 39 filas sin scroll en 1080p */
+  --spacing-fila-encabezado: 32px;  /* menos peso visual que las filas de datos */
+  --spacing-barra:           56px;  /* alto de la barra superior */
+  --spacing-barra-acciones:  64px;  /* barra fija del formulario: 2 botones de 36px + aire */
+  --spacing-toque:           44px;  /* minimo de Apple HIG; SOLO dentro de app/(cleaner)/ */
+}
+
+/* ── Tipografia — 02-UI-SPEC.md §3 ────────────────────────────────────────────
+   Exactamente 4 tamanos y 2 pesos (400 y 600). Nada de 500, 700 ni 800.
+   `micro` no fija peso porque se usa en 400 (ayuda, contadores) y en 600
+   (encabezados de columna, etiqueta de estado).                              */
+@theme {
+  --text-display: 1.5rem;                /* 24px — titulo de pagina */
+  --text-display--line-height: 1.2;
+  --text-display--font-weight: 600;
+
+  --text-heading: 1rem;                  /* 16px — titulos de seccion y de dialogo */
+  --text-heading--line-height: 1.3;
+  --text-heading--font-weight: 600;
+
+  --text-body: 0.875rem;                 /* 14px — todo el texto corriente */
+  --text-body--line-height: 1.5;
+  --text-body--font-weight: 400;
+
+  --text-micro: 0.75rem;                 /* 12px — ayuda, contadores, encabezados */
+  --text-micro--line-height: 1.4;
 }
