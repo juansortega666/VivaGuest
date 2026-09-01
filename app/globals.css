@@ -329,6 +329,19 @@
 @theme {
   --container-admin: 1440px;  /* contenedor de contenido de (admin) */
   --container-vacio: 44ch;    /* cuerpo del estado vacio (UI-SPEC §9.2) */
+
+  /* Diálogo de alta de aseador (UI-SPEC §11.2). El default de `DialogContent`
+     de shadcn es `sm:max-w-sm` (384px) y el contrato pide 480px. */
+  --container-dialogo: 480px;
+
+  /* Ancho minimo del boton primario del dialogo. §9.3 exige que el boton NO
+     salte de ancho al pasar a `Creando…`, y ahi si hace falta el `min-width`
+     que el boton de /login no necesitaba: este no es de ancho completo, asi que
+     su ancho SI depende del label. Va como token porque `min-w-[148px]` seria
+     exactamente el valor arbitrario que §2 prohibe.
+     Tailwind v4 resuelve `min-w-*` con nombre desde `--container-*`, igual que
+     `max-w-*` (medido en el plan 02-06). */
+  --container-boton-alta: 148px;
 }
 
 /* ── Movimiento — 02-UI-SPEC.md §6.4 ──────────────────────────────────────────
