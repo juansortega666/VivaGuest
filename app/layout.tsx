@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Poppins } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
@@ -12,6 +12,19 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+// Poppins es la tipografia de marca de VivaGuest, recuperada del sitio de 2018.
+// Se usa SOLO en momentos de marca: logotipo, pantalla de login y titulos.
+// Los datos densos (tablas, formularios, dinero) se quedan en Geist, que es
+// tipografia de producto y trae numerales tabulares: en una columna de 39
+// tarifas, los digitos alinean. Poppins es geometrica y ancha, pensada para
+// marketing, y en tabla cuesta ancho horizontal y legibilidad a 12-14px.
+const poppins = Poppins({
+  variable: "--font-poppins",
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -41,7 +54,7 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`${geistSans.variable} ${geistMono.variable}`}
+      className={`${geistSans.variable} ${geistMono.variable} ${poppins.variable}`}
     >
       <body className="antialiased">
         <TooltipProvider>{children}</TooltipProvider>

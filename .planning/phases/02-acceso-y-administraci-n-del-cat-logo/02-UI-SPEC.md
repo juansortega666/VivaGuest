@@ -123,6 +123,36 @@ Reglas ligadas:
 
 ---
 
+
+> ### ACTUALIZACIÓN 2026-09-01 — identidad real recuperada
+>
+> Se encontró el sitio de VivaGuest de 2018 (web.archive.org, snapshot 2018-08-22) y de ahí
+> sale la identidad real. **Esto reemplaza el placeholder** y corrige una de las cuatro razones
+> que esta sección daba.
+>
+> | Token | Valor | Contraste vs blanco | Uso |
+> |---|---|---|---|
+> | `--brand-identity` | `#ff7469` | 2.64:1 | Coral de marca 2018. **Logo y áreas grandes. Nunca texto ni relleno de control.** |
+> | `--brand` | `#d1382c` | 4.87:1 | El mismo tono (hue 4.4) oscurecido a AA. Botones, enlaces, foco |
+> | `--brand-hover` | `#bc3228` | 5.79:1 | Estado hover |
+> | `--brand-gold` | `#efc14e` | 1.69:1 | Acento dorado 2018. Decorativo y fondos, nunca texto sobre blanco |
+>
+> **La razón de "marca registrada de Airbnb" queda ANULADA.** El coral de VivaGuest está a
+> hue 4.4 y el de Airbnb a 358.2: casi el mismo tono, pero VivaGuest llegó ahí por su cuenta
+> en 2018. No hay nada que reclamar. Las otras tres razones siguen en pie, y la de contraste
+> empeora: el coral propio da 2.64:1, peor que los 3.05:1 de Airbnb.
+>
+> **Tipografía: Poppins es la de marca**, cargada con pesos 300/400/500/600/700 vía `next/font`,
+> expuesta como `--font-brand` y `--font-heading`.
+>
+> **Poppins NO se usa para datos.** Los densos (tabla de 39 unidades, formularios, dinero) se
+> quedan en Geist (`--font-sans`), que trae numerales tabulares y alinea las columnas de tarifas.
+> Poppins es geométrica y ancha, pensada para marketing: en tabla cuesta ancho horizontal y
+> pierde legibilidad a 12-14px. Poppins vive en logotipo, pantalla de login y títulos.
+>
+> Otros valores de 2018 disponibles si hacen falta: texto `#4d4d4d` (8.45:1), fondo `#f5f5f5`,
+> borde `#ebebeb`. Logos: `vivaguest-logo-rojo.svg` y `vivaguest-logo-blanco.svg`.
+
 ## 4. Color
 
 ### 4.1 Advertencia sobre la marca — el coral es un PLACEHOLDER
