@@ -7,9 +7,15 @@
 #   2. Ninguna clave de servicio lleva prefijo NEXT_PUBLIC_
 #   3. lib/supabase/admin.ts declara import 'server-only'
 #   4. Ninguna migracion ni seed usa current_date / now()::date
+#   5. La fabrica administrativa solo se importa desde Server Actions o app/api/
+#   6. Ningun archivo de UI lleva un valor de color literal fuera de globals.css
 #
-# Se corre en el job `arquitectura` de .github/workflows/db.yml y en local con
-# `npm run ci:arch`.
+# Se corre en el job `arquitectura` de ci/db.yml y en local con `npm run ci:arch`.
+#
+# REGLA AL EDITAR ESTE ARCHIVO: ningun comentario puede citar literalmente un token
+# que el propio script prohibe, o el script se atrapa a si mismo el dia que alguien
+# amplie el alcance de un grep. Describe el patron, no lo escribas. Paso dos veces
+# en la Fase 1.
 set -euo pipefail
 
 ADMIN_FILE="lib/supabase/admin.ts"
@@ -25,6 +31,10 @@ err() {
   echo "$1" >&2
   fallo=1
 }
+
+# Filtro comun de lineas de comentario sobre la salida `archivo:linea:contenido`
+# de `grep -rn`. Cubre los cuatro estilos que aparecen en el repo.
+COMENTARIO_RE='^[^:]+:[0-9]+:[[:space:]]*(//|/\*|\*|#|--)'
 
 # ── 1. La clave de servicio, solo en admin.ts ────────────────────────────────────
 # `import 'server-only'` rompe el build si el modulo se importa desde un Client
@@ -74,6 +84,83 @@ if [ ${#SQL_DIRS[@]} -gt 0 ]; then
   if [ -n "$FECHAS" ]; then
     err "usa public.today_bog(), no current_date:"
     echo "$FECHAS" >&2
+  fi
+fi
+
+# ── 5. Quien puede importar la fabrica administrativa ───────────────────────────
+# El guardarrail 1 busca el NOMBRE de la variable de entorno, no el import. Nada
+# impedia que una pagina del admin importara la fabrica que salta RLS por completo,
+# y `import 'server-only'` tampoco: solo rompe si el importador es Client Component.
+#
+# Solo tres sitios pueden importarla:
+#   - el propio lib/supabase/admin.ts
+#   - un archivo que declare la directiva de Server Action en su primera linea de codigo
+#   - cualquier route handler bajo app/api/
+if [ ${#SRC_DIRS[@]} -gt 0 ]; then
+  CANDIDATOS=$(grep -rl --include='*.ts' --include='*.tsx' \
+    -F '@/lib/supabase/admin' "${SRC_DIRS[@]}" 2>/dev/null || true)
+
+  IMPORTADORES=""
+  while IFS= read -r archivo; do
+    if [ -z "$archivo" ]; then
+      continue
+    fi
+    if [ "$archivo" = "$ADMIN_FILE" ]; then
+      continue
+    fi
+    case "$archivo" in
+      app/api/*) continue ;;
+    esac
+    # La referencia solo cuenta si esta en codigo. Un comentario que mencione la
+    # fabrica no es una importacion.
+    if ! grep -vE '^[[:space:]]*(//|/\*|\*)' "$archivo" | grep -q 'createAdminClient'; then
+      continue
+    fi
+    # Primera linea de codigo, ignorando comentarios y lineas en blanco.
+    PRIMERA=$(grep -vE '^[[:space:]]*(//|/\*|\*)|^[[:space:]]*$' "$archivo" | head -n 1 || true)
+    case "$PRIMERA" in
+      "'use server'"*) continue ;;
+      '"use server"'*) continue ;;
+    esac
+    IMPORTADORES="${IMPORTADORES}  ${archivo}
+"
+  done <<EOF
+$CANDIDATOS
+EOF
+
+  if [ -n "$IMPORTADORES" ]; then
+    err "la fabrica administrativa (${ADMIN_FILE}) se importa desde un archivo que no es Server Action ni vive bajo app/api/:"
+    printf '%s' "$IMPORTADORES" >&2
+  fi
+fi
+
+# ── 6. Colores literales fuera de la capa de tokens ─────────────────────────────
+# El swap de marca es de dos lineas en app/globals.css (UI-SPEC §4.3). Deja de serlo
+# en cuanto un componente conoce un valor de color literal. Se buscan dos formas: el
+# valor hexadecimal de 3 o 6 digitos, y la clase arbitraria de Tailwind que lo mete
+# en bg/text/border/ring/fill/stroke.
+#
+# Exclusiones:
+#   - app/globals.css: es el UNICO archivo autorizado a nombrar valores literales.
+#   - components/ui/: lo genera el CLI de shadcn. Editarlo a mano es el modelo, pero
+#     los valores que trae son del preset y se sustituyen por la capa de tokens, no
+#     reescribiendo archivo por archivo.
+UI_DIRS=()
+for d in app components; do
+  [ -d "$d" ] && UI_DIRS+=("$d")
+done
+
+if [ ${#UI_DIRS[@]} -gt 0 ]; then
+  COLORES=$(grep -rnE --include='*.ts' --include='*.tsx' --include='*.css' \
+    -e '#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})([^0-9a-fA-F]|$)' \
+    -e '(bg|text|border|ring|fill|stroke)-\[#' \
+    "${UI_DIRS[@]}" 2>/dev/null \
+    | grep -vE "$COMENTARIO_RE" \
+    | grep -vE '^app/globals\.css:' \
+    | grep -vE '^components/ui/' || true)
+  if [ -n "$COLORES" ]; then
+    err "valor de color literal fuera de la capa de tokens (solo app/globals.css puede nombrarlos):"
+    echo "$COLORES" >&2
   fi
 fi
 
