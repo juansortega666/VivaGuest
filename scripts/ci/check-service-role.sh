@@ -9,6 +9,7 @@
 #   4. Ninguna migracion ni seed usa current_date / now()::date
 #   5. La fabrica administrativa solo se importa desde Server Actions, app/api/ o lib/test/
 #   6. Ningun archivo de UI lleva un valor de color literal fuera de globals.css
+#   7. Quien construye la fabrica administrativa llama antes a un guard de sesion
 #
 # Se corre en el job `arquitectura` de ci/db.yml y en local con `npm run ci:arch`.
 #
@@ -173,6 +174,93 @@ if [ ${#UI_DIRS[@]} -gt 0 ]; then
   if [ -n "$COLORES" ]; then
     err "valor de color literal fuera de la capa de tokens (solo app/globals.css puede nombrarlos):"
     echo "$COLORES" >&2
+  fi
+fi
+
+# ── 7. El guard va ANTES de construir la fabrica administrativa ────────────────
+# El guardarrail 5 obliga a que solo una Server Action pueda importar la fabrica.
+# No dice NADA sobre si esa action comprueba quien la llama, y un Server Action es
+# un endpoint HTTP publico: sin guard, cualquiera con el id de action y un payload
+# opera con un cliente que salta la RLS por completo.
+#
+# MEDIDO en el plan 02-08: se borro `exigirAdmin()` de la action de alta de aseador,
+# convirtiendola en un creador de cuentas abierto a cualquiera, y NADA lo atrapo.
+# Ni el compilador, ni los 188 tests unitarios, ni los 13 de integracion, ni los 33
+# de punta a punta, ni los guardarrailes 1 a 6. Este es el hueco que cierra.
+#
+# LA COMPROBACION ES POR FUNCION, NO POR ARCHIVO, Y ESO TAMBIEN SE MIDIO. La
+# primera version de este guardarrail comparaba la primera linea con un guard
+# contra la primera que construye la fabrica en TODO el archivo, y era un FALSO
+# VERDE: en el archivo de actions del alta hay dos exportaciones, y el guard de la
+# primera satisfacia la comprobacion mientras la segunda se quedaba sin ninguno.
+# Con el guard borrado de la action que de verdad importa, el script decia OK.
+#
+# Por eso se recorre funcion a funcion y se exige, DENTRO de cada una, que el guard
+# aparezca antes de construir la fabrica. Invertir el orden deja el cliente
+# privilegiado construido antes de saber quien pregunta.
+#
+# Los patrones buscan la LLAMADA (con parentesis) y no el identificador a secas,
+# para que la linea del `import` no cuente como si fuera una invocacion.
+if [ ${#SRC_DIRS[@]} -gt 0 ]; then
+  USUARIOS=$(grep -rl --include='*.ts' --include='*.tsx' \
+    -F '@/lib/supabase/admin' "${SRC_DIRS[@]}" 2>/dev/null || true)
+
+  SIN_GUARD=""
+  while IFS= read -r archivo; do
+    [ -z "$archivo" ] && continue
+    [ "$archivo" = "$ADMIN_FILE" ] && continue
+    case "$archivo" in
+      # Codigo de prueba: siembra y limpia a proposito sin sesion. Misma excepcion
+      # acotada que documenta el guardarrail 5.
+      lib/test/*) continue ;;
+    esac
+
+    # Solo importa el archivo que de verdad la CONSTRUYE; importarla sin llamarla
+    # ya lo cubre el guardarrail 5.
+    if ! grep -qE '(^|[^A-Za-z0-9_])createAdminClient[[:space:]]*\(' "$archivo"; then
+      continue
+    fi
+
+    HALLAZGOS=$(awk -v archivo="$archivo" '
+      function esComentario(l) { return l ~ /^[[:space:]]*(\/\/|\/\*|\*)/ }
+
+      # Cierre de una funcion de nivel superior: la llave en la columna 1.
+      dentro && /^\}/ {
+        if (fabrica && !guard) {
+          printf "  %s: %s() construye la fabrica administrativa sin un guard antes\n", archivo, nombre
+        }
+        dentro = 0
+        next
+      }
+
+      dentro {
+        if (esComentario($0)) next
+        # El guard solo cuenta si aparece ANTES de construir la fabrica.
+        if ($0 ~ /(^|[^A-Za-z0-9_])(exigirAdmin|exigirSesion)[[:space:]]*\(/ && !fabrica) guard = 1
+        if ($0 ~ /(^|[^A-Za-z0-9_])createAdminClient[[:space:]]*\(/) fabrica = 1
+        next
+      }
+
+      # Apertura de una funcion de nivel superior, exportada o no.
+      /^(export[[:space:]]+)?(async[[:space:]]+)?function[[:space:]]+[A-Za-z_$]/ {
+        dentro = 1; guard = 0; fabrica = 0
+        nombre = $0
+        sub(/^.*function[[:space:]]+/, "", nombre)
+        sub(/[[:space:]]*[(<].*$/, "", nombre)
+      }
+    ' "$archivo")
+
+    if [ -n "$HALLAZGOS" ]; then
+      SIN_GUARD="${SIN_GUARD}${HALLAZGOS}
+"
+    fi
+  done <<EOF
+$USUARIOS
+EOF
+
+  if [ -n "$SIN_GUARD" ]; then
+    err "una Server Action es un endpoint HTTP publico: el guard va ANTES de construir la fabrica administrativa:"
+    printf '%s' "$SIN_GUARD" >&2
   fi
 fi
 
