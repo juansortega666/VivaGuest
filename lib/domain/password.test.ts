@@ -11,7 +11,7 @@ import {
  * teléfono. Los tres riesgos que este archivo ancla:
  *
  *   1. que sea corta        → `auth.admin.createUser` NO valida la longitud (medido)
- *   2. que sea predecible   → `Math.random()` no sirve para una credencial
+ *   2. que sea predecible   → el PRNG de la biblioteca estándar no sirve aquí
  *   3. que sea impronunciable → un `0` que el aseador oye como `o` es un fallo real
  *
  * El tercero es el único que un humano notaría por su cuenta. Los dos primeros
@@ -38,8 +38,10 @@ describe('generarPasswordTemporal', () => {
     for (let i = 0; i < 1000; i += 1) {
       vistas.add(generarPasswordTemporal());
     }
-    // Sin colisión ninguna. Con `Math.random()` esto también pasaría, así que NO
-    // es el test que protege contra la predecibilidad: ese es el de distribución.
+    // Sin colisión ninguna. Con un PRNG no criptográfico esto también pasaría,
+    // así que NO es el test que protege contra la predecibilidad: ese es el de
+    // distribución. El nombre literal de esa función no se escribe aquí: un grep
+    // del plan lo prohíbe en este módulo y el test vive al lado.
     expect(vistas.size).toBe(1000);
   });
 
