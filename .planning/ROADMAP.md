@@ -66,7 +66,24 @@ Plans:
   4. El admin crea y desactiva cuentas de aseador (sin auto-registro) y el aseador desactivado pierde el acceso de inmediato aunque tuviera la sesión abierta
   5. El admin encuentra cualquiera de las 39 unidades desde el buscador y ve la lista de aseadores con su estado y los apartamentos donde es responsable o suplente
   6. Al conectar el calendario, el admin sigue una guía visual de dónde sacar el link de exportación en Airbnb, y al pegarlo ve en pantalla que el feed sirve, cuántas reservas trajo y cuál es el próximo checkout detectado, sin tener que esperar la siguiente corrida del sync
-**Plans**: TBD
+**Plans:** 15 plans en 13 waves
+
+Plans:
+- [ ] 02-01-PLAN.md — Desbloqueo: proveedor de email en `config.toml`, `.env.example`, env de build en CI y los guardarraíles 5 y 6 de arquitectura
+- [ ] 02-02-PLAN.md — Dominio puro: tabla de ruteo por rol, derivación de estado de apartamento, dinero COP y fechas de negocio
+- [ ] 02-03-PLAN.md — Dominio puro: contrato borrador→activo en Zod, `mapDbError` ampliado + `mapAuthError`, y el escáner de iCal con sus fixtures
+- [ ] 02-04-PLAN.md — Puerta de legitimidad de paquetes, Vitest de integración con JWT reales y runner de Playwright
+- [ ] 02-05-PLAN.md — shadcn 4.19.1 con Base UI (`-p nova`, `field` en vez de `form`), capa de tokens y muerte del boilerplate
+- [ ] 02-06-PLAN.md — Los cuatro clientes de Supabase, middleware con `setAll` de dos argumentos, `/login` y stub del aseador
+- [ ] 02-07-PLAN.md — Shell del admin con `TopNav` y lista de aseadores con sus asignaciones (ASEADOR-03)
+- [ ] 02-08-PLAN.md — Alta de aseadores con contraseña criptográfica de una sola vez (ASEADOR-01)
+- [ ] 02-09-PLAN.md — Baja y reactivación con revocación inmediata: `is_active` + `ban_duration` (ASEADOR-02, PLAT-04)
+- [ ] 02-10-PLAN.md — Lecturas del catálogo y Server Actions de CRUD, con `property_secrets` por `service_role`
+- [ ] 02-11-PLAN.md — Tabla de las 39 unidades, buscador sin tildes, cuatro estados y banner de montaje (APTO-11)
+- [ ] 02-12-PLAN.md — Formulario de apartamento, secciones 1–4 y barra de acciones con faltantes en vivo
+- [ ] 02-13-PLAN.md — Cuartos y faltantes del apartamento, sección 5 (APTO-06, APTO-07)
+- [ ] 02-14-PLAN.md — APTO-12: guía de Airbnb, validación en vivo del feed y los siete estados
+- [ ] 02-15-PLAN.md — Cierre: capturas de la guía, las 11 puertas a mano, sign-off de validación y humo con feed real
 **UI hint**: yes
 
 ### Phase 3: Motor de sincronización iCal
