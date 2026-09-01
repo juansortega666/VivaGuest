@@ -17,7 +17,8 @@
     "test:unit": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
-    "ci:arch": "bash scripts/ci/check-service-role.sh"
+    "ci:arch": "bash scripts/ci/check-service-role.sh",
+    "setup:worktree": "bash scripts/dev/setup-worktree.sh"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
