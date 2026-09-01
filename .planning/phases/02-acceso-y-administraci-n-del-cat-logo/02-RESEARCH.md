@@ -1861,7 +1861,12 @@ Lo único que se acerca al concepto es la **configuración viva de Supabase Auth
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> Las 5 preguntas quedaron resueltas y trazadas a planes concretos, verificado por
+> `gsd-plan-checker` el 2026-09-01. Detalle original abajo.
+
+
 
 1. **El copy de "cuenta desactivada" enumera cuentas. ¿Se queda?**
    - Lo que sabemos, medido: GoTrue devuelve `user_banned` **antes** de verificar la contraseña. Cualquiera con un email válido y una contraseña cualquiera descubre que esa cuenta existe y está desactivada.

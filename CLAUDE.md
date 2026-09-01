@@ -78,10 +78,25 @@ Plataforma que automatiza la asignación y ejecución de aseos en propiedades de
 - `Cache-Control: private, no-cache, no-store, must-revalidate, max-age=0`
 - `Expires: 0`
 - `Pragma: no-cache`
-### Trampa #2: `getClaims()` reemplazó a `getUser()` como el método recomendado
-- **`getClaims()`** → proteger rutas, leer `sub` y custom claims. Es lo que va en el middleware y en los layouts.
-- **`getUser()`** → solo cuando necesitas el registro fresco del usuario (p. ej. justo después de que el admin desactiva un aseador y necesitas confirmar el estado real).
+### Trampa #2: en ESTE proyecto va `getUser()`, no `getClaims()`
+
+> **CORREGIDO 2026-09-01, contra la recomendación oficial de Supabase.** La doc de Supabase
+> presenta `getClaims()` como el reemplazo recomendado de `getUser()`. Para VivaGuest esa es
+> la respuesta equivocada, y está medido: **tras banear a un usuario, `getUser()` devuelve
+> 403 y `getClaims()` sigue respondiendo OK.** `getClaims()` valida la firma del JWT
+> localmente; no pregunta al servidor de Auth si el usuario todavía existe o sigue activo.
+>
+> El criterio de éxito 4 del ROADMAP exige que un aseador desactivado pierda el acceso
+> **de inmediato, aunque tuviera la sesión abierta**. Con `getClaims()` conservaría acceso
+> hasta que expire su token. Medición en `.planning/phases/02-acceso-y-administraci-n-del-cat-logo/02-RESEARCH.md`.
+
+- **`getUser()`** → proteger rutas y leer el usuario en middleware y layouts. Es el único que
+  valida contra el servidor de Auth, que es lo que hace visible una desactivación.
+- **`getClaims()`** → solo donde no importe la revocación y el costo de red sí. Hoy: ningún caso.
 - **`getSession()`** → nunca para autorizar. Advertencia literal de la doc: *"Never trust `supabase.auth.getSession()` inside server code."*
+- **El rol sale de `app_metadata.role`, nunca de `user_metadata`.** Medido: un aseador puede
+  escribir `user_metadata.role = 'admin'` en su propio JWT. `app_metadata` no es escribible
+  por el usuario y `getUser()` lo devuelve sin costo extra.
 ### Trampa #3: `cookies()` es async en Next 15
 ### Trampa #4: nombres de API keys
 ### Código de referencia
@@ -197,7 +212,9 @@ Plataforma que automatiza la asignación y ejecución de aseos en propiedades de
 | **`@ducanh2912/next-pwa`** | Congelado en 2024-09; su autor lo sucedió con Serwist. | `@serwist/next` |
 | **`@serwist/turbopack` en Vercel** | Bug abierto **serwist#360**: `ERR_MODULE_NOT_FOUND` en runtime tras cache miss + precache manifest vacío. Reproducido en 9.5.11 y 9.5.12. | `@serwist/next` webpack, o configurator mode con `precachePrerendered: false` |
 | **`setAll(cookiesToSet)` de un solo argumento** | Firma obsoleta. Omitir el arg `headers` deja que el CDN de Vercel cachee respuestas con cookie de sesión → **fuga de sesión entre usuarios**. | `setAll(cookiesToSet, headers)` aplicando ambos |
-| **`getSession()` para autorizar** | Doc oficial: *"Never trust `supabase.auth.getSession()` inside server code."* Las cookies se pueden falsificar. | `getClaims()` |
+| **`getSession()` para autorizar** | Doc oficial: *"Never trust `supabase.auth.getSession()` inside server code."* Las cookies se pueden falsificar. | `getUser()` |
+| **`getClaims()` para proteger rutas** | Valida la firma del JWT en local, no pregunta al servidor de Auth. **Medido: tras un ban devuelve OK mientras `getUser()` da 403.** Rompe el criterio de revocación inmediata. Es lo que recomienda la doc oficial de Supabase; acá no aplica. | `getUser()` |
+| **Leer el rol de `user_metadata`** | El usuario puede escribirlo en su propio JWT. Medido: un aseador se puede poner `role: 'admin'`. | `app_metadata.role` |
 | **`ical-expander`** | Fijado a `ical.js@^1.x`, dos majors atrás. Su única función (expandir recurrencias) no aplica: estos feeds no tienen `RRULE`. | `node-ical` |
 | **`rrule@2.8.1`** | Sin releases desde 2023-11. `node-ical` ya lo abandonó por `rrule-temporal`. | No instalarlo |
 | **`date-fns-tz`** | Última publicación 2024-09; date-fns v4 lo absorbió. Además, sin DST en Colombia no aporta nada. | `date-fns@4` a secas |
