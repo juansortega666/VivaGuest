@@ -7,7 +7,12 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  /* El init escribe `--font-sans: var(--font-sans)`, que es una referencia
+     circular invalida: el `html { @apply font-sans }` de abajo cae al fallback
+     del navegador y Geist no se renderiza nunca. `app/layout.tsx` declara la
+     fuente como `variable: "--font-geist-sans"`, que es a lo que hay que
+     apuntar. `--font-mono` ya venia correcto. */
+  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -130,4 +135,139 @@
   html {
     @apply font-sans;
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CAPA DE TOKENS DE VIVAGUEST — 02-UI-SPEC.md §4.3
+
+   Todo lo que sigue va DESPUES de lo que genero `shadcn init` y lo pisa por
+   orden de cascada. Este es el unico archivo del repo autorizado a nombrar un
+   valor de color literal; el guardarrail 6 de scripts/ci/check-service-role.sh
+   lo excluye a proposito y atrapa cualquier hex o clase arbitraria que se
+   escape a app/ o components/.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ─────────────────────────────────────────────────────────────
+     MARCA — PLACEHOLDER. Coral de Airbnb oscurecido a AA.
+     Al definir la identidad real de VivaGuest se cambian ESTAS DOS
+     LÍNEAS y nada más. Ningún componente conoce el valor literal.
+     ───────────────────────────────────────────────────────────── */
+  --brand:       oklch(0.5837 0.1961 23.31);  /* #D7373F */
+  --brand-hover: oklch(0.5197 0.1771 23.57);  /* #B92C33 */
+  --brand-foreground: oklch(1 0 0);
+
+  /* Todo lo que es "de marca" deriva. Nunca al revés. */
+  --primary:            var(--brand);
+  --primary-foreground: var(--brand-foreground);
+  --ring:               var(--brand);
+  --sidebar-primary:    var(--brand);
+  --sidebar-ring:       var(--brand);
+
+  /* Estados operativos: NO son de marca y NO cambian con el rebrand. */
+  --status-ok:   oklch(0.5273 0.1371 150.07);
+  --status-warn: oklch(0.5553 0.1455 49.00);
+  --status-idle: oklch(0.4455 0.0374 257.28);
+  --status-info: oklch(0.5510 0.0234 264.36);
+  --surface-ok:   oklch(0.9788 0.0221 160.24);
+  --surface-warn: oklch(0.9810 0.0187 83.06);
+  --surface-destructive: oklch(0.9708 0.0130 11.54);
+
+  --input: oklch(0.6411 0.0216 260.16);
+  --radius: 0.375rem;
+}
+
+@theme inline {
+  --color-status-ok:   var(--status-ok);
+  --color-status-warn: var(--status-warn);
+  --color-status-idle: var(--status-idle);
+  --color-status-info: var(--status-info);
+  --color-surface-ok:   var(--surface-ok);
+  --color-surface-warn: var(--surface-warn);
+  --color-surface-destructive: var(--surface-destructive);
+}
+
+/* ── Resto de la paleta medida de §4.2 ────────────────────────────────────────
+   El preset `nova` trae una escala de grises neutra; estos son los valores que
+   el UI-SPEC midio con la formula WCAG 2.1 contra la superficie donde cada
+   token se usa. No son de marca y no cambian con el rebrand.
+
+   `--input` (arriba, en el bloque de §4.3) es mas oscuro que `--border` A
+   PROPOSITO: WCAG 1.4.11 exige 3:1 para el limite de un control y `--border`
+   da 1.25:1. No unificarlos.
+
+   `--destructive` es un rojo distinto del coral. Su contraste con `--primary`
+   es 1.72:1, asi que la distincion NO puede quedar en el color: §4.6 obliga a
+   que todo destructivo lleve icono y a que nunca haya un primario relleno
+   adyacente a un destructivo relleno.                                        */
+:root {
+  --background: oklch(1 0 0);                    /* #FFFFFF */
+  --foreground: oklch(0.2101 0.0318 264.66);     /* #111827 */
+  --canvas: oklch(0.9757 0.0017 247.84);         /* #F6F7F8 — secundario 30% */
+  --muted: oklch(0.9632 0.0034 247.86);          /* #F1F3F5 */
+  --muted-foreground: oklch(0.5006 0.0216 258.37); /* #5C6470 */
+  --border: oklch(0.9235 0.0052 247.88);         /* #E3E6E9 */
+  --destructive: oklch(0.4546 0.1713 13.70);     /* #9F1239 */
+
+  --card: var(--background);
+  --card-foreground: var(--foreground);
+  --popover: var(--background);
+  --popover-foreground: var(--foreground);
+  --secondary: var(--canvas);
+  --secondary-foreground: var(--foreground);
+  --accent: var(--canvas);
+  --accent-foreground: var(--foreground);
+  --sidebar: var(--canvas);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-accent: var(--muted);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-primary-foreground: var(--brand-foreground);
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+}
+
+/* ── Escala de espaciado — 02-UI-SPEC.md §2 ───────────────────────────────────
+   Todos multiplos de 4. Se usan POR TOKEN. Prohibido `p-[13px]`, `gap-[7px]` y
+   cualquier valor arbitrario de espaciado en un componente: si hace falta un
+   valor nuevo, se anade aqui.                                                */
+@theme {
+  --spacing-xs:  4px;   /* icono↔texto, padding inline de badges */
+  --spacing-sm:  8px;   /* padding vertical de celda, gap en grupo de botones */
+  --spacing-md:  12px;  /* padding horizontal de celda, gap de la toolbar */
+  --spacing-lg:  16px;  /* entre campos de formulario, padding de card */
+  --spacing-xl:  24px;  /* padding de pagina, entre secciones del formulario */
+  --spacing-2xl: 32px;  /* entre bloques mayores de una pantalla */
+  --spacing-3xl: 48px;  /* nivel de pagina (cabecera ↔ contenido vacio) */
+
+  /* Excepciones declaradas de §2. Existen como token justamente para que nadie
+     tenga que escribirlas como valor arbitrario. */
+  --spacing-fila:            40px;  /* alto de fila de tabla; 39 filas sin scroll en 1080p */
+  --spacing-fila-encabezado: 32px;  /* menos peso visual que las filas de datos */
+  --spacing-barra:           56px;  /* alto de la barra superior */
+  --spacing-barra-acciones:  64px;  /* barra fija del formulario: 2 botones de 36px + aire */
+  --spacing-toque:           44px;  /* minimo de Apple HIG; SOLO dentro de app/(cleaner)/ */
+}
+
+/* ── Tipografia — 02-UI-SPEC.md §3 ────────────────────────────────────────────
+   Exactamente 4 tamanos y 2 pesos (400 y 600). Nada de 500, 700 ni 800.
+   `micro` no fija peso porque se usa en 400 (ayuda, contadores) y en 600
+   (encabezados de columna, etiqueta de estado).                              */
+@theme {
+  --text-display: 1.5rem;                /* 24px — titulo de pagina */
+  --text-display--line-height: 1.2;
+  --text-display--font-weight: 600;
+
+  --text-heading: 1rem;                  /* 16px — titulos de seccion y de dialogo */
+  --text-heading--line-height: 1.3;
+  --text-heading--font-weight: 600;
+
+  --text-body: 0.875rem;                 /* 14px — todo el texto corriente */
+  --text-body--line-height: 1.5;
+  --text-body--font-weight: 400;
+
+  --text-micro: 0.75rem;                 /* 12px — ayuda, contadores, encabezados */
+  --text-micro--line-height: 1.4;
 }

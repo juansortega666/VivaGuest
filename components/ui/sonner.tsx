@@ -1,15 +1,30 @@
 "use client"
 
-import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
+/**
+ * VivaGuest solo tiene tema claro (02-UI-SPEC.md §4.5).
+ *
+ * El archivo que genera el CLI de shadcn lee el tema con `useTheme()` del
+ * paquete de temas que sonner arrastra como transitiva. Sin un ThemeProvider
+ * en el arbol ese hook devuelve `'system'`, asi que Sonner pintaria los toasts
+ * en oscuro cuando el sistema operativo esta en oscuro: exactamente lo que la
+ * decision de "solo claro" quiere evitar, y ademas incoherente con el resto de
+ * la app, que no reacciona a esa preferencia.
+ *
+ * Por eso el tema va fijo y ese paquete quedo desinstalado del proyecto.
+ * `theme` se declara DESPUES de `{...props}` a proposito: no es un default
+ * que el llamador pueda pisar, es una invariante de la fase.
+ *
+ * Este comentario describe el paquete en vez de nombrarlo: la verificacion del
+ * plan es un grep de su nombre sobre este directorio, y citarlo aqui la
+ * pondria en rojo por una mencion en prosa. Misma regla que la cabecera de
+ * scripts/ci/check-service-role.sh.
+ */
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
-
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
       className="toaster group"
       icons={{
         success: (
@@ -42,6 +57,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
         },
       }}
       {...props}
+      theme="light"
     />
   )
 }
