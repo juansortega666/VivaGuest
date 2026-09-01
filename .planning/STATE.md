@@ -28,7 +28,7 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 Phase: 01 (fundaci-n-schema-y-rls) — EXECUTING
 Plan: 1 of 9
 Status: Executing Phase 01
-Last activity: 2026-09-01 — Fase 1 cerrada (passed_with_gaps) y mergeada en PR #1. Arrancando Fase 2
+Last activity: 2026-09-01 — Fase 2 planeada: contrato de UI verificado, research medido contra el stack local, 15 planes aprobados sin bloqueantes
 
 Progress: [█░░░░░░░░░] 11% (1 de 9 fases completas)
 
@@ -111,5 +111,5 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 ## Session Continuity
 
 Last session: 2026-08-31
-Stopped at: Fase 1 cerrada y mergeada. Siguiente: contrato de UI de la Fase 2
+Stopped at: Fase 2 planeada. Siguiente: /gsd:execute-phase 2
 Resume file: None

@@ -56,6 +56,7 @@ Plans:
 - Catálogo provisional de cuartos y tareas (máximo 3 por tipo), editable sin migración
 
 ### Phase 2: Acceso y administración del catálogo
+**Status**: Planned — 15 planes en 13 waves, contrato de UI y planes verificados sin bloqueantes (2026-09-01)
 **Goal**: El admin monta toda la operación real en el sistema y cada usuario entra a la superficie que le corresponde
 **Depends on**: Fase 1
 **Requirements**: PLAT-01, PLAT-02, PLAT-04, PLAT-07, APTO-01, APTO-02, APTO-03, APTO-04, APTO-05, APTO-06, APTO-07, APTO-08, APTO-09, APTO-10, APTO-11, APTO-12, ASEADOR-01, ASEADOR-02, ASEADOR-03
@@ -211,7 +212,7 @@ Fases con patrón ya documentado en el research (se puede saltar):
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Fundación, schema y RLS | 9/9 | Complete (passed_with_gaps) | 2026-09-01 |
-| 2. Acceso y administración del catálogo | 0/TBD | Not started | - |
+| 2. Acceso y administración del catálogo | 0/15 | Planned | - |
 | 3. Motor de sincronización iCal | 0/TBD | Not started | - |
 | 4. Dashboard operativo del admin | 0/TBD | Not started | - |
 | 5. Notificaciones push e instalación de la PWA | 0/TBD | Not started | - |
