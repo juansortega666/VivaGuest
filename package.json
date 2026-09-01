@@ -15,6 +15,7 @@
     "db:types": "supabase gen types typescript --local --schema public > lib/database.types.ts",
     "db:types:check": "supabase gen types typescript --local --schema public > /tmp/vg.types.gen.ts && diff -u lib/database.types.ts /tmp/vg.types.gen.ts",
     "test:unit": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "ci:arch": "bash scripts/ci/check-service-role.sh"
   },
   "dependencies": {

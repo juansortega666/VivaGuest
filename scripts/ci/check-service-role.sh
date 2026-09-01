@@ -7,7 +7,7 @@
 #   2. Ninguna clave de servicio lleva prefijo NEXT_PUBLIC_
 #   3. lib/supabase/admin.ts declara import 'server-only'
 #   4. Ninguna migracion ni seed usa current_date / now()::date
-#   5. La fabrica administrativa solo se importa desde Server Actions o app/api/
+#   5. La fabrica administrativa solo se importa desde Server Actions, app/api/ o lib/test/
 #   6. Ningun archivo de UI lleva un valor de color literal fuera de globals.css
 #
 # Se corre en el job `arquitectura` de ci/db.yml y en local con `npm run ci:arch`.
@@ -92,10 +92,21 @@ fi
 # impedia que una pagina del admin importara la fabrica que salta RLS por completo,
 # y `import 'server-only'` tampoco: solo rompe si el importador es Client Component.
 #
-# Solo tres sitios pueden importarla:
+# Solo cuatro sitios pueden importarla:
 #   - el propio lib/supabase/admin.ts
 #   - un archivo que declare la directiva de Server Action en su primera linea de codigo
 #   - cualquier route handler bajo app/api/
+#   - lib/test/, y SOLO por la razon que sigue
+#
+# EXCEPCION lib/test/ (anadida en el plan 02-04): los tests de integracion tienen
+# que sembrar y limpiar usuarios saltandose la RLS, porque un test que siembra con
+# el mismo cliente con el que comprueba pasa aunque la policy este mal escrita.
+# Es seguro porque ese directorio es codigo de prueba que NUNCA se compila en el
+# bundle: nada bajo app/ lo importa, solo lo tocan los *.integration.test.ts, y
+# `npm run build` lo confirma al no incluirlo en ningun chunk.
+# La excepcion es de directorio, no de archivo, y es deliberadamente estrecha: si
+# algun dia un import de la fabrica aparece en lib/ FUERA de lib/test/, este
+# guardarrail lo sigue atrapando.
 if [ ${#SRC_DIRS[@]} -gt 0 ]; then
   CANDIDATOS=$(grep -rl --include='*.ts' --include='*.tsx' \
     -F '@/lib/supabase/admin' "${SRC_DIRS[@]}" 2>/dev/null || true)
@@ -110,6 +121,7 @@ if [ ${#SRC_DIRS[@]} -gt 0 ]; then
     fi
     case "$archivo" in
       app/api/*) continue ;;
+      lib/test/*) continue ;;
     esac
     # La referencia solo cuenta si esta en codigo. Un comentario que mencione la
     # fabrica no es una importacion.
