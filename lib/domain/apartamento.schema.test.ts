@@ -374,3 +374,89 @@ describe('valoresDesdeFilaGuardada', () => {
     expect(resultado.error?.issues[0].path).toEqual(['contacto_externo']);
   });
 });
+
+/**
+ * LO QUE UN `<input>` VACIO ENTREGA DE VERDAD, QUE NO ES `null` SINO `''`.
+ *
+ * El formulario del plan 02-12 monta los 12 campos sobre estos esquemas. Ningún
+ * input de HTML produce `null`: un campo en blanco entrega la cadena vacía, y un
+ * `Select` sin selección entrega la cadena vacía de su opción centinela. Sin la
+ * normalización de `vacioANulo` sobre los campos opcionales, `z.url()` y
+ * `z.uuid()` rechazan estados perfectamente legítimos de un borrador y `Guardar`
+ * queda bloqueado señalando un campo que el admin nunca tocó.
+ */
+describe('los campos opcionales tal como los entrega un formulario', () => {
+  it('acepta maps_url vacío: es opcional, y un input vacío manda "" y no null', () => {
+    // CONTROL de que el problema existe: la validación de URL SI está activa y
+    // rechaza basura. Sin este control, la aserción de arriba pasaría también con
+    // un `z.string()` a secas, que es como se pierde la validación al "arreglar".
+    expect(esquemaBorrador.safeParse({ ...borradorGestionada, maps_url: 'ni-idea' }).success).toBe(
+      false,
+    );
+
+    expect(esquemaBorrador.safeParse({ ...borradorGestionada, maps_url: '' }).success).toBe(true);
+    expect(esquemaBorrador.safeParse({ ...borradorGestionada, maps_url: '   ' }).success).toBe(true);
+  });
+
+  it('normaliza el maps_url vacío a null, no a cadena vacía', () => {
+    // `filaDeProperties` hace `campos.maps_url ?? null`, así que un `''` que
+    // sobreviva se ESCRIBE como cadena vacía en la base y el link del detalle
+    // apuntaría a ninguna parte con un botón visible.
+    const r = esquemaBorrador.safeParse({ ...borradorGestionada, maps_url: '' });
+    expect(r.success && r.data.maps_url).toBeNull();
+  });
+
+  it('acepta responsable_id y suplente_id vacíos, que es lo que manda el Select sin selección', () => {
+    // CONTROL: la validación de uuid sigue viva.
+    expect(
+      esquemaBorrador.safeParse({ ...borradorGestionada, responsable_id: 'no-es-uuid' }).success,
+    ).toBe(false);
+
+    const r = esquemaBorrador.safeParse({
+      ...borradorGestionada,
+      responsable_id: '',
+      suplente_id: '',
+    });
+    expect(r.success).toBe(true);
+    // Y los dos vacíos NO pueden verse como "iguales" y disparar
+    // `props_suplente_distinct`, que es lo que pasaría comparando '' con ''.
+    expect(r.success && r.data.responsable_id).toBeNull();
+    expect(r.success && r.data.suplente_id).toBeNull();
+  });
+
+  it('una dirección o un contacto de solo espacios cuentan como ausencia', () => {
+    const r = esquemaBorrador.safeParse({
+      ...borradorGestionada,
+      direccion: '   ',
+      contacto_externo: '   ',
+    });
+    expect(r.success && r.data.direccion).toBeNull();
+    expect(r.success && r.data.contacto_externo).toBeNull();
+  });
+
+  it('LA ASERCION QUE IMPORTA: un contacto de solo espacios no activa una informativa', () => {
+    // Si `'   '` sobreviviera como texto, `props_active_requires_owner` lo vería
+    // como `not null` —y de todas formas ese CHECK no aplica a las informativas—,
+    // así que una unidad externa quedaría activa con un contacto en blanco. No
+    // hay ningún 23514 detrás de esta puerta.
+    expect(
+      esquemaActivar.safeParse({ ...borradorInformativa, contacto_externo: '   ' }).success,
+    ).toBe(false);
+
+    // CONTROL: con contacto de verdad sí activa, o el test pasaría con un esquema
+    // que rechaza todo.
+    expect(esquemaActivar.safeParse(informativaCompleta).success).toBe(true);
+  });
+
+  it('y faltantesParaActivar dice lo mismo que el esquema sobre los espacios', () => {
+    // Las dos caras del contrato de §8.2 tienen que coincidir: si el checklist
+    // dijera que no falta nada mientras `esquemaActivar` rechaza, el botón se
+    // habilitaría y el submit fallaría con un error inline sin explicación.
+    expect(faltantesParaActivar({ gestion_vivaguest: false, contacto_externo: '   ' })).toHaveLength(
+      1,
+    );
+    expect(
+      faltantesParaActivar({ gestion_vivaguest: false, contacto_externo: 'Marcela, 300 123 4567' }),
+    ).toHaveLength(0);
+  });
+});

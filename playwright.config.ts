@@ -6,7 +6,21 @@ import { defineConfig, devices } from '@playwright/test';
  * En esta wave todavía no existe ninguna pantalla, así que `playwright test` corre
  * con CERO specs. Es lo correcto: la config aterriza ahora y cada spec aterriza con
  * su feature.
+ *
+ * ── EL PUERTO ES CONFIGURABLE, Y ESO EVITA UN FALSO RESULTADO ENTERO ────────
+ * `reuseExistingServer` está en `true` fuera de CI, que es lo que hace rápido el
+ * ciclo local. El precio: si en el puerto 3000 hay un `next start` de OTRO
+ * checkout —y los worktrees de este repo comparten máquina y stack de Supabase—,
+ * Playwright lo reutiliza sin decir nada y la suite mide el código de otro. Una
+ * ruta que este checkout acaba de añadir da 404 y el fallo apunta al sitio
+ * equivocado; peor, una aserción negativa pasa trivialmente contra una pantalla
+ * que ni existe.
+ *
+ * `PLAYWRIGHT_PORT` deja levantar el servidor en un puerto propio. El default
+ * sigue siendo 3000, así que para quien corre un solo checkout no cambia nada.
  */
+const PUERTO = Number(process.env.PLAYWRIGHT_PORT ?? 3000);
+
 export default defineConfig({
   testDir: './e2e',
 
@@ -22,7 +36,7 @@ export default defineConfig({
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : [['list']],
 
   use: {
-    baseURL: 'http://127.0.0.1:3000',
+    baseURL: `http://127.0.0.1:${PUERTO}`,
     // El producto es de Colombia y toda la lógica de fecha asume Bogotá sin DST.
     // Fijarlos aquí hace que un formateo dependiente de la locale del que corre el
     // test se rompa en CI, que es donde tiene que romperse.
@@ -41,7 +55,7 @@ export default defineConfig({
     // `next build && next start`, NUNCA `next dev`. En dev hay recompilaciones que
     // producen flakiness, y las cookies y el middleware no se comportan como en
     // producción, que es justo lo que el criterio 1 del ROADMAP tiene que probar.
-    command: 'npm run build && npm run start',
+    command: `npm run build && npm run start -- --port ${PUERTO}`,
 
     // Se espera por PUERTO, no por `url`, y la razón está medida:
     // la sonda HTTP de Playwright sigue los redirects y exige un status final
@@ -53,7 +67,7 @@ export default defineConfig({
     // No se cambia a `url: '/login'` cuando esa página aterrice: acoplar el arranque
     // del servidor a una ruta concreta reintroduce el mismo fallo la próxima vez que
     // alguien mueva la pantalla de entrada.
-    port: 3000,
+    port: PUERTO,
 
     reuseExistingServer: !process.env.CI,
     // `next build` en frío mide ~11s aquí, pero en CI sin caché es bastante más.
