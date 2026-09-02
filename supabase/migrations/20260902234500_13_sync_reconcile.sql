@@ -98,7 +98,7 @@
 --     QUITAR SOLO UNA DE LAS DOS NO PONE NINGUNA ASERCIÓN DE COMPORTAMIENTO EN
 --     ROJO. Son dos capas a propósito —quitar cualquiera de las dos deja la
 --     otra protegiendo el caso `en_curso`—, y lo que impide que alguien borre
---     la capa sobrante es la aserción ESTRUCTURAL 47 de
+--     la capa sobrante es la aserción ESTRUCTURAL 50 de
 --     `supabase/tests/05_sync.test.sql`, que lee el cuerpo de esta función.
 --
 -- ---------------------------------------------------------------------------
@@ -108,7 +108,7 @@
 -- de esa bandera al valor falso tiene que devolver cero ocurrencias, y por eso
 -- ese literal no se escribe tampoco en un comentario: la misma regla de la
 -- cabecera de `scripts/ci/check-service-role.sh`, que se aprendió dos veces en
--- la Fase 1. La aserción estructural 47 de `05_sync.test.sql` lo comprueba
+-- la Fase 1. La aserción estructural 50 de `05_sync.test.sql` lo comprueba
 -- sobre el cuerpo de la función, no sobre el archivo.
 --
 -- TODO CANDIDATO QUE NO PASA LOS CANDADOS RECIBE `needs_review`,
@@ -857,7 +857,9 @@ begin
   -- semana. Lo que separa los dos casos es SI LA RESERVA ANTERIOR SE MOVIÓ O
   -- DESAPARECIÓ EN LA MISMA CORRIDA, y por eso R2 lleva esa condición y no
   -- solo la coincidencia de fechas. Quitarla es el señuelo obligatorio del
-  -- plan y pone en rojo la aserción 43 de `05_sync.test.sql`.
+  -- plan y pone en rojo la aserción 46 de `05_sync.test.sql` (medido: también
+  -- arrastra la 33 y la 34, porque la fixture de la ventana protegida trae un
+  -- turnover incidental que el R2 roto marca como extensión).
   -- ***********************************************************************
   if v_reconcile and coalesce(array_length(v_nuevas, 1), 0) > 0 then
     with nuevas as (
