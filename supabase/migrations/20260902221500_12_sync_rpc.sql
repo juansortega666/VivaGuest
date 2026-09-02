@@ -408,13 +408,93 @@ begin
           and c2.id <> c.id);
   get diagnostics v_relinked = row_count;
 
+  -- =========================================================================
+  -- (f) RECALCULAR is_urgent — recalcular, NUNCA acumular
+  -- =========================================================================
+  -- La urgencia es un HECHO DERIVADO del feed, no un evento: si la reserva
+  -- entrante se mueve, la urgencia tiene que APAGARSE SOLA. Por eso es
+  -- `set is_urgent = exists (...)` y no un `set is_urgent = true` condicional.
+  --
+  -- Las cinco condiciones del `where`, y cada una tapa un agujero concreto:
+  --   1. `property_id` = el del feed: un feed no toca aseos de otro apartamento.
+  --   2. `origin = 'ical'`: EL RECONCILE NO TOCA NUNCA UN ASEO MANUAL. Un
+  --      `repaso` o una `emergencia` creados por el admin no son del sync.
+  --   3. `state is distinct from 'cancelada'`.
+  --   4. `and c.is_managed`: SIN ESTO REVIENTA CON 23514 sobre
+  --      `cl_unmanaged_is_inert`, que exige urgencia falsa cuando la unidad es
+  --      de gestión externa. Hay cinco en la semilla.
+  --   5. `scheduled_date >= public.today_bog()`: no tiene sentido recalcular el
+  --      pasado, y `today_bog()` y no la función de fecha de sesión porque la
+  --      sesión corre en UTC y después de las 19:00 de Bogotá ya sería mañana.
+  --
+  -- La condición es: existe una reserva viva del mismo apartamento cuyo
+  -- `starts_on` coincide con el `scheduled_date` del aseo. Es decir, checkout y
+  -- checkin el mismo día. El feed real trae exactamente ese caso el 2026-10-10.
+  --
+  -- La reserva entrante se busca por `property_id` y no por `feed_id`: con
+  -- varios proveedores por apartamento, el checkin que hace urgente el aseo
+  -- puede venir de otro feed.
+  update public.cleanings c
+     set is_urgent = exists (
+           select 1
+             from public.calendar_reservations r
+            where r.property_id = c.property_id
+              and r.disappeared_at is null
+              and r.starts_on = c.scheduled_date)
+   where c.property_id = v_property
+     and c.origin = 'ical'
+     and c.state is distinct from 'cancelada'
+     and c.is_managed
+     and c.scheduled_date >= public.today_bog();
 
   -- =========================================================================
-  -- (f) e (i) — recálculo de urgencia y salud del feed
+  -- (i) SALUD DEL FEED Y FILA DE LA CORRIDA — dentro de esta transacción
   -- =========================================================================
-  -- PENDIENTES EN ESTA VERSIÓN. Llegan en la tarea 2 de este mismo plan, sobre
-  -- este mismo archivo. `v_min_ends_on`, `v_max_ends_on` y `v_run_id` ya están
-  -- calculados o declarados porque son sus operandos.
+  update public.calendar_feeds f
+     set last_success_at      = p_fetched_at,
+         last_attempt_at      = p_fetched_at,
+         last_etag            = p_etag,
+         last_payload_hash    = p_payload_hash,
+         last_http_status     = p_http_status,
+         last_error           = null,
+         consecutive_failures = 0,
+         next_sync_at         = now() + interval '30 minutes',
+         claimed_at           = null,
+         -- El piso de ESTA corrida. Comparado con el de la anterior, un salto
+         -- de un día es el borde normal de la ventana de Airbnb; un salto de
+         -- trece significa que el proveedor tiró un bloque de historia o que la
+         -- URL cambió de anuncio.
+         last_min_ends_on     = v_min_ends_on,
+         -- OJO: ES EL NÚMERO DE RESERVAS CLASIFICADAS, NO DE EVENTOS. Es una
+         -- costura del plan 02-14 y no se puede redefinir: la pantalla de
+         -- "Conectar calendario" muestra este número como la verificación
+         -- humana de que el link es el del apartamento correcto, y además es el
+         -- operando de la guarda de colapso del plan 03-06. Cambiar su
+         -- significado rompe las dos cosas a la vez.
+         last_event_count     = v_reservation_count
+   where f.id = p_feed_id;
+
+  -- `min_ends_on` se calcula sobre las RESERVAS clasificadas de esta corrida,
+  -- no sobre todos los eventos: es el candado que hace seguro el reconcile
+  -- destructivo del plan 03-05 sin necesidad de saber dónde está el borde de la
+  -- ventana de Airbnb, y es la serie temporal que en dos o tres días contesta
+  -- si la reserva que termina hoy desaparece hoy mismo o mañana. Un bloqueo del
+  -- propietario que llegara con una fecha más baja movería el piso hacia abajo
+  -- y el candado dejaría de proteger nada.
+  insert into public.feed_sync_runs
+    (feed_id, outcome, http_status,
+     event_count, reservation_count, block_count, unknown_count,
+     min_ends_on, max_ends_on,
+     cleanings_created, cleanings_cancelled, reviews_flagged, uid_rotations,
+     finished_at)
+  values
+    (p_feed_id, 'ok', p_http_status,
+     v_event_count, v_reservation_count, v_block_count, v_unknown_count,
+     v_min_ends_on, v_max_ends_on,
+     -- Los dos ceros son de la migración 13, no un olvido de esta.
+     v_cleanings_created, 0, 0, v_uid_rotations,
+     now())
+  returning id into v_run_id;
 
   return jsonb_build_object(
     'run_id',                   v_run_id,
