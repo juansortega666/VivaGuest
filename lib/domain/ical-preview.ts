@@ -18,6 +18,14 @@
 // NO SE CONSTRUYE NI UN SOLO OBJETO `Date` EN ESTE ARCHIVO, a propósito. Ver el
 // comentario de `proximoCheckout` más abajo y PITFALLS §2.
 
+// `desdoblar` VIVE EN `./ical` desde el plan 03-02 y aquí solo se importa y se
+// reexporta. Es la única función que este archivo comparte con el pipeline: una
+// divergencia en el desdoblado sería un defecto, no una decisión, a diferencia
+// del conteo, que sí diverge a propósito.
+import { desdoblar } from './ical';
+
+export { desdoblar };
+
 /**
  * `DTEND` como fecha pura: `DTEND;VALUE=DATE:20260904` o `DTEND:20260904`.
  * Solo 8 dígitos: una forma con hora no es lo que Airbnb sirve y se ignora.
@@ -42,18 +50,6 @@ const RE_DESCRIPTION = /^DESCRIPTION(?:;[^:]*)?:/i;
  * apartamento correcto.
  */
 const RE_RESERVA = /reservations\/details\/[A-Z0-9]+/i;
-
-/**
- * RFC 5545 §3.1: una línea física que empieza por espacio o tabulador es la
- * continuación de la anterior.
- *
- * Sin esto NADA funciona: Airbnb pliega la `DESCRIPTION` a 75 octetos y parte el
- * código de reserva por la mitad, así que `RE_RESERVA` no matchea y el conteo da
- * 0 reservas en un feed lleno. Medido contra `__fixtures__/ical/folded.ics`.
- */
-export function desdoblar(texto: string): string {
-  return texto.replace(/\r\n/g, '\n').replace(/\n[ \t]/g, '');
-}
 
 export type PreviewIcs =
   | { ok: false; motivo: 'no-es-ical' }
