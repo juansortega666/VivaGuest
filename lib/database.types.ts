@@ -92,6 +92,7 @@ export type Database = {
           last_etag: string | null
           last_event_count: number | null
           last_http_status: number | null
+          last_min_ends_on: string | null
           last_payload_hash: string | null
           last_success_at: string | null
           next_sync_at: string
@@ -110,6 +111,7 @@ export type Database = {
           last_etag?: string | null
           last_event_count?: number | null
           last_http_status?: number | null
+          last_min_ends_on?: string | null
           last_payload_hash?: string | null
           last_success_at?: string | null
           next_sync_at?: string
@@ -128,6 +130,7 @@ export type Database = {
           last_etag?: string | null
           last_event_count?: number | null
           last_http_status?: number | null
+          last_min_ends_on?: string | null
           last_payload_hash?: string | null
           last_success_at?: string | null
           next_sync_at?: string
@@ -148,6 +151,7 @@ export type Database = {
         Row: {
           disappeared_at: string | null
           ends_on: string
+          ends_on_anterior: string | null
           feed_id: string
           first_seen_at: string
           id: string
@@ -163,6 +167,7 @@ export type Database = {
         Insert: {
           disappeared_at?: string | null
           ends_on: string
+          ends_on_anterior?: string | null
           feed_id: string
           first_seen_at?: string
           id?: string
@@ -178,6 +183,7 @@ export type Database = {
         Update: {
           disappeared_at?: string | null
           ends_on?: string
+          ends_on_anterior?: string | null
           feed_id?: string
           first_seen_at?: string
           id?: string
@@ -702,6 +708,71 @@ export type Database = {
             columns: ["reported_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      feed_sync_runs: {
+        Row: {
+          block_count: number | null
+          cleanings_cancelled: number
+          cleanings_created: number
+          event_count: number | null
+          feed_id: string
+          finished_at: string | null
+          http_status: number | null
+          id: number
+          max_ends_on: string | null
+          min_ends_on: string | null
+          outcome: string
+          reservation_count: number | null
+          reviews_flagged: number
+          started_at: string
+          uid_rotations: number
+          unknown_count: number | null
+        }
+        Insert: {
+          block_count?: number | null
+          cleanings_cancelled?: number
+          cleanings_created?: number
+          event_count?: number | null
+          feed_id: string
+          finished_at?: string | null
+          http_status?: number | null
+          id?: number
+          max_ends_on?: string | null
+          min_ends_on?: string | null
+          outcome: string
+          reservation_count?: number | null
+          reviews_flagged?: number
+          started_at?: string
+          uid_rotations?: number
+          unknown_count?: number | null
+        }
+        Update: {
+          block_count?: number | null
+          cleanings_cancelled?: number
+          cleanings_created?: number
+          event_count?: number | null
+          feed_id?: string
+          finished_at?: string | null
+          http_status?: number | null
+          id?: number
+          max_ends_on?: string | null
+          min_ends_on?: string | null
+          outcome?: string
+          reservation_count?: number | null
+          reviews_flagged?: number
+          started_at?: string
+          uid_rotations?: number
+          unknown_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feed_sync_runs_feed_id_fkey"
+            columns: ["feed_id"]
+            isOneToOne: false
+            referencedRelation: "calendar_feeds"
             referencedColumns: ["id"]
           },
         ]
