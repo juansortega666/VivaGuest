@@ -11,6 +11,13 @@
 -- comportamiento de `sync_feed_apply()`, que ese mismo plan entrega en la
 -- migración 12. Son el contrato ejecutable de la mitad ADITIVA del diff.
 --
+-- Las aserciones 27 a 50 las añadió el plan 03-05 y tampoco nacen en rojo: son
+-- el contrato ejecutable de la mitad DESTRUCTIVA, la migración 13. Es el único
+-- bloque del archivo donde un fallo significa que el sistema BORRA TRABAJO
+-- PAGADO, no que se vea mal, y por eso todas las que afirman que un candado
+-- protegió llevan en la misma cadena comparada un aseo hermano de la misma
+-- corrida que SÍ se canceló.
+--
 -- CONSECUENCIA OPERATIVA, y hay que conocerla antes de correr nada:
 -- mientras este archivo esté en rojo, `npm run db:test` sale con código distinto
 -- de cero. El plan 03-07 es el que devuelve la suite completa a verde. Los otros
@@ -49,6 +56,31 @@
 --   tras 03-01 (archivo nuevo)     1 2 3 4 5 6 7 8 9 10 11 12    (doce)
 --   tras 03-03 (migración 11)      4 5 6 7 8 9                   (seis)
 --   tras 03-04 (migración 12)      4 5 6 7 8 9                   (seis, LAS MISMAS)
+--   tras 03-05 (migración 13)      4 5 6 7 8 9                   (seis, LAS MISMAS)
+--
+-- Y NO BASTA CON LOS IDENTIFICADORES TAMPOCO: hay que comprobar que el archivo
+-- CORRIÓ ENTERO. Medido en el plan 03-05, con un señuelo: si una sentencia
+-- lanza dentro de un bloque anónimo, la transacción se aborta y el archivo deja
+-- de imprimir TAP a mitad. En esa corrida salieron 7 `not ok` en vez de 6 —una
+-- diferencia que parece un solo fallo puntual— cuando en realidad solo habían
+-- corrido 36 de las 50 aserciones y catorce no llegaron a medirse. La
+-- comprobación es `ok + not ok = el número del plan`, y con `pg_prove` es la
+-- línea `Tests: N`. Un conteo bajo puede ser una mejora o un incendio.
+--
+-- La segunda forma de ese mismo incendio, también medida en 03-05: una
+-- subconsulta ESCALAR que devuelve dos filas no da `not ok`, da
+-- `ERROR: more than one row returned by a subquery used as an expression`, y
+-- aborta igual. Por eso toda subconsulta escalar de este archivo va agregada
+-- (`string_agg`, `count`, `min`), incluso donde hoy solo puede haber una fila:
+-- la fila de más aparece entonces en el valor comparado en vez de matar el
+-- archivo.
+--
+-- SOBRE LA RENUMERACIÓN DE LAS MIGRACIONES: el texto de abajo, escrito en
+-- 03-04, atribuye los jobs de `cron.job` y las dos funciones que faltan a las
+-- migraciones 13 y 14. El número 13 lo tomó el reconcile destructivo del plan
+-- 03-05, así que `dispatch_feed_syncs`, `feed_health_watchdog` y los tres jobs
+-- son de las migraciones SIGUIENTES, las de los planes 03-06 y 03-07. Lo que no
+-- cambia es la lista de identificadores en rojo.
 --
 -- QUE 03-04 NO MUEVA NINGUNA DE LAS CATORCE ORIGINALES ES LO ESPERADO, y merece
 -- leerse despacio porque invita a un falso rojo y a un falso verde a la vez:
@@ -97,7 +129,7 @@
 -- ============================================================================
 
 begin;
-select plan(26);
+select plan(50);
 
 -- ---------------------------------------------------------------------------
 -- Helper: leer un escalar de un catálogo que quizá todavía no existe.
@@ -776,10 +808,25 @@ end $$;
 
 -- 24  LA PRIMERA AUSENCIA NO CANCELA NADA. La reserva ausente recibe
 --     `disappeared_at` y su aseo SIGUE VIVO: la cancelación exige dos ausencias
---     consecutivas y es del plan 03-05. Los cuatro elementos afirman que la
---     marca cayó en la fila correcta —no en cualquiera— y que ni un solo aseo
---     pasó a cancelada. `delete` sobre `calendar_reservations` está prohibido
---     en todo el pipeline: por eso el conteo de reservas sigue siendo dos.
+--     consecutivas. Los cuatro elementos afirman que la marca cayó en la fila
+--     correcta —no en cualquiera— y que ni un solo aseo pasó a cancelada.
+--     `delete` sobre `calendar_reservations` está prohibido en todo el
+--     pipeline: por eso el conteo de reservas sigue siendo dos.
+--
+--     REVISADA A CONCIENCIA EN EL PLAN 03-05, que es cuando la cancelación
+--     empezó a existir. El plan 03-04 la escribió afirmando que la cancelación
+--     "no ocurre todavía" y dejó dicho que 03-05 tendría que releerla, porque
+--     una aserción que pasaba por AUSENCIA de una función y sigue pasando
+--     cuando la función ya existe es exactamente el tipo de verde que no
+--     significa nada.
+--
+--     Sigue verde, y ahora por el motivo FUERTE: el reconcile de la migración
+--     13 está cargado y corriendo sobre esta misma corrida, y no cancela porque
+--     el candado de las dos ausencias se lo impide. Medido: con ese candado
+--     quitado (señuelo S9 del plan 03-05) esta aserción se pone ROJA con
+--     `have: {2,HMSYNC8B,1,1}`, o sea el aseo cancelado en la PRIMERA lectura
+--     que no lo vio. Ya no es una aserción sobre lo que falta: es una aserción
+--     sobre lo que el candado hace.
 select is(
   (select array[
      (select count(*)::text from public.calendar_reservations
@@ -853,5 +900,1058 @@ select is(
   1,
   'sync_feed_apply no es ejecutable por anon ni por authenticated, y sí por service_role');
 
+
+-- ===========================================================================
+-- EL RECONCILE DESTRUCTIVO — sync_feed_apply(), migración 13 (plan 03-05)
+--
+-- Veinticuatro aserciones sobre la mitad que BORRA: los pasos (e), (g) y (h).
+-- Todo lo anterior de la fase solo creaba filas; aquí se cancela, y un aseo
+-- cancelado por equivocación a las 6am deja a una aseadora en la calle.
+--
+-- REGLA DEL ARNÉS, la misma del bloque anterior y aquí importa el DOBLE: una
+-- aserción de "no se canceló nada" pasa en verde con el reconcile MUERTO. Por
+-- eso ninguna de las de abajo se escribe sola: todas las que afirman que un
+-- candado protegió llevan, EN LA MISMA CADENA COMPARADA, un aseo hermano de la
+-- MISMA CORRIDA que sí se canceló. Ese aseo es el control positivo, y sin él
+-- las aserciones 31, 33, 35, 37 y 48 valdrían exactamente nada.
+--
+-- Un apartamento por propiedad medida, para que ninguna aserción dependa del
+-- estado que dejó otra:
+--   d1 primera y segunda ausencia, control del contador y bitácora de estado
+--   d2 el aseo en curso protegido, con su control cancelado al lado
+--   d3 el aseo manual protegido, con su control cancelado al lado
+--   d4 la ventana protegida, con su control, y la deduplicación de alertas
+--   d5 el piso del feed, con su control
+--   d6 el aseo completada, intacto, y el trigger que lo respalda
+--   d7 la reserva movida, caso feliz
+--   d8 la reserva movida con el aseo viejo intocable: la trampa del 23505
+--   d9 cancelar y recrear el mismo día, a través del RPC
+--   dA la extensión mal creada y sus notificaciones
+--   dB EL TURNOVER SANO, que es la aserción que separa SYNC-07 de SYNC-08
+--   dC el colapso de formato
+--   dD la fila informativa de gestión externa que se reprograma
+-- ---------------------------------------------------------------------------
+
+-- TRES ADMINISTRADORES, y los tres hacen falta.
+--
+-- El bloque de fixtures de más arriba borró `public.profiles` entero y dejó una
+-- sola aseadora. Sin admins, `notifications.recipient_id` no tiene a quién
+-- apuntar, el `cross join` del paso (h) devuelve CERO filas y TODAS las
+-- aserciones de notificaciones de abajo pasarían por vacuidad —incluida la 47,
+-- que es la más importante del plan—. Es el modo de fallo que la Fase 2 midió
+-- cuatro veces.
+--
+-- Dos activos y uno desactivado: el fan-out se afirma como "exactamente uno por
+-- admin ACTIVO", no como "al menos una fila". Con un solo admin, un `cross
+-- join` roto que emitiera una fila por aseo y no por destinatario daría el
+-- mismo número y no se vería.
+delete from public.notifications;
+
+insert into auth.users (id, email) values
+  ('ad000001-0000-0000-0000-000000000001', 'admin1@vg.co'),
+  ('ad000002-0000-0000-0000-000000000002', 'admin2@vg.co'),
+  ('ad000003-0000-0000-0000-000000000003', 'admin3@vg.co');
+
+-- `on conflict do update` y no `insert` a secas: el espejo de `auth.users` ya
+-- creó la fila de perfil con el rol por defecto.
+insert into public.profiles (id, role, full_name, is_active, deactivated_at) values
+  ('ad000001-0000-0000-0000-000000000001', 'admin', 'Admin Uno',      true,  null),
+  ('ad000002-0000-0000-0000-000000000002', 'admin', 'Admin Dos',      true,  null),
+  ('ad000003-0000-0000-0000-000000000003', 'admin', 'Admin Inactivo', false, now())
+on conflict (id) do update
+  set role           = excluded.role,
+      full_name      = excluded.full_name,
+      is_active      = excluded.is_active,
+      deactivated_at = excluded.deactivated_at;
+
+insert into public.properties
+  (id, nombre, cluster, gestion_vivaguest, tarifa_huesped, pago_aseador, responsable_id) values
+  ('cd000001-0000-0000-0000-000000000001', 'Apto rec 1', 'Cluster Rec', true,  130000::bigint, 48000::bigint, null),
+  ('cd000002-0000-0000-0000-000000000002', 'Apto rec 2', 'Cluster Rec', true,  130000::bigint, 48000::bigint, null),
+  ('cd000003-0000-0000-0000-000000000003', 'Apto rec 3', 'Cluster Rec', true,  130000::bigint, 48000::bigint, null),
+  ('cd000004-0000-0000-0000-000000000004', 'Apto rec 4', 'Cluster Rec', true,  130000::bigint, 48000::bigint, null),
+  ('cd000005-0000-0000-0000-000000000005', 'Apto rec 5', 'Cluster Rec', true,  130000::bigint, 48000::bigint, null),
+  ('cd000006-0000-0000-0000-000000000006', 'Apto rec 6', 'Cluster Rec', true,  130000::bigint, 48000::bigint, null),
+  ('cd000007-0000-0000-0000-000000000007', 'Apto rec 7', 'Cluster Rec', true,  130000::bigint, 48000::bigint, null),
+  ('cd000008-0000-0000-0000-000000000008', 'Apto rec 8', 'Cluster Rec', true,  130000::bigint, 48000::bigint, null),
+  ('cd000009-0000-0000-0000-000000000009', 'Apto rec 9', 'Cluster Rec', true,  130000::bigint, 48000::bigint, null),
+  ('cd00000a-0000-0000-0000-00000000000a', 'Apto rec A', 'Cluster Rec', true,  130000::bigint, 48000::bigint, null),
+  ('cd00000b-0000-0000-0000-00000000000b', 'Apto rec B', 'Cluster Rec', true,  130000::bigint, 48000::bigint, null),
+  ('cd00000c-0000-0000-0000-00000000000c', 'Apto rec C', 'Cluster Rec', true,  130000::bigint, 48000::bigint, null),
+  -- El único de gestión externa de este bloque.
+  ('cd00000d-0000-0000-0000-00000000000d', 'Apto rec D', 'Cluster Rec', false, null,           null,          null);
+
+insert into public.calendar_feeds (id, property_id, provider) values
+  ('cfd00001-0000-0000-0000-000000000001', 'cd000001-0000-0000-0000-000000000001', 'airbnb'),
+  ('cfd00002-0000-0000-0000-000000000002', 'cd000002-0000-0000-0000-000000000002', 'airbnb'),
+  ('cfd00003-0000-0000-0000-000000000003', 'cd000003-0000-0000-0000-000000000003', 'airbnb'),
+  ('cfd00004-0000-0000-0000-000000000004', 'cd000004-0000-0000-0000-000000000004', 'airbnb'),
+  ('cfd00005-0000-0000-0000-000000000005', 'cd000005-0000-0000-0000-000000000005', 'airbnb'),
+  ('cfd00006-0000-0000-0000-000000000006', 'cd000006-0000-0000-0000-000000000006', 'airbnb'),
+  ('cfd00007-0000-0000-0000-000000000007', 'cd000007-0000-0000-0000-000000000007', 'airbnb'),
+  ('cfd00008-0000-0000-0000-000000000008', 'cd000008-0000-0000-0000-000000000008', 'airbnb'),
+  ('cfd00009-0000-0000-0000-000000000009', 'cd000009-0000-0000-0000-000000000009', 'airbnb'),
+  ('cfd0000a-0000-0000-0000-00000000000a', 'cd00000a-0000-0000-0000-00000000000a', 'airbnb'),
+  ('cfd0000b-0000-0000-0000-00000000000b', 'cd00000b-0000-0000-0000-00000000000b', 'airbnb'),
+  ('cfd0000c-0000-0000-0000-00000000000c', 'cd00000c-0000-0000-0000-00000000000c', 'airbnb'),
+  ('cfd0000d-0000-0000-0000-00000000000d', 'cd00000d-0000-0000-0000-00000000000d', 'airbnb');
+
+-- Un solo lector para las aserciones de forma: "día relativo a hoy = estado /
+-- needs_review / review_reason", en una cadena ordenada por fecha. Comparar la
+-- cadena COMPLETA y no un conteo es lo que hace que la aserción diga a la vez
+-- cuántos aseos hay, en qué fechas están, cuál se canceló y cuál no. Un
+-- `count(*) where state = 'cancelada'` no distingue "se canceló el correcto" de
+-- "se canceló otro".
+create function pg_temp.foto(p_property uuid) returns text
+language sql stable as $fn$
+  select coalesce(string_agg(
+           (c.scheduled_date - public.today_bog())::text
+           || '=' || coalesce(c.state::text, '<informativa>')
+           || '/' || c.needs_review::text
+           || '/' || coalesce(c.review_reason, '-'),
+           ',' order by c.scheduled_date, c.state)
+         , '<sin aseos>')
+    from public.cleanings c
+   where c.property_id = p_property;
+$fn$;
+
+
+-- ---------------------------------------------------------------------------
+-- d1 — primera ausencia, segunda ausencia, y el contador que lo demuestra.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfd00001-0000-0000-0000-000000000001',
+    jsonb_build_array(
+      pg_temp.evento('uid-d1A@airbnb.com', 'HMRECD1A', public.today_bog() + 2, public.today_bog() + 6),
+      pg_temp.evento('uid-d1B@airbnb.com', 'HMRECD1B', public.today_bog() + 9, public.today_bog() + 13)));
+  -- Corrida 2: d1B desaparece. PRIMERA ausencia.
+  perform pg_temp.correr('cfd00001-0000-0000-0000-000000000001',
+    jsonb_build_array(
+      pg_temp.evento('uid-d1A@airbnb.com', 'HMRECD1A', public.today_bog() + 2, public.today_bog() + 6)));
+end $$;
+
+-- 27  SYNC-04. LA PRIMERA AUSENCIA NO CANCELA NADA. Es el candado 2 y es lo que
+--     elimina de raíz toda la clase de "una lectura mala canceló los aseos": a
+--     30 minutos de cadencia, esperar una segunda corrida cuesta como mucho una
+--     hora de retraso, que es operativamente invisible.
+--
+--     El quinto elemento es el control positivo y sin él la aserción no vale
+--     nada: afirma que la ausencia SÍ se registró, en la fila correcta. Sin él,
+--     un paso (b) roto que no marcara nada daría exactamente los mismos cuatro
+--     primeros valores.
+--
+--     TODA subconsulta escalar de este bloque va agregada, incluso donde hoy
+--     solo puede haber una fila. MEDIDO en el señuelo S8: una subconsulta
+--     escalar que devuelve dos filas no da `not ok`, da `ERROR: more than one
+--     row returned by a subquery`, y ese error ABORTA la transacción y se lleva
+--     por delante todas las aserciones siguientes. Es la misma clase de falso
+--     verde que el plan 03-04 midió con `min(uuid)`: el archivo deja de
+--     imprimir TAP y el conteo de rojos sale BAJO, que parece una mejora.
+select is(
+  (select array[
+     (select coalesce(string_agg(coalesce(state::text, '<null>'), '+' order by id), '<sin aseo>')
+        from public.cleanings
+       where property_id = 'cd000001-0000-0000-0000-000000000001'
+         and scheduled_date = public.today_bog() + 13),
+     (select coalesce(string_agg(coalesce(cancel_reason, '<ninguno>'), '+' order by id), '<sin aseo>')
+        from public.cleanings
+       where property_id = 'cd000001-0000-0000-0000-000000000001'
+         and scheduled_date = public.today_bog() + 13),
+     (select count(*)::text from public.cleanings
+       where property_id = 'cd000001-0000-0000-0000-000000000001'
+         and state = 'cancelada'),
+     (select cleanings_cancelled::text from public.feed_sync_runs
+       where feed_id = 'cfd00001-0000-0000-0000-000000000001' order by id desc limit 1),
+     (select coalesce(string_agg(reservation_code, ',' order by reservation_code), '<ninguna>')
+        from public.calendar_reservations
+       where feed_id = 'cfd00001-0000-0000-0000-000000000001'
+         and disappeared_at is not null)]),
+  array['pendiente', '<ninguno>', '0', '0', 'HMRECD1B'],
+  'SYNC-04 la primera ausencia marca disappeared_at y NO cancela: hacen falta dos corridas');
+
+-- Corrida 3: d1B sigue ausente. SEGUNDA ausencia.
+do $$ begin
+  perform pg_temp.correr('cfd00001-0000-0000-0000-000000000001',
+    jsonb_build_array(
+      pg_temp.evento('uid-d1A@airbnb.com', 'HMRECD1A', public.today_bog() + 2, public.today_bog() + 6)));
+end $$;
+
+-- 28  SYNC-04. LA SEGUNDA AUSENCIA SÍ CANCELA, y solo el aseo de la reserva que
+--     de verdad se fue. El aseo de d1A, que sigue en el feed, no se toca.
+--
+--     `needs_review` se afirma en FALSO sobre el cancelado a propósito: lo que
+--     se cancela limpiamente no necesita revisión humana, y marcarlo además
+--     convertiría cada cancelación normal en una alerta.
+select is(
+  pg_temp.foto('cd000001-0000-0000-0000-000000000001'),
+  '6=pendiente/false/-,13=cancelada/false/-',
+  'SYNC-04 la segunda ausencia consecutiva cancela el aseo de la reserva ausente, y solo ese');
+
+-- 29  EL CONTROL DEL CONTADOR, y va en la MISMA aserción que las dos corridas.
+--
+--     Sin esto, todas las aserciones de "no se canceló nada" de abajo —la 31,
+--     la 33, la 35, la 37 y la 48— pasarían en verde con el reconcile
+--     COMPLETAMENTE MUERTO, porque un reconcile muerto tampoco cancela nada. El
+--     arreglo compara las tres corridas seguidas: 0 en la de creación, 0 en la
+--     primera ausencia, 1 en la segunda. Es la demostración de que el contador
+--     se mueve, y de que se mueve en la corrida correcta.
+select is(
+  (select array_agg(cleanings_cancelled order by id)
+     from public.feed_sync_runs
+    where feed_id = 'cfd00001-0000-0000-0000-000000000001'),
+  array[0, 0, 1],
+  'SYNC-04 control: cleanings_cancelled va 0, 0, 1 en las tres corridas, y el 1 es el de la segunda ausencia');
+
+-- 30  La bitácora de estado registra la cancelación con `actor_id` NULL, y el
+--     NULL es INFORMACIÓN, no carencia: es lo que distingue "lo canceló el
+--     sync" de "lo canceló el admin" cuando alguien reclame por un aseo que
+--     desapareció de la agenda. El `reason` lo copia
+--     `tg_cleanings_log_transition()` de `cancel_reason`, así que esta aserción
+--     también fija que la lista cerrada de motivos llega hasta la auditoría.
+select is(
+  (select coalesce(string_agg(t.from_state::text || '->' || t.to_state::text
+                              || '/' || (t.actor_id is null)::text
+                              || '/' || coalesce(t.reason, '<ninguno>'),
+                              ',' order by t.created_at, t.id), '<sin transiciones>')
+     from public.cleaning_state_transitions t
+     join public.cleanings c on c.id = t.cleaning_id
+    where c.property_id = 'cd000001-0000-0000-0000-000000000001'),
+  'pendiente->cancelada/true/reserva_desaparecida',
+  'la cancelación del sync queda en cleaning_state_transitions con actor_id NULL');
+
+
+-- ---------------------------------------------------------------------------
+-- d2 — el aseo EN CURSO. La aseadora ya fue y hay que pagarle.
+--
+-- d2C termina en +7 y su aseo se lleva a `en_curso`; d2D termina en +11 y se
+-- queda `pendiente`. Las dos desaparecen en la misma corrida, así que la
+-- diferencia entre las dos es EXCLUSIVAMENTE el estado del aseo. d2E se queda
+-- viva para que el piso de la corrida (+4) no sea el que bloquee: sin ella el
+-- piso subiría y la aserción mediría otro candado sin decirlo.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfd00002-0000-0000-0000-000000000002',
+    jsonb_build_array(
+      pg_temp.evento('uid-d2C@airbnb.com', 'HMRECD2C', public.today_bog() + 2, public.today_bog() + 7),
+      pg_temp.evento('uid-d2D@airbnb.com', 'HMRECD2D', public.today_bog() + 3, public.today_bog() + 11),
+      pg_temp.evento('uid-d2E@airbnb.com', 'HMRECD2E', public.today_bog() + 1, public.today_bog() + 4)));
+end $$;
+
+update public.cleanings
+   set state         = 'en_curso',
+       confirmado_at = now(),
+       aseador_id    = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+       started_at    = now()
+ where property_id = 'cd000002-0000-0000-0000-000000000002'
+   and scheduled_date = public.today_bog() + 7;
+
+do $$ begin
+  perform pg_temp.correr('cfd00002-0000-0000-0000-000000000002',
+    jsonb_build_array(
+      pg_temp.evento('uid-d2E@airbnb.com', 'HMRECD2E', public.today_bog() + 1, public.today_bog() + 4)));
+  perform pg_temp.correr('cfd00002-0000-0000-0000-000000000002',
+    jsonb_build_array(
+      pg_temp.evento('uid-d2E@airbnb.com', 'HMRECD2E', public.today_bog() + 1, public.today_bog() + 4)));
+end $$;
+
+-- 31  NUNCA SE CANCELA UN ASEO QUE YA EMPEZÓ. Es la regla de dominio no
+--     negociable de 03-CONTEXT.md y la mitigación de T-03-42.
+--
+--     El aseo de +11 es el CONTROL POSITIVO y está en la misma cadena: misma
+--     corrida, misma reserva ausente dos veces, mismos candados de fecha, y sí
+--     se cancela. Lo único que los distingue es el estado del aseo. Sin ese
+--     control, esta aserción pasaría con el reconcile muerto.
+--
+--     Y el de +7 no se pierde en silencio: queda `needs_review` con su motivo
+--     enumerado, que es la mitad que hace aceptable la mitad conservadora.
+--
+--     DOS CAPAS Y UNA REDUNDANCIA MEDIDA: el `where` de la cancelación lleva a
+--     la vez `state = 'pendiente'` y `started_at is null`, y
+--     `cl_pendiente_shape` las hace co-implicadas. Quitar UNA de las dos deja
+--     esta aserción VERDE, porque la otra sigue protegiendo. Hay que quitar las
+--     DOS para ponerla en rojo. Medido en el plan 03-05; lo que impide que
+--     alguien borre la capa aparentemente sobrante es la aserción estructural
+--     50, no esta.
+select is(
+  pg_temp.foto('cd000002-0000-0000-0000-000000000002'),
+  '4=pendiente/false/-,7=en_curso/true/reserva_desaparecida_aseo_iniciado,11=cancelada/false/-',
+  'SYNC-04 un aseo en curso sobrevive a dos ausencias y queda en revisión; el pendiente hermano sí se cancela');
+
+
+-- ---------------------------------------------------------------------------
+-- d3 — el aseo MANUAL. Trabajo humano que el sync no puede destruir.
+--
+-- El aseo de +8 se convierte en `manual` CONSERVANDO su `reservation_id`: es el
+-- único modo de que llegue a ser candidato del paso (e), y por tanto el único
+-- modo de que la línea `origin = 'ical'` se mida de verdad. Un aseo manual sin
+-- reserva apuntada nunca entra al `where` y la aserción pasaría por ausencia.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfd00003-0000-0000-0000-000000000003',
+    jsonb_build_array(
+      pg_temp.evento('uid-d3F@airbnb.com', 'HMRECD3F', public.today_bog() + 2, public.today_bog() + 8),
+      pg_temp.evento('uid-d3G@airbnb.com', 'HMRECD3G', public.today_bog() + 3, public.today_bog() + 14),
+      pg_temp.evento('uid-d3H@airbnb.com', 'HMRECD3H', public.today_bog() + 1, public.today_bog() + 4)));
+end $$;
+
+update public.cleanings
+   set origin     = 'manual',
+       tipo       = 'repaso',
+       aseador_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+ where property_id = 'cd000003-0000-0000-0000-000000000003'
+   and scheduled_date = public.today_bog() + 8;
+
+do $$ begin
+  perform pg_temp.correr('cfd00003-0000-0000-0000-000000000003',
+    jsonb_build_array(
+      pg_temp.evento('uid-d3H@airbnb.com', 'HMRECD3H', public.today_bog() + 1, public.today_bog() + 4)));
+  perform pg_temp.correr('cfd00003-0000-0000-0000-000000000003',
+    jsonb_build_array(
+      pg_temp.evento('uid-d3H@airbnb.com', 'HMRECD3H', public.today_bog() + 1, public.today_bog() + 4)));
+end $$;
+
+-- 32  EL RECONCILE NO TOCA NUNCA UN ASEO MANUAL. Es la línea de `where` que
+--     ningún documento de research pedía y la mitigación de T-03-43.
+--
+--     El aseo de +14 es el control: misma corrida, misma clase de ausencia,
+--     mismos candados de fecha, y sí se cancela. Lo único distinto es `origin`.
+--
+--     Se afirma además que la aseadora asignada sigue puesta: cancelar no es la
+--     única forma de destruir trabajo humano.
+select is(
+  (select array[
+     pg_temp.foto('cd000003-0000-0000-0000-000000000003'),
+     (select coalesce(string_agg(origin || '/' || tipo::text
+                                 || '/' || case when aseador_id is null then '-' else 'A' end,
+                                 ',' order by scheduled_date), '<vacio>')
+        from public.cleanings
+       where property_id = 'cd000003-0000-0000-0000-000000000003')]),
+  array['4=pendiente/false/-,8=pendiente/false/-,14=cancelada/false/-',
+        'ical/normal/-,manual/repaso/A,ical/normal/-'],
+  'el reconcile no cancela ni modifica un aseo manual, aunque su reserva lleve dos corridas ausente');
+
+
+-- ---------------------------------------------------------------------------
+-- d4 — LA VENTANA PROTEGIDA: hoy, mañana y todo el pasado son inmunes.
+--
+-- Cuatro reservas con checkout en -6, 0, +1 y +5. La de -6 se queda viva, y su
+-- único trabajo es fijar el piso de la corrida en -6 para que el candado 4 NO
+-- sea el que bloquee: si el piso subiera, las tres protegidas lo estarían por el
+-- piso y la aserción diría estar midiendo la ventana sin medirla.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfd00004-0000-0000-0000-000000000004',
+    jsonb_build_array(
+      pg_temp.evento('uid-d4I@airbnb.com', 'HMRECD4I', public.today_bog() - 5, public.today_bog()),
+      pg_temp.evento('uid-d4J@airbnb.com', 'HMRECD4J', public.today_bog() - 4, public.today_bog() + 1),
+      pg_temp.evento('uid-d4K@airbnb.com', 'HMRECD4K', public.today_bog() + 1, public.today_bog() + 5),
+      pg_temp.evento('uid-d4L@airbnb.com', 'HMRECD4L', public.today_bog() - 9, public.today_bog() - 6)));
+  perform pg_temp.correr('cfd00004-0000-0000-0000-000000000004',
+    jsonb_build_array(
+      pg_temp.evento('uid-d4L@airbnb.com', 'HMRECD4L', public.today_bog() - 9, public.today_bog() - 6)));
+  perform pg_temp.correr('cfd00004-0000-0000-0000-000000000004',
+    jsonb_build_array(
+      pg_temp.evento('uid-d4L@airbnb.com', 'HMRECD4L', public.today_bog() - 9, public.today_bog() - 6)));
+  -- CUARTA corrida, idéntica a la tercera. Es la que ejerce la deduplicación:
+  -- los dos aseos protegidos siguen siendo candidatos de revisión y el paso (h)
+  -- vuelve a INTENTAR su notificación. Quien impide la segunda fila es
+  -- `notifications_dedupe_idx`, no un `where` del `select`, y por eso el intento
+  -- tiene que ocurrir de verdad para que la propiedad quede medida.
+  perform pg_temp.correr('cfd00004-0000-0000-0000-000000000004',
+    jsonb_build_array(
+      pg_temp.evento('uid-d4L@airbnb.com', 'HMRECD4L', public.today_bog() - 9, public.today_bog() - 6)));
+end $$;
+
+-- 33  T-03-41. EL ASEO DE HOY NO SE CANCELA CON LA ASEADORA EN CAMINO, y el de
+--     mañana tampoco. El `+1` compra 24 horas de margen contra el borde que
+--     este repo ya conoce: a las 19:00 de Bogotá ya es el día siguiente en UTC.
+--
+--     El aseo de +5 es el control positivo: misma corrida, misma clase de
+--     ausencia, mismo `origin`, mismo estado, y sí se cancela. Lo único que lo
+--     distingue de los de 0 y +1 es la fecha.
+select is(
+  pg_temp.foto('cd000004-0000-0000-0000-000000000004'),
+  '-6=pendiente/false/-'
+  || ',0=pendiente/true/reserva_desaparecida_ventana_protegida'
+  || ',1=pendiente/true/reserva_desaparecida_ventana_protegida'
+  || ',5=cancelada/false/-',
+  'SYNC-04 la ventana protegida salva los aseos de hoy y de mañana; el de +5 de la misma corrida sí se cancela');
+
+-- 34  Lo que la ventana protege NO se pierde en silencio, Y NO SE AVISA DOS
+--     VECES. Tres propiedades en una sola aserción, sobre cuatro corridas:
+--
+--     1. Los dos aseos salvados quedan marcados con el motivo ENUMERADO que dice
+--        por qué. Un aseo que sobrevive sin marca es un aseo que nadie va a
+--        mirar nunca.
+--     2. `reviews_flagged` va 0, 0, 2, 0: la marca se cuenta en la corrida que
+--        la puso y en ninguna otra. El último cero es lo que demuestra que
+--        `needs_review` es pegajoso y no se reescribe en cada vuelta del cron.
+--     3. LA DEDUPLICACIÓN. La cuarta corrida vuelve a INTENTAR las mismas dos
+--        notificaciones y siguen siendo cuatro filas —dos aseos por dos admins
+--        activos— con dos `dedupe_key` distintas. Sin `notifications_dedupe_idx`
+--        serían ocho, y a media hora por corrida el admin recibiría 48 alertas
+--        al día del mismo aseo. Es un HECHO PUNTUAL: su clave va SIN cubo de
+--        tiempo, justo al revés que la del formato desconocido.
+select is(
+  (select array[
+     (select count(*)::text from public.cleanings
+       where property_id = 'cd000004-0000-0000-0000-000000000004'
+         and needs_review
+         and review_reason = 'reserva_desaparecida_ventana_protegida'),
+     (select string_agg(reviews_flagged::text, ',' order by id) from public.feed_sync_runs
+       where feed_id = 'cfd00004-0000-0000-0000-000000000004'),
+     (select count(*)::text from public.notifications
+       where property_id = 'cd000004-0000-0000-0000-000000000004'
+         and dedupe_key like 'rev:%'),
+     (select count(distinct dedupe_key)::text from public.notifications
+       where property_id = 'cd000004-0000-0000-0000-000000000004'
+         and dedupe_key like 'rev:%'),
+     (select count(distinct recipient_id)::text from public.notifications
+       where property_id = 'cd000004-0000-0000-0000-000000000004')]),
+  array['2', '0,0,2,0', '4', '2', '2'],
+  'los dos aseos que la ventana protegió quedan marcados, contados una sola vez y notificados una sola vez por admin');
+
+
+-- ---------------------------------------------------------------------------
+-- d5 — EL PISO DEL FEED: lo que quedó detrás de la ventana no está cancelado,
+--      está fuera de la ventana.
+--
+-- La ventana del proveedor salta hacia adelante: de cuatro reservas queda solo
+-- la que termina en +24, así que el piso de las corridas 2 y 3 es +24. Los aseos
+-- de +6 y +12 quedan POR DEBAJO y son inmunes; el de +30, por encima, no.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfd00005-0000-0000-0000-000000000005',
+    jsonb_build_array(
+      pg_temp.evento('uid-d5M@airbnb.com', 'HMRECD5M', public.today_bog() + 2,  public.today_bog() + 6),
+      pg_temp.evento('uid-d5N@airbnb.com', 'HMRECD5N', public.today_bog() + 8,  public.today_bog() + 12),
+      pg_temp.evento('uid-d5O@airbnb.com', 'HMRECD5O', public.today_bog() + 18, public.today_bog() + 24),
+      pg_temp.evento('uid-d5P@airbnb.com', 'HMRECD5P', public.today_bog() + 26, public.today_bog() + 30)));
+  perform pg_temp.correr('cfd00005-0000-0000-0000-000000000005',
+    jsonb_build_array(
+      pg_temp.evento('uid-d5O@airbnb.com', 'HMRECD5O', public.today_bog() + 18, public.today_bog() + 24)));
+  perform pg_temp.correr('cfd00005-0000-0000-0000-000000000005',
+    jsonb_build_array(
+      pg_temp.evento('uid-d5O@airbnb.com', 'HMRECD5O', public.today_bog() + 18, public.today_bog() + 24)));
+end $$;
+
+-- 35  T-03-40. EL CANDADO MÁS FUERTE DE LOS CUATRO, y el que hace innecesario
+--     adivinar dónde está el borde de la ventana del proveedor: se deriva de la
+--     propia corrida.
+--
+--     El aseo de +30 es el control positivo y está por ENCIMA del piso: misma
+--     corrida, mismas dos ausencias, misma clase de aseo, y sí se cancela. Lo
+--     único que lo distingue de los de +6 y +12 es su posición respecto al piso.
+--
+--     Sin este candado, el día que el proveedor mueva su ventana hacia adelante
+--     —que es su comportamiento normal— el sistema cancelaría en bloque todos
+--     los aseos que quedaron detrás.
+select is(
+  pg_temp.foto('cd000005-0000-0000-0000-000000000005'),
+  '6=pendiente/true/reserva_desaparecida_bajo_piso'
+  || ',12=pendiente/true/reserva_desaparecida_bajo_piso'
+  || ',24=pendiente/false/-'
+  || ',30=cancelada/false/-',
+  'SYNC-04 el piso del feed salva todo lo que quedó por detrás de la ventana; el de +30, por encima, sí se cancela');
+
+-- 36  El piso de cada corrida queda escrito en `feed_sync_runs.min_ends_on`, que
+--     es la instrumentación que en dos o tres días de producción contesta si la
+--     reserva que termina hoy desaparece hoy mismo o mañana. Aquí se afirma que
+--     el salto de la ventana quedó registrado: +6 en la primera corrida, +24 en
+--     las dos siguientes.
+select is(
+  (select array_agg((min_ends_on - public.today_bog())::int order by id)
+     from public.feed_sync_runs
+    where feed_id = 'cfd00005-0000-0000-0000-000000000005'),
+  array[6, 24, 24],
+  'min_ends_on registra el piso de cada corrida y el salto de la ventana del proveedor');
+
+
+-- ---------------------------------------------------------------------------
+-- d6 — el aseo COMPLETADA. Trabajo ya ejecutado.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfd00006-0000-0000-0000-000000000006',
+    jsonb_build_array(
+      pg_temp.evento('uid-d6Q@airbnb.com', 'HMRECD6Q', public.today_bog() + 2, public.today_bog() + 6),
+      pg_temp.evento('uid-d6R@airbnb.com', 'HMRECD6R', public.today_bog() + 1, public.today_bog() + 3)));
+end $$;
+
+-- Recorrido legal completo: pendiente -> en_curso -> completada.
+update public.cleanings
+   set state = 'en_curso', confirmado_at = now(),
+       aseador_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', started_at = now()
+ where property_id = 'cd000006-0000-0000-0000-000000000006'
+   and scheduled_date = public.today_bog() + 6;
+update public.cleanings
+   set state = 'completada', finished_at = now()
+ where property_id = 'cd000006-0000-0000-0000-000000000006'
+   and scheduled_date = public.today_bog() + 6;
+
+do $$ begin
+  perform pg_temp.correr('cfd00006-0000-0000-0000-000000000006',
+    jsonb_build_array(
+      pg_temp.evento('uid-d6R@airbnb.com', 'HMRECD6R', public.today_bog() + 1, public.today_bog() + 3)));
+  perform pg_temp.correr('cfd00006-0000-0000-0000-000000000006',
+    jsonb_build_array(
+      pg_temp.evento('uid-d6R@airbnb.com', 'HMRECD6R', public.today_bog() + 1, public.today_bog() + 3)));
+end $$;
+
+-- 37  Un aseo YA HECHO sobrevive intacto a que su reserva desaparezca, y NO
+--     queda marcado para revisión. Las dos mitades importan:
+--
+--     que no se cancele es T-03-42; que TAMPOCO se marque es el anti-tormenta.
+--     Que una reserva salga de la ventana del proveedor semanas después de que
+--     su aseo ya se hizo es el caso NORMAL, y marcar cada uno de esos aseos
+--     convertiría el movimiento rutinario de la ventana en una avalancha de
+--     alertas sobre trabajo terminado, que es la forma más segura de que el
+--     admin deje de mirar la campana.
+--
+--     El tercer elemento es el control positivo: la ausencia SÍ se registró.
+select is(
+  (select array[
+     pg_temp.foto('cd000006-0000-0000-0000-000000000006'),
+     (select coalesce(string_agg((cancelled_at is null)::text, '+' order by id), '<sin aseo>')
+        from public.cleanings
+       where property_id = 'cd000006-0000-0000-0000-000000000006'
+         and scheduled_date = public.today_bog() + 6),
+     (select coalesce(string_agg(reservation_code, ',' order by reservation_code), '<ninguna>')
+        from public.calendar_reservations
+       where feed_id = 'cfd00006-0000-0000-0000-000000000006'
+         and disappeared_at is not null)]),
+  array['3=pendiente/false/-,6=completada/false/-', 'true', 'HMRECD6Q'],
+  'SYNC-04 un aseo completada sobrevive intacto a dos ausencias y no se marca para revisión');
+
+-- 38  Y la garantía última no es del RPC sino del TRIGGER: `completada` es
+--     terminal. `service_role` salta la RLS pero NO salta los triggers, así que
+--     ni un error de diff, ni un `where` mal escrito, ni una migración futura
+--     pueden cancelar trabajo ya ejecutado sin que la base lance.
+--
+--     Es la segunda capa de T-03-42, sobre el mismo aseo que la aserción 37
+--     acaba de medir. La aserción 13 afirma lo mismo sobre un aseo MANUAL; esta
+--     lo afirma sobre uno que creó el propio RPC.
+select throws_ok(
+  $q$update public.cleanings
+        set state = 'cancelada', cancelled_at = now()
+      where property_id = 'cd000006-0000-0000-0000-000000000006'
+        and scheduled_date = public.today_bog() + 6$q$,
+  'P0001', null,
+  'ni el sync ni nadie puede cancelar un aseo completada creado por el RPC: el trigger lanza transicion_invalida');
+
+
+-- ---------------------------------------------------------------------------
+-- d7 — LA RESERVA MOVIDA, caso feliz. El aseo viejo se confirma a mano ANTES de
+--      que la reserva se mueva, para poder afirmar que el nuevo NO hereda esa
+--      confirmación: la fecha cambió, y lo que el admin confirmó ya no es lo
+--      que va a pasar.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfd00007-0000-0000-0000-000000000007',
+    jsonb_build_array(
+      pg_temp.evento('uid-d7S@airbnb.com', 'HMRECD7S', public.today_bog() + 2, public.today_bog() + 8)));
+end $$;
+
+update public.cleanings
+   set confirmado_at = now(), num_huespedes = 3
+ where property_id = 'cd000007-0000-0000-0000-000000000007'
+   and scheduled_date = public.today_bog() + 8;
+
+do $$ begin
+  perform pg_temp.correr('cfd00007-0000-0000-0000-000000000007',
+    jsonb_build_array(
+      pg_temp.evento('uid-d7S@airbnb.com', 'HMRECD7S', public.today_bog() + 2, public.today_bog() + 12)));
+end $$;
+
+-- 39  SYNC-05, caso (a) del diff. El aseo viejo se cancela con su motivo
+--     enumerado y nace uno nuevo en la fecha nueva, SIN CONFIRMAR y apuntando a
+--     la reserva.
+--
+--     Los cuatro campos por fila cubren cuatro modos de fallo distintos: que no
+--     se cancelara el viejo, que no naciera el nuevo, que el nuevo heredara la
+--     confirmación del admin —lo que lo metería en la agenda en firme para una
+--     fecha que nadie confirmó— y que el nuevo naciera huérfano cuando SÍ podía
+--     apuntar a su reserva.
+select is(
+  (select string_agg((scheduled_date - public.today_bog())::text
+                     || '=' || state::text
+                     || '/' || coalesce(cancel_reason, '-')
+                     || '/' || case when reservation_id is null then '-' else 'R' end
+                     || '/' || case when confirmado_at is null then 'sin-confirmar' else 'confirmado' end,
+                     ',' order by scheduled_date)
+     from public.cleanings
+    where property_id = 'cd000007-0000-0000-0000-000000000007'),
+  '8=cancelada/reserva_movida/R/confirmado,12=pendiente/-/R/sin-confirmar',
+  'SYNC-05 la reserva movida cancela el aseo viejo y crea uno nuevo sin confirmar en la fecha nueva');
+
+
+-- ---------------------------------------------------------------------------
+-- d8 — LA RESERVA MOVIDA CON EL ASEO VIEJO INTOCABLE. La trampa del 23505.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfd00008-0000-0000-0000-000000000008',
+    jsonb_build_array(
+      pg_temp.evento('uid-d8T@airbnb.com', 'HMRECD8T', public.today_bog() + 2, public.today_bog() + 8)));
+end $$;
+
+update public.cleanings
+   set state = 'en_curso', confirmado_at = now(),
+       aseador_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', started_at = now()
+ where property_id = 'cd000008-0000-0000-0000-000000000008'
+   and scheduled_date = public.today_bog() + 8;
+
+-- 40  LA TRAMPA, MEDIDA. `cleanings_one_live_per_reservation` es único sobre
+--     `reservation_id` para las filas vivas. El aseo viejo está EN CURSO, así
+--     que no se puede cancelar y sigue apuntando a la reserva; si el aseo nuevo
+--     naciera apuntando a esa misma reserva, el insert reventaría con 23505 y
+--     se llevaría por delante la corrida ENTERA del feed, no solo este aseo.
+--
+--     `lives_ok` y no un `is` sobre el resultado: lo que se mide aquí es que la
+--     llamada no lanza. Si lanzara dentro de un bloque anónimo, el archivo
+--     entero abortaría y dejaría de imprimir TAP, que es el modo de fallo que
+--     el plan 03-04 ya midió una vez.
+select lives_ok(
+  $q$select pg_temp.correr('cfd00008-0000-0000-0000-000000000008',
+        jsonb_build_array(
+          pg_temp.evento('uid-d8T@airbnb.com', 'HMRECD8T', public.today_bog() + 2, public.today_bog() + 12)))$q$,
+  'SYNC-05 mover una reserva cuyo aseo viejo está en curso no lanza 23505 sobre cleanings_one_live_per_reservation');
+
+-- 41  Y LA FORMA RESULTANTE, que es donde se ve POR QUÉ no lanzó: el aseo nuevo
+--     NACE HUÉRFANO.
+--
+--     De las dos salidas posibles se eligió la única aceptable. Desapuntar el
+--     aseo viejo dejaría libre el índice, pero borraría el vínculo entre un aseo
+--     que ya tiene trabajo dentro y la reserva que lo justifica, que es
+--     exactamente el vínculo que un pago o una disputa necesitan. El aseo nuevo
+--     nace con `reservation_id` nulo —forma válida en el schema, y la de todos
+--     los `manual`— y el viejo queda marcado para que un humano decida.
+select is(
+  (select string_agg((scheduled_date - public.today_bog())::text
+                     || '=' || state::text
+                     || '/' || needs_review::text
+                     || '/' || coalesce(review_reason, '-')
+                     || '/' || case when reservation_id is null then 'huerfano' else 'R' end,
+                     ',' order by scheduled_date)
+     from public.cleanings
+    where property_id = 'cd000008-0000-0000-0000-000000000008'),
+  '8=en_curso/true/reserva_movida_aseo_iniciado/R,12=pendiente/false/-/huerfano',
+  'SYNC-05 si el aseo viejo no se pudo cancelar, el nuevo nace con reservation_id nulo y el viejo queda en revisión');
+
+
+-- ---------------------------------------------------------------------------
+-- d9 — CANCELAR Y RECREAR EL MISMO DÍA, a través del RPC.
+--
+-- La aserción 14 mide esa propiedad sobre el índice, con dos sentencias
+-- escritas a mano. Esta la mide sobre el camino real: el RPC cancela el aseo de
+-- +9 en una corrida y, dos corridas después, otra reserva distinta que también
+-- termina el +9 hace que nazca uno nuevo en esa misma fecha.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfd00009-0000-0000-0000-000000000009',
+    jsonb_build_array(
+      pg_temp.evento('uid-d9U@airbnb.com', 'HMRECD9U', public.today_bog() + 3, public.today_bog() + 9),
+      pg_temp.evento('uid-d9V@airbnb.com', 'HMRECD9V', public.today_bog() + 1, public.today_bog() + 4)));
+  perform pg_temp.correr('cfd00009-0000-0000-0000-000000000009',
+    jsonb_build_array(
+      pg_temp.evento('uid-d9V@airbnb.com', 'HMRECD9V', public.today_bog() + 1, public.today_bog() + 4)));
+  perform pg_temp.correr('cfd00009-0000-0000-0000-000000000009',
+    jsonb_build_array(
+      pg_temp.evento('uid-d9V@airbnb.com', 'HMRECD9V', public.today_bog() + 1, public.today_bog() + 4)));
+  -- Cuarta corrida: aparece otra reserva que también termina el +9.
+  perform pg_temp.correr('cfd00009-0000-0000-0000-000000000009',
+    jsonb_build_array(
+      pg_temp.evento('uid-d9V@airbnb.com', 'HMRECD9V', public.today_bog() + 1, public.today_bog() + 4),
+      pg_temp.evento('uid-d9W@airbnb.com', 'HMRECD9W', public.today_bog() + 5, public.today_bog() + 9)));
+end $$;
+
+-- 42  Dos filas para el mismo apartamento y el mismo día conviven porque el
+--     índice único es PARCIAL sobre el operador de distinción: al cancelar, la
+--     fila sale del índice. Es lo que permite que el motor no tenga que elegir
+--     entre "dejo un aseo cancelado en la agenda" y "no puedo crear el que de
+--     verdad hace falta".
+--
+--     El cuarto elemento es el que importa: el aseo VIVO del +9 apunta a la
+--     reserva NUEVA, no a la que se fue. Sin él, un aseo vivo que siguiera
+--     apuntando a una reserva desaparecida pasaría el conteo sin que nada lo
+--     dijera.
+select is(
+  (select array[
+     (select count(*)::text from public.cleanings
+       where property_id = 'cd000009-0000-0000-0000-000000000009'
+         and scheduled_date = public.today_bog() + 9),
+     (select count(*)::text from public.cleanings
+       where property_id = 'cd000009-0000-0000-0000-000000000009'
+         and scheduled_date = public.today_bog() + 9
+         and state = 'cancelada'
+         and cancel_reason = 'reserva_desaparecida'),
+     (select count(*)::text from public.cleanings
+       where property_id = 'cd000009-0000-0000-0000-000000000009'
+         and scheduled_date = public.today_bog() + 9
+         and state = 'pendiente'),
+     (select coalesce(string_agg(r.reservation_code, '+' order by r.reservation_code), '<ninguna>')
+        from public.cleanings c
+        join public.calendar_reservations r on r.id = c.reservation_id
+       where c.property_id = 'cd000009-0000-0000-0000-000000000009'
+         and c.scheduled_date = public.today_bog() + 9
+         and c.state = 'pendiente')]),
+  array['2', '1', '1', 'HMRECD9W'],
+  'SYNC-05 el RPC cancela y recrea el aseo del mismo día, y el vivo apunta a la reserva nueva');
+
+
+-- ---------------------------------------------------------------------------
+-- dA — LA EXTENSIÓN MAL CREADA. La reserva se acorta y aparece otra, con código
+--      nuevo, empezando exactamente donde terminaba.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfd0000a-0000-0000-0000-00000000000a',
+    jsonb_build_array(
+      pg_temp.evento('uid-dAX@airbnb.com', 'HMRECDAX', public.today_bog() + 2, public.today_bog() + 8)));
+  perform pg_temp.correr('cfd0000a-0000-0000-0000-00000000000a',
+    jsonb_build_array(
+      pg_temp.evento('uid-dAX@airbnb.com', 'HMRECDAX', public.today_bog() + 2, public.today_bog() + 6),
+      pg_temp.evento('uid-dAY@airbnb.com', 'HMRECDAY', public.today_bog() + 6, public.today_bog() + 9)));
+end $$;
+
+-- 43  SYNC-08, regla R2. El aseo de la FECHA DE UNIÓN queda marcado.
+--
+--     Lo que el paso (g) SE NIEGA a hacer también está aquí: el aseo del +9
+--     existe y está limpio —el checkout de la reserva nueva es real y hay que
+--     ir—, el del +6 existe y está marcado, y ninguno de los dos se borró ni se
+--     fusionó. Si de verdad era una extensión, el coste es un viaje de más y
+--     una alerta; si no lo era, el coste de no crear el aseo es un huésped
+--     entrando a un apartamento sucio. La asimetría decide sola.
+select is(
+  pg_temp.foto('cd00000a-0000-0000-0000-00000000000a'),
+  '6=pendiente/true/extension_sospechosa,8=cancelada/false/-,9=pendiente/false/-',
+  'SYNC-08 una reserva nueva que empieza donde otra se acortó marca el aseo de la fecha de unión');
+
+-- 44  EL FAN-OUT Y LA DEDUPLICACIÓN, en la misma aserción.
+--
+--     `notifications.recipient_id` es NOT NULL: no existe "una notificación para
+--     el rol". Cada alerta se inserta una vez por admin ACTIVO, y el admin
+--     desactivado no recibe ninguna —cuarto elemento—, que es lo que impide que
+--     alguien que ya no trabaja aquí siga recibiendo la operación.
+--
+--     Los dos primeros elementos separan "cuántas filas" de "cuántos
+--     destinatarios distintos": con un solo admin sembrado los dos números
+--     coincidirían y un `cross join` roto pasaría inadvertido. El quinto afirma
+--     que el hecho se contó UNA vez, con UNA sola `dedupe_key`.
+select is(
+  (select array[
+     (select count(*)::text from public.notifications
+       where property_id = 'cd00000a-0000-0000-0000-00000000000a'
+         and type = 'extension_sospechosa'),
+     (select count(distinct recipient_id)::text from public.notifications
+       where property_id = 'cd00000a-0000-0000-0000-00000000000a'
+         and type = 'extension_sospechosa'),
+     (select count(*)::text from public.notifications
+       where property_id = 'cd00000a-0000-0000-0000-00000000000a'
+         and type = 'aseo_cancelado'),
+     (select count(*)::text from public.notifications
+       where property_id = 'cd00000a-0000-0000-0000-00000000000a'
+         and recipient_id = 'ad000003-0000-0000-0000-000000000003'),
+     (select count(distinct dedupe_key)::text from public.notifications
+       where property_id = 'cd00000a-0000-0000-0000-00000000000a'
+         and type = 'extension_sospechosa')]),
+  array['2', '2', '2', '0', '1'],
+  'SYNC-08 la alerta de extensión se encola una vez por admin activo, ninguna para el desactivado');
+
+-- La misma corrida otra vez, sin ningún cambio.
+do $$ begin
+  perform pg_temp.correr('cfd0000a-0000-0000-0000-00000000000a',
+    jsonb_build_array(
+      pg_temp.evento('uid-dAX@airbnb.com', 'HMRECDAX', public.today_bog() + 2, public.today_bog() + 6),
+      pg_temp.evento('uid-dAY@airbnb.com', 'HMRECDAY', public.today_bog() + 6, public.today_bog() + 9)));
+end $$;
+
+-- 45  `needs_review` ES PEGAJOSO. El sync nunca lo apaga: solo el admin, en la
+--     Fase 4. Apagarlo automáticamente haría desaparecer la alerta antes de que
+--     nadie la atendiera, y el aseo volvería a la agenda como si nada hubiera
+--     pasado.
+--
+--     El tercer y cuarto elemento son el control: la corrida limpia NO vuelve a
+--     contar la marca (`reviews_flagged = 0`), mientras que la corrida que la
+--     puso sí contó 1. Sin esa pareja, un `reviews_flagged` que devolviera
+--     siempre cero pasaría esta aserción sin haber medido nada.
+select is(
+  (select array[
+     (select coalesce(string_agg(needs_review::text, '+' order by id), '<sin aseo>')
+        from public.cleanings
+       where property_id = 'cd00000a-0000-0000-0000-00000000000a'
+         and scheduled_date = public.today_bog() + 6),
+     (select coalesce(string_agg(coalesce(review_reason, '-'), '+' order by id), '<sin aseo>')
+        from public.cleanings
+       where property_id = 'cd00000a-0000-0000-0000-00000000000a'
+         and scheduled_date = public.today_bog() + 6),
+     (select reviews_flagged::text from public.feed_sync_runs
+       where feed_id = 'cfd0000a-0000-0000-0000-00000000000a' order by id desc limit 1),
+     (select reviews_flagged::text from public.feed_sync_runs
+       where feed_id = 'cfd0000a-0000-0000-0000-00000000000a'
+       order by id asc limit 1 offset 1)]),
+  array['true', 'extension_sospechosa', '0', '1'],
+  'SYNC-08 needs_review es pegajoso: una corrida limpia no lo apaga ni lo vuelve a contar');
+
+
+-- ---------------------------------------------------------------------------
+-- dB — EL TURNOVER SANO. Dos reservas vivas y sin cambios, el checkout de una
+--      es el checkin de la otra.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfd0000b-0000-0000-0000-00000000000b',
+    jsonb_build_array(
+      pg_temp.evento('uid-dBZ@airbnb.com', 'HMRECDBZ', public.today_bog() + 2, public.today_bog() + 6),
+      pg_temp.evento('uid-dB1@airbnb.com', 'HMRECDB1', public.today_bog() + 6, public.today_bog() + 9)));
+  perform pg_temp.correr('cfd0000b-0000-0000-0000-00000000000b',
+    jsonb_build_array(
+      pg_temp.evento('uid-dBZ@airbnb.com', 'HMRECDBZ', public.today_bog() + 2, public.today_bog() + 6),
+      pg_temp.evento('uid-dB1@airbnb.com', 'HMRECDB1', public.today_bog() + 6, public.today_bog() + 9)));
+end $$;
+
+-- 46  ****** LA ASERCIÓN QUE SEPARA SYNC-07 DE SYNC-08 ******
+--
+--     Un turnover del mismo día NO es una extensión sospechosa: es el caso MÁS
+--     COMÚN y MÁS IMPORTANTE del negocio, y lo que le corresponde es URGENCIA,
+--     no revisión. El feed real trae exactamente este caso el 2026-10-10, con
+--     dos reservas sanas.
+--
+--     Confundirlos convertiría cada turnover en una falsa alarma permanente y
+--     el admin dejaría de mirar la campana en una semana, que es T-03-44. Lo
+--     único que separa los dos casos es SI LA RESERVA ANTERIOR SE MOVIÓ O
+--     DESAPARECIÓ EN LA MISMA CORRIDA; por eso R2 lleva esa condición y no solo
+--     la coincidencia de fechas.
+--
+--     La forma es idéntica a la de la aserción 43 salvo por ese hecho: allí la
+--     reserva anterior se había acortado; aquí las dos están vivas y sin
+--     cambios. El primer elemento es el control positivo de que el turnover SÍ
+--     se detectó como tal: el aseo del +6 es urgente. Sin él, un motor que no
+--     hiciera absolutamente nada pasaría los otros cuatro.
+select is(
+  (select array[
+     (select string_agg((scheduled_date - public.today_bog())::text || '=' || is_urgent::text,
+                        ',' order by scheduled_date)
+        from public.cleanings
+       where property_id = 'cd00000b-0000-0000-0000-00000000000b'),
+     (select count(*)::text from public.cleanings
+       where property_id = 'cd00000b-0000-0000-0000-00000000000b' and needs_review),
+     (select count(*)::text from public.notifications
+       where property_id = 'cd00000b-0000-0000-0000-00000000000b'
+         and type = 'extension_sospechosa'),
+     (select count(*)::text from public.notifications
+       where property_id = 'cd00000b-0000-0000-0000-00000000000b'),
+     (select sum(reviews_flagged)::text from public.feed_sync_runs
+       where feed_id = 'cfd0000b-0000-0000-0000-00000000000b')]),
+  array['6=true,9=false', '0', '0', '0', '0'],
+  'SYNC-07 un turnover del mismo día sano es urgente y NO es una extensión sospechosa: cero alertas');
+
+
+-- ---------------------------------------------------------------------------
+-- dC — EL COLAPSO DE FORMATO. Los mismos tres eventos, ahora sin clasificar.
+--
+-- Es el escenario que hace de la falla cerrada de `ical-clasificar.ts` una bomba
+-- si no existe esta guarda: el día que el proveedor cambie la cadena de la que
+-- sale la clasificación, siguen llegando los mismos eventos —un conteo de
+-- EVENTOS no se mueve ni un poco— y todos caen a desconocido.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfd0000c-0000-0000-0000-00000000000c',
+    jsonb_build_array(
+      pg_temp.evento('uid-dC2@airbnb.com', 'HMRECDC2', public.today_bog() + 3,  public.today_bog() + 7),
+      pg_temp.evento('uid-dC3@airbnb.com', 'HMRECDC3', public.today_bog() + 10, public.today_bog() + 14),
+      pg_temp.evento('uid-dC4@airbnb.com', 'HMRECDC4', public.today_bog() + 20, public.today_bog() + 24)));
+  perform pg_temp.correr('cfd0000c-0000-0000-0000-00000000000c',
+    jsonb_build_array(
+      pg_temp.evento('uid-dC2@airbnb.com', null, public.today_bog() + 3,  public.today_bog() + 7,  'desconocido'),
+      pg_temp.evento('uid-dC3@airbnb.com', null, public.today_bog() + 10, public.today_bog() + 14, 'desconocido'),
+      pg_temp.evento('uid-dC4@airbnb.com', null, public.today_bog() + 20, public.today_bog() + 24, 'desconocido')));
+  perform pg_temp.correr('cfd0000c-0000-0000-0000-00000000000c',
+    jsonb_build_array(
+      pg_temp.evento('uid-dC2@airbnb.com', null, public.today_bog() + 3,  public.today_bog() + 7,  'desconocido'),
+      pg_temp.evento('uid-dC3@airbnb.com', null, public.today_bog() + 10, public.today_bog() + 14, 'desconocido'),
+      pg_temp.evento('uid-dC4@airbnb.com', null, public.today_bog() + 20, public.today_bog() + 24, 'desconocido')));
+end $$;
+
+-- 47  LA GUARDA DE COLAPSO VA SOBRE RESERVAS CLASIFICADAS, NO SOBRE EVENTOS.
+--
+--     Dos corridas seguidas con los mismos tres eventos sin clasificar: si la
+--     guarda mirara `event_count`, valdría 3 en las dos y no saltaría nunca; la
+--     segunda corrida sería la segunda ausencia y los tres aseos se irían.
+--
+--     Los elementos 1 y 2 afirman que no se canceló nada. El 3 es el que hace
+--     que eso NO sea vacuo: `event_count` sigue valiendo 3 mientras
+--     `reservation_count` cae a 0, así que los eventos SÍ llegaron y el motor
+--     SÍ corrió. Y el 4 afirma que ni siquiera se marcó la primera ausencia: de
+--     una corrida en la que nada clasificó no se aprende NADA sobre ausencias, y
+--     marcarla dejaría el terreno servido para que la corrida siguiente cancele.
+select is(
+  (select array[
+     pg_temp.foto('cd00000c-0000-0000-0000-00000000000c'),
+     (select coalesce(string_agg(cleanings_cancelled::text, ',' order by id), '<sin corridas>')
+        from public.feed_sync_runs where feed_id = 'cfd0000c-0000-0000-0000-00000000000c'),
+     (select coalesce(string_agg(event_count::text || '/' || reservation_count::text || '/' || unknown_count::text,
+                                 ',' order by id), '<sin corridas>')
+        from public.feed_sync_runs where feed_id = 'cfd0000c-0000-0000-0000-00000000000c'),
+     (select count(*)::text from public.calendar_reservations
+       where feed_id = 'cfd0000c-0000-0000-0000-00000000000c' and disappeared_at is not null)]),
+  array['7=pendiente/false/-,14=pendiente/false/-,24=pendiente/false/-',
+        '0,0,0',
+        '3/3/0,3/0/3,3/0/3',
+        '0'],
+  'SYNC-04 un feed cuyo formato colapsa no cancela ni un aseo, aunque el conteo de eventos no se mueva');
+
+-- 48  Y el colapso NO es silencioso: se emite UNA alerta, con cubo DIARIO y una
+--     fila por admin activo. El cubo de tiempo es lo que PRODUCE la repetición,
+--     no lo que la evita: un problema de formato que dure tres días vuelve a
+--     avisar cada día, y no cada media hora.
+--
+--     El tercer elemento es el que demuestra el cubo: dos corridas colapsadas el
+--     mismo día producen UNA sola `dedupe_key`, y por tanto dos filas —una por
+--     admin— y no cuatro.
+select is(
+  (select array[
+     (select count(*)::text from public.notifications
+       where property_id = 'cd00000c-0000-0000-0000-00000000000c'
+         and type = 'calendario_caido'),
+     (select count(distinct recipient_id)::text from public.notifications
+       where property_id = 'cd00000c-0000-0000-0000-00000000000c'),
+     (select count(distinct dedupe_key)::text from public.notifications
+       where property_id = 'cd00000c-0000-0000-0000-00000000000c'),
+     -- `string_agg(distinct ...)` y no una subconsulta escalar con `distinct`:
+     -- MEDIDO en el señuelo S8. Con la guarda de colapso rota aparecían además
+     -- alertas de revisión sobre el mismo apartamento, la subconsulta devolvía
+     -- dos filas y el resultado NO era `not ok` sino `ERROR: more than one row
+     -- returned by a subquery`, que aborta la transacción y mata las aserciones
+     -- 49 y 50. Agregado, un motivo de más se ve en el valor comparado.
+     (select coalesce(string_agg(distinct payload ->> 'motivo', '+'), '<ninguno>')
+        from public.notifications
+       where property_id = 'cd00000c-0000-0000-0000-00000000000c'),
+     (select coalesce(string_agg(distinct payload ->> 'scope', '+'), '<ninguno>')
+        from public.notifications
+       where property_id = 'cd00000c-0000-0000-0000-00000000000c')]),
+  array['2', '2', '1', 'formato_desconocido', 'feed'],
+  'el colapso de formato encola una sola alerta por admin activo, con cubo diario en la dedupe_key');
+
+
+-- ---------------------------------------------------------------------------
+-- dD — LA FILA INFORMATIVA de una unidad de gestión externa, cuya reserva se
+--      mueve. No se puede cancelar (`cl_unmanaged_is_inert` exige estado nulo) y
+--      no tiene nada que preservar: se REPROGRAMA.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfd0000d-0000-0000-0000-00000000000d',
+    jsonb_build_array(
+      pg_temp.evento('uid-dD5@airbnb.com', 'HMRECDD5', public.today_bog() + 2, public.today_bog() + 8)));
+  perform pg_temp.correr('cfd0000d-0000-0000-0000-00000000000d',
+    jsonb_build_array(
+      pg_temp.evento('uid-dD5@airbnb.com', 'HMRECDD5', public.today_bog() + 2, public.today_bog() + 12)));
+end $$;
+
+-- 49  SYNC-11. La fila informativa sigue siendo UNA y ahora está en la fecha
+--     nueva. Las dos mitades importan:
+--
+--     que siga siendo una demuestra que no se duplicó —el paso (c) no la puede
+--     recrear, porque la reserva ya tiene una fila viva apuntándola—; y que se
+--     haya movido demuestra que no quedó anclada para siempre en una fecha que
+--     la reserva abandonó, que es lo que pasaría si el reconcile la tratara como
+--     a un aseo gestionado y se limitara a no poder cancelarla.
+--
+--     El estado sigue siendo nulo y `is_managed` falso: la reprogramación no la
+--     convierte en operativa.
+select is(
+  (select array[
+     (select count(*)::text from public.cleanings
+       where property_id = 'cd00000d-0000-0000-0000-00000000000d'),
+     pg_temp.foto('cd00000d-0000-0000-0000-00000000000d'),
+     (select (bool_and(not is_managed) and bool_and(state is null)
+              and bool_and(not is_urgent) and bool_and(aseador_id is null))::text
+        from public.cleanings
+       where property_id = 'cd00000d-0000-0000-0000-00000000000d')]),
+  array['1', '12=<informativa>/false/-', 'true'],
+  'SYNC-11 la fila informativa de una unidad de gestión externa se reprograma a la fecha nueva y sigue inerte');
+
+
+-- ---------------------------------------------------------------------------
+-- 50 — LA ASERCIÓN ESTRUCTURAL, y existe porque hay una capa que NINGUNA
+--      aserción de comportamiento puede defender.
+--
+-- `cl_pendiente_shape` hace que `state = 'pendiente'` y `started_at is null`
+-- sean co-implicadas, así que quitar UNA de las dos del `where` de cancelación
+-- deja TODAS las aserciones de arriba en verde. Medido en el plan 03-05. Es
+-- exactamente el falso verde que esta fase lleva cuatro planes catalogando, y la
+-- única defensa posible es leer el cuerpo de la función.
+--
+-- Se leen los comentarios FUERA antes de buscar: si no, cualquier comentario que
+-- mencione un candado lo daría por presente, que es la misma trampa que la
+-- cabecera de `scripts/ci/check-service-role.sh` describe.
+-- ---------------------------------------------------------------------------
+create function pg_temp.cuerpo_sync() returns text
+language sql stable as $fn$
+  select regexp_replace(pg_get_functiondef(p.oid), '--[^' || chr(10) || ']*', '', 'g')
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'sync_feed_apply';
+$fn$;
+
+create function pg_temp.ocurrencias(p_patron text) returns int
+language sql stable as $fn$
+  select count(*)::int from regexp_matches(pg_temp.cuerpo_sync(), p_patron, 'g');
+$fn$;
+
+-- SE COMPARAN RAZONES, NO NÚMEROS MÁGICOS, y esa decisión también está medida.
+--
+-- La primera versión de esta aserción preguntaba `> 0` por cada candado. Con el
+-- señuelo aplicado —quitar `started_at is null` del `where` de la cancelación
+-- por desaparición— seguía en VERDE, porque la MISMA cadena sobrevivía en el
+-- `where` de la cancelación por movimiento. Un `> 0` mide "existe en algún
+-- sitio", que no es la propiedad: la propiedad es que TODA cancelación lleva
+-- todos sus candados.
+--
+-- Así que el patrón es: contar las cancelaciones y exigir que cada candado
+-- aparezca exactamente ese número de veces. Añadir una tercera cancelación sin
+-- sus candados rompe la igualdad, y añadirla CON ellos la mantiene sin tocar
+-- este archivo. No hay ningún número escrito a mano que quede obsoleto.
+--
+-- EL ÚLTIMO ELEMENTO ES EL QUE IMPIDE LA VACUIDAD, y es imprescindible: si
+-- alguien borrara las dos cancelaciones, todas las igualdades de arriba serían
+-- `0 = 0` y esta aserción pasaría en verde sobre una función que ya no cancela
+-- nada. Afirmar que el contador de cancelaciones es mayor que cero es el
+-- control positivo del control positivo.
+--
+-- EL PISO SE EXIGE CON `> 0` Y NO CON LA RAZÓN, A PROPÓSITO: aparece en la
+-- cancelación por desaparición y NO en la de movimiento. Medido al diseñar: una
+-- reserva que se mueve hacia adelante y es la única del feed pone el piso en su
+-- fecha NUEVA, así que el aseo viejo —que por definición está antes— quedaría
+-- por debajo del piso y no se cancelaría jamás. El candado 4 distingue "la
+-- reserva se canceló" de "la reserva quedó fuera de la ventana", y en el caso
+-- movido la reserva está en la corrida diciendo su fecha nueva: no hay nada
+-- fuera de la ventana que explicar.
+select is(
+  array[
+    -- Cada cancelación lleva sus cuatro candados de fila.
+    (pg_temp.ocurrencias('c\.state = ''pendiente''')
+       = pg_temp.ocurrencias('state\s*=\s*''cancelada'''))::text,
+    (pg_temp.ocurrencias('c\.started_at is null')
+       = pg_temp.ocurrencias('state\s*=\s*''cancelada'''))::text,
+    (pg_temp.ocurrencias('public\.today_bog\(\) \+ 1')
+       >= pg_temp.ocurrencias('state\s*=\s*''cancelada'''))::text,
+    (pg_temp.ocurrencias('c\.origin = ''ical''')
+       >= pg_temp.ocurrencias('state\s*=\s*''cancelada'''))::text,
+    -- El piso, presente en la cancelación por desaparición. Ver el comentario.
+    (pg_temp.ocurrencias('c\.scheduled_date >= v_piso')   > 0)::text,
+    -- `needs_review` es pegajoso: la función NUNCA lo apaga.
+    pg_temp.ocurrencias('needs_review\s*=\s*false')::text,
+    -- Ni un solo borrado, ni de aseos ni de reservas, en toda la función.
+    pg_temp.ocurrencias('delete\s+from')::text,
+    -- `cancel_reason` se escribe en cada cancelación y solo con los dos valores
+    -- enumerados. Un tercer valor, o uno interpolado, rompe la igualdad.
+    (pg_temp.ocurrencias('cancel_reason\s*=\s*''')
+       = pg_temp.ocurrencias('state\s*=\s*''cancelada'''))::text,
+    (pg_temp.ocurrencias('cancel_reason\s*=\s*''')
+       = pg_temp.ocurrencias('cancel_reason\s*=\s*''reserva_desaparecida''')
+       + pg_temp.ocurrencias('cancel_reason\s*=\s*''reserva_movida'''))::text,
+    -- CONTROL POSITIVO: hay cancelaciones que contar. Sin esto, borrarlas todas
+    -- pondría las ocho comparaciones de arriba en `0 = 0` y en verde.
+    (pg_temp.ocurrencias('state\s*=\s*''cancelada''')     > 0)::text
+  ],
+  array['true', 'true', 'true', 'true', 'true', '0', '0', 'true', 'true', 'true'],
+  'toda cancelación de la función lleva sus candados, no hay borrados, needs_review no se apaga y cancel_reason es una lista cerrada');
 select * from finish();
 rollback;
