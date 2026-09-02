@@ -10,11 +10,12 @@ import type { ResultadoAccion } from '@/lib/domain/acciones';
 import {
   esquemaActivar,
   esquemaBorrador,
+  valoresDesdeFilaGuardada,
   type ApartamentoInput,
   type ApartamentoOutput,
 } from '@/lib/domain/apartamento.schema';
 import { campoDeConstraint, mapDbError, type DbErrorLike } from '@/lib/domain/errors';
-import type { Database, Tables } from '@/lib/database.types';
+import type { Database } from '@/lib/database.types';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 /**
@@ -214,32 +215,6 @@ function filaDeProperties(
 }
 
 /**
- * Una fila de `properties` en la forma que comen `esquemaBorrador` y
- * `esquemaActivar`, para poder revalidar contra el contrato de UI-SPEC §8.2 lo
- * que ya está guardado.
- */
-function valoresDesdeFila(fila: Tables<'properties'>): ApartamentoInput {
-  return {
-    nombre: fila.nombre,
-    cluster: fila.cluster,
-    direccion: fila.direccion,
-    maps_url: fila.maps_url,
-    gestion_vivaguest: fila.gestion_vivaguest,
-    tarifa_huesped: fila.tarifa_huesped,
-    pago_aseador: fila.pago_aseador,
-    fee_discriminado: fila.fee_discriminado,
-    responsable_id: fila.responsable_id,
-    suplente_id: fila.suplente_id,
-    contacto_externo: fila.contacto_externo,
-    // `properties.hora_limite` es de tipo `time` y PostgREST la devuelve como
-    // 'HH:MM:SS'. `RE_HORA` del esquema exige 'HH:MM' EXACTO, así que pasarla
-    // tal cual haría fallar la revalidación de TODOS los apartamentos con un
-    // mensaje de formato de hora que no tiene nada que ver con lo que falta.
-    hora_limite: fila.hora_limite.slice(0, 5),
-  };
-}
-
-/**
  * Crea o actualiza un apartamento, en modo borrador o activando (APTO-01).
  *
  * `properties` con el cliente del usuario; `property_secrets`, si vienen, con el
@@ -386,7 +361,12 @@ export async function activarApartamento(id: string): Promise<ResultadoAccion> {
   if (errorLectura) return errorDeBase(errorLectura);
   if (!fila) return noEncontrado();
 
-  const revision = esquemaActivar.safeParse(valoresDesdeFila(fila));
+  // `valoresDesdeFilaGuardada` vive en `lib/domain/` y no aquí: un archivo con
+  // `'use server'` solo puede exportar funciones async, así que un helper puro
+  // declarado en este archivo sería inexportable y por tanto imposible de
+  // cubrir con un test. Y ese helper recorta los segundos de `hora_limite`, sin
+  // lo cual NINGÚN apartamento se puede activar (ver su comentario).
+  const revision = esquemaActivar.safeParse(valoresDesdeFilaGuardada(fila));
   if (!revision.success) return problemaZod(revision.error);
 
   // ── 3. UPDATE, CON EL CLIENTE DEL USUARIO ───────────────────────────────────
@@ -484,7 +464,9 @@ export async function leerSecretos(id: string): Promise<SecretosApartamento | nu
   // ── 3. SOLO AHORA, EL CLIENTE ADMINISTRATIVO ────────────────────────────────
   // Con el JWT del admin esta consulta devuelve `42501 permission denied for
   // table property_secrets`. No es la RLS: es que la tabla no tiene grant. No
-  // existe otra ruta.
+  // existe otra ruta, y el guardarraíl 8 de CI lo impone: cambiar esta línea
+  // por el cliente del usuario pone el build en rojo con el nombre de esta
+  // función. Antes de ese guardarraíl no lo atrapaba nada, y está medido.
   const admin = createAdminClient();
 
   const { data, error } = await admin

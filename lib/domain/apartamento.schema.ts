@@ -13,6 +13,8 @@
  */
 import { z } from 'zod';
 
+import type { Tables } from '@/lib/database.types';
+
 /**
  * Normaliza a `null` lo que un formulario manda como "vacío".
  *
@@ -137,6 +139,50 @@ export const esquemaActivar = invariantesSiempre(apartamentoBase)
     path: ['contacto_externo'],
     message: 'Falta el contacto externo.',
   });
+
+/**
+ * Una fila YA GUARDADA de `properties`, en la forma que comen los dos esquemas.
+ *
+ * Existe para que `activarApartamento` (plan 02-10) pueda revalidar el contrato
+ * de §8.2 sobre lo que hay en la base, sin pasar por el formulario: el menú `⋯`
+ * de UI-SPEC §7.3 ofrece `Activar` sobre una fila de la tabla y ahí no hay
+ * ninguna validación de cliente detrás.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * LA LÍNEA QUE IMPORTA DE ESTA FUNCIÓN ES LA DE `hora_limite`, Y SIN ELLA NO
+ * SE PUEDE ACTIVAR NI UN SOLO APARTAMENTO.
+ *
+ * `properties.hora_limite` es de tipo `time` y PostgREST la serializa como
+ * `'11:30:00'`, con segundos. `RE_HORA` exige `'HH:MM'` EXACTO —y es estricta a
+ * propósito, porque un `24:00` reventaría en Postgres como error de parseo
+ * crudo—, así que pasar el valor tal cual hace fallar la revalidación de TODAS
+ * las filas con el mensaje "La hora debe tener el formato HH:MM", que no tiene
+ * absolutamente nada que ver con lo que el admin acaba de pulsar.
+ *
+ * Vive aquí, en `lib/domain/`, y no dentro del archivo de Server Actions, por
+ * una razón mecánica: un archivo con `'use server'` solo puede exportar
+ * funciones async, así que un helper puro declarado ahí es inexportable y por
+ * tanto imposible de cubrir con un test unitario. Y `vitest.config.ts` solo
+ * recoge `lib/**`. Un trozo de lógica que rompe la funcionalidad entera no
+ * puede vivir donde ninguna suite lo alcanza.
+ * ────────────────────────────────────────────────────────────────────────────
+ */
+export function valoresDesdeFilaGuardada(fila: Tables<'properties'>): ApartamentoInput {
+  return {
+    nombre: fila.nombre,
+    cluster: fila.cluster,
+    direccion: fila.direccion,
+    maps_url: fila.maps_url,
+    gestion_vivaguest: fila.gestion_vivaguest,
+    tarifa_huesped: fila.tarifa_huesped,
+    pago_aseador: fila.pago_aseador,
+    fee_discriminado: fila.fee_discriminado,
+    responsable_id: fila.responsable_id,
+    suplente_id: fila.suplente_id,
+    contacto_externo: fila.contacto_externo,
+    hora_limite: fila.hora_limite.slice(0, 5),
+  };
+}
 
 /** Un ítem de la lista "Para activar falta" de UI-SPEC §8.2. */
 export type Faltante = {
