@@ -46,12 +46,40 @@ describe('listarClusters', () => {
     expect(listarClusters([])).toEqual([]);
   });
 
-  test('ordena con las tildes en su sitio, no por punto de codigo', () => {
-    // Un `sort()` a secas manda 'Bogotá' DESPUES de 'Zipaquira' porque 'á' esta
-    // por encima de 'z' en UTF-16. En un filtro de 8 clusters eso se ve.
-    const filas = [fila('Zipaquira'), fila('Bogota'), fila('Bogotá'), fila('Armenia')];
+  test('ordena por collation es-CO y no por punto de codigo UTF-16', () => {
+    // ESTE TEST SE ESCRIBIO DOS VECES, Y LA PRIMERA VERSION NO SERVIA.
+    //
+    // Decia `['Zipaquira','Bogota','Bogotá','Armenia'] -> ['Armenia','Bogota',
+    // 'Bogotá','Zipaquira']` y pasaba TAMBIEN con un `sort()` a secas, porque
+    // en ese juego de datos las dos ordenaciones coinciden: 'a'(U+0061) va
+    // antes que 'á'(U+00E1) en puntos de codigo, y tambien antes por collation.
+    // El senuelo de cambiar `localeCompare` por `sort()` salio VERDE.
+    //
+    // Los dos casos de abajo son los que de verdad discriminan:
+    //
+    //  1. MAYUSCULAS. `sort()` compara code units, y toda mayuscula ASCII
+    //     (65..90) va antes que toda minuscula (97..122): 'Zipaquira' quedaria
+    //     antes que 'chapinero'. El admin teclea el cluster a mano, asi que una
+    //     minuscula inicial es un dato realista, no un caso de laboratorio.
+    //  2. LA TILDE EN MEDIO. 'Bogotá 1' vs 'Bogota 2': por code unit gana
+    //     'Bogota 2' (la 'a' pelada es menor que la 'á'); por collation es-CO la
+    //     tilde es una diferencia terciaria y decide el digito, asi que gana
+    //     'Bogotá 1'. Son ordenes OPUESTOS.
+    const filas = [
+      fila('Zipaquira'),
+      fila('chapinero'),
+      fila('Bogotá 1'),
+      fila('Bogota 2'),
+      fila('Armenia'),
+    ];
 
-    expect(listarClusters(filas)).toEqual(['Armenia', 'Bogota', 'Bogotá', 'Zipaquira']);
+    expect(listarClusters(filas)).toEqual([
+      'Armenia',
+      'Bogotá 1',
+      'Bogota 2',
+      'chapinero',
+      'Zipaquira',
+    ]);
   });
 
   test('descarta un cluster que solo tiene espacios', () => {
