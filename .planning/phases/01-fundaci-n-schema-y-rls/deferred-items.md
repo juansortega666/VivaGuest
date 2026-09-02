@@ -110,3 +110,59 @@ Dos veces apareció el mismo patrón: un comentario que cita el nombre literal d
 hace fallar el propio grep que la prohíbe (`service_role` en 01-01, `gen_random_uuid` en 01-05).
 Vale la pena volverlo regla explícita al planear: los guardarraíles por grep obligan a que los
 comentarios no citen el token vetado.
+
+---
+
+## Recuento desde el cierre de la Fase 2 (plan 02-15, 2026-09-02)
+
+La Fase 2 cerró sin tocar una sola línea de DDL: `git log 19c5817..8687a18 -- supabase/`
+devuelve **un único commit**, `84e3b24`, y su diff es `supabase/config.toml`. Así que
+ninguno de los hallazgos de arriba se movió por trabajo de la Fase 2. Se volvieron a medir
+contra la base viva para no dejarlos como afirmación vieja.
+
+| # | Hallazgo | Estado medido hoy | Dueño |
+|---|---|---|---|
+| 1 | `project_id` = nombre del worktree | **Cerrado.** `supabase/config.toml:5` → `project_id = "vivaguest"` | — |
+| 2 | `anon` tiene `TRUNCATE` sobre `storage.objects` | **ABIERTO.** `has_table_privilege('anon','storage.objects','TRUNCATE')` → `t` | pendiente de decisión |
+| 3 | Privilegios por defecto de `public` abiertos | Cerrado en su parte de tablas por la migración 07; su cola de funciones se convirtió en el hallazgo 5 | ver 5 |
+| 4 | `calendar_feeds.url`: plan y suite se contradicen | **Cerrado.** La tabla existe con 16 columnas y **sin `url`**; ganó el argumento de seguridad y el fixture pgTAP se ajustó. Las 47 aserciones corren y pasan | — |
+| 5 | `alter default privileges` no le quita `EXECUTE` a PUBLIC | **ABIERTO como regla permanente.** Hoy no hay fuga: la consulta de funciones de `public` ejecutables por `anon` devuelve **cero filas**. Pero la protección es el revoke explícito de la migración 07, no un default: la primera función nueva sin su par de líneas reabre el agujero | toda migración de las Fases 3 a 9 que cree funciones en `public` |
+| 6 | `results_eq` sobre función inexistente aborta el archivo | **Cerrado.** `00_rls_aseos.test.sql ...... ok`, y el total sigue en `Files=5, Tests=47, Result: PASS` | — |
+| 7 | Una foto puede colgar de un `checklist_item` de otro aseo | **ABIERTO.** Sin cambios: sigue sin ruta de escritura para `damages`, `expenses` y `missing_item_reports`, así que el trigger sigue sin poder escribirse completo | Fase 6 |
+| 8 | Objetos de Storage huérfanos | **ABIERTO.** Sin cambios | Fase 9 (RET-06) |
+
+**Cuatro siguen abiertos: 2, 5, 7 y 8.** Ninguno es de la Fase 2 y ninguno se tocó.
+
+### Y el checkpoint A1, que sigue abierto y ahora arrastra más cosas
+
+Los proyectos de Supabase dev y prod **todavía no existen**. Es el checkpoint A1 de esta
+fase y no es de la Fase 2 cerrarlo. Lo que sí es nuevo es lo que ese checkpoint ahora
+bloquea, y conviene que esté escrito en un solo sitio antes de que se olvide:
+
+1. **La configuración del proveedor de email hay que replicarla a mano en el panel.** El
+   plan 02-01 la arregló en `supabase/config.toml` (commit `84e3b24`), y `config.toml` **no
+   se aplica al proyecto hosted**. El equivalente es Authentication → Providers → Email →
+   Enabled **ON**, y Allow new users to sign up **OFF**. Está en `02-RESEARCH.md` §8.1 como
+   `[ASSUMED]`, o sea: nadie lo ha visto funcionar en hosted. Si se linkea y se olvida esta
+   mitad, el login del producto entero queda apagado con el mismo error que la Fase 2 tardó
+   un plan en desbloquear: `Email logins are disabled`.
+2. **`supabase db advisors --type security` va a decir cosas nuevas.** Los lints de
+   seguridad que solo existen en hosted —configuración de `[auth]`, extensiones en
+   `public`— llegan como WARN, y el umbral está en `--fail-on error` a propósito. Subirlo a
+   `warn` es una decisión de la fase que linkee, no un descuido.
+3. **El hallazgo 2 de este documento es ejecutable desde el dashboard y no desde una
+   migración.** Si se va a entrar al panel para lo de arriba, es el momento de revocarle el
+   `TRUNCATE` a `anon` sobre `storage.objects`, que es lo único que la Fase 1 dejó sin poder
+   hacer por falta de un rol con privilegios suficientes.
+
+**Dueño:** la fase que linkee los proyectos. No es la Fase 3.
+
+### Lo que la Fase 2 aprendió sobre los worktrees, y que sigue aplicando
+
+La nota de "Ejecución paralela y base local compartida" de arriba se quedó corta en un
+punto que la Fase 2 midió: **el puerto 3000 también es compartido**. `playwright.config.ts`
+tiene `reuseExistingServer: !process.env.CI`, así que un `next start` de otro checkout en
+el 3000 se reutiliza sin decir nada y la suite mide el código equivocado — una ruta nueva da
+404 y el fallo apunta al sitio errado; peor, una aserción negativa pasa trivialmente contra
+una pantalla que ni existe. El plan 02-04 dejó `PLAYWRIGHT_PORT` para eso, y todo ejecutor
+en worktree tiene que usarlo. El sign-off de la Fase 2 se corrió con `PLAYWRIGHT_PORT=3117`.

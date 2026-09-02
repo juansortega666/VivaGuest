@@ -51,3 +51,60 @@ ESLint — y eso no es una corrección de alcance de este plan. Anunciado para "
 major de Vite", así que hay tiempo.
 
 **Cuándo hacerlo:** en un plan propio, con las suites completas como red.
+
+---
+
+## 3. `npm run build` avisa de un `_phone` sin usar (heredado del plan 02-08)
+
+**Encontrado en:** plan 02-15, corriendo la puerta 9 para el sign-off.
+
+```
+./lib/domain/aseador.schema.test.ts
+40:20  Warning: '_phone' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+```
+
+**Qué es:** un aviso, no un error. Es un destructuring que descarta el campo a propósito y
+la convención del `_` delante no está declarada en la config de ESLint, así que la regla no
+la reconoce.
+
+**Por qué no se arregló aquí:** el plan 02-15 no toca `lib/domain/`, y ninguna puerta se
+pone en rojo por esto — `npm run build` sale con exit 0. Tocarlo desde el plan de cierre
+sería meter un cambio de código sin red en el commit que firma la validación.
+
+**Opciones cuando se decida:** añadir
+`argsIgnorePattern`/`varsIgnorePattern` con `^_` a la config de ESLint, que es la
+convención que el código ya está usando de facto en varios sitios, o quitar la variable.
+La primera es preferible: declara la convención en vez de esquivarla caso por caso.
+
+**Dueño:** el plan que toque la config de ESLint. Va junto con el hallazgo 1 de este
+documento, que es el mismo archivo de config.
+
+---
+
+## 4. Las puertas 10 y 11 no están escritas en `ci/db.yml` (plan 02-15)
+
+**Encontrado en:** plan 02-15, corriendo las puertas para el sign-off.
+
+**Qué pasa:** `ci/db.yml` conoce 9 pasos entre sus dos jobs. Esta fase añadió dos suites que
+el workflow no menciona:
+
+- `npm run test:integration` — 5 archivos, **52 aserciones** contra la base real con JWT
+  emitidos por GoTrue. Es donde vive la prueba central de PLAT-04 y la costura con la Fase 3.
+- `npx playwright test` — 10 specs, **76 aserciones**. Es la única capa que ve la máscara de
+  miles, la puerta de `contacto_externo` y los siete estados de APTO-12.
+
+Son **128 aserciones** que el día que el CI arranque van a seguir sin correr si nadie añade
+los pasos.
+
+**Por qué no se arregló aquí:** es el mismo bloqueo que mantiene `ci/db.yml` fuera de
+`.github/workflows/` — editar un workflow requiere un token con scope `workflow`, y
+`02-CONTEXT.md` lo difiere. Añadir los pasos al archivo que está en `ci/` no cambia nada
+mientras el archivo no sea un workflow.
+
+**Lo que hay que presupuestar cuando se haga:** los dos jobs nuevos necesitan el stack de
+Supabase arriba, no solo `db start`. `test:integration` habla con GoTrue (puerto 54321), no
+solo con Postgres, así que el truco de `supabase db start` que usa el job `database` no le
+sirve. Playwright además necesita `npx playwright install --with-deps chromium`.
+
+**Dueño:** la fase que consiga el token con scope `workflow`. Va con el movimiento de
+`ci/db.yml` a `.github/workflows/`, no antes.
