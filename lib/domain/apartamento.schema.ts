@@ -22,12 +22,26 @@ import type { Tables } from '@/lib/database.types';
  * `valueAsNumber`). Sin esto, `z.coerce.number()` convertiría `''` en `0` y una
  * unidad se activaría con "tarifa 0" en vez de bloquear la activación: la lista de
  * faltantes diría que el campo está lleno cuando en pantalla está vacío.
+ *
+ * TAMBIÉN CUBRE LOS CAMPOS OPCIONALES DE TEXTO, y ahí no es una comodidad: un
+ * `<input>` vacío entrega `''`, nunca `null`, así que sin este paso
+ * `z.url()` rechaza un `maps_url` que el admin dejó en blanco —siendo opcional— y
+ * `z.uuid()` rechaza el `responsable_id` de una unidad sin responsable. Los dos
+ * son estados legítimos de un borrador y bloquearían `Guardar` con un mensaje que
+ * señala un campo que nadie tocó.
+ *
+ * La cadena de solo espacios cuenta como vacía: en pantalla es indistinguible de
+ * la vacía, y guardada produce una dirección "presente" que no dice nada y un
+ * `contacto_externo` que satisface la puerta de activación sin contener a nadie.
  */
 function vacioANulo(v: unknown): unknown {
-  if (v === '') return null;
+  if (typeof v === 'string' && v.trim() === '') return null;
   if (typeof v === 'number' && Number.isNaN(v)) return null;
   return v;
 }
+
+/** Texto opcional de formulario: `''` y `'   '` son ausencia, no dato. */
+const textoOpcional = z.preprocess(vacioANulo, z.string().trim().nullish());
 
 /**
  * Pesos colombianos ENTEROS (`bigint` en la base, sin decimales nunca).
@@ -53,15 +67,15 @@ const RE_HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
 export const apartamentoBase = z.object({
   nombre: z.string().trim().min(1, 'El nombre es obligatorio'),
   cluster: z.string().trim().min(1, 'El cluster es obligatorio'),
-  direccion: z.string().trim().nullish(),
-  maps_url: z.url('Pega un link válido de Google Maps').nullish(),
+  direccion: textoOpcional,
+  maps_url: z.preprocess(vacioANulo, z.url('Pega un link válido de Google Maps').nullish()),
   gestion_vivaguest: z.boolean(),
   tarifa_huesped: cop,
   pago_aseador: cop,
   fee_discriminado: z.boolean(),
-  responsable_id: z.uuid().nullish(),
-  suplente_id: z.uuid().nullish(),
-  contacto_externo: z.string().trim().nullish(),
+  responsable_id: z.preprocess(vacioANulo, z.uuid().nullish()),
+  suplente_id: z.preprocess(vacioANulo, z.uuid().nullish()),
+  contacto_externo: textoOpcional,
   hora_limite: z.string().regex(RE_HORA, 'La hora debe tener el formato HH:MM'),
 });
 
