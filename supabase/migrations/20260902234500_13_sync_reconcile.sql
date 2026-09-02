@@ -20,12 +20,6 @@
 --   (h) notificaciones ..................................... ESTA migración
 --   (i) salud del feed + fila de la corrida ................ migración 12  (+ contadores)
 --
--- ESTADO DE ESTE INCREMENTO: el paso (e) está completo y medido. Los pasos (g)
--- y (h) llegan en el commit siguiente sobre este mismo archivo. Mientras tanto
--- `v_rev_desap`, `v_rev_movida` y `v_ext_ids` se calculan y no se consumen: son
--- exactamente el universo de destinatarios que el paso (h) va a necesitar, y
--- calcularlos aquí es lo que permite que (h) sea solo el `insert`.
---
 -- POR QUÉ EL ORDEN NO ES ESTÉTICO: aditivo primero, destructivo al final. Si el
 -- paso destructivo falla, la transacción entera se revierte y no queda nada a
 -- medias. Si el paso destructivo se salta por los candados, el sistema queda
@@ -834,6 +828,253 @@ begin
      and c.state is distinct from 'cancelada'
      and c.is_managed
      and c.scheduled_date >= public.today_bog();
+
+  -- =========================================================================
+  -- (g) LA EXTENSIÓN MAL CREADA — SYNC-08
+  -- =========================================================================
+  -- Una reserva con `uid` nuevo Y código nuevo que empieza exactamente donde
+  -- terminaba otra. El sistema SÍ crea la reserva y SÍ crea el aseo del nuevo
+  -- `ends_on`, porque es un checkout real. Lo que hace ADEMÁS es marcar el aseo
+  -- de la FECHA DE UNIÓN —el `ends_on` viejo, que es el `starts_on` nuevo— y
+  -- encolar la alerta.
+  --
+  -- Lo que este paso SE NIEGA A HACER: no borra el aseo de la fecha de unión,
+  -- no fusiona las dos reservas y no auto-resuelve. Si de verdad era una
+  -- extensión, el coste es un viaje de más y una alerta; si no lo era, el coste
+  -- de no crear el aseo es un huésped entrando a un apartamento sucio. La
+  -- asimetría decide sola.
+  --
+  -- ***********************************************************************
+  -- LA DISTINCIÓN QUE NINGÚN DOCUMENTO DE RESEARCH HACE Y QUE DECIDE ESTE PASO
+  --
+  -- Una reserva nueva que empieza en el `ends_on` de otra reserva VIVA Y SIN
+  -- CAMBIOS **no es una extensión sospechosa: es un TURNOVER DEL MISMO DÍA**,
+  -- que es SYNC-07 (urgencia) y no SYNC-08 (revisión). El feed real trae
+  -- exactamente ese caso el 2026-10-10, con dos reservas sanas.
+  --
+  -- Confundirlos convertiría el caso MÁS COMÚN y MÁS IMPORTANTE del negocio en
+  -- una falsa alarma permanente, y el admin dejaría de mirar las alertas en una
+  -- semana. Lo que separa los dos casos es SI LA RESERVA ANTERIOR SE MOVIÓ O
+  -- DESAPARECIÓ EN LA MISMA CORRIDA, y por eso R2 lleva esa condición y no
+  -- solo la coincidencia de fechas. Quitarla es el señuelo obligatorio del
+  -- plan y pone en rojo la aserción 43 de `05_sync.test.sql`.
+  -- ***********************************************************************
+  if v_reconcile and coalesce(array_length(v_nuevas, 1), 0) > 0 then
+    with nuevas as (
+      select r.id, r.property_id, r.reservation_code, r.starts_on, r.ends_on
+        from public.calendar_reservations r
+       where r.id = any (v_nuevas)
+    ), sospechosas as (
+      select distinct n.starts_on as fecha_union
+        from nuevas n
+       where
+         -- R1: el mismo código ya se vio en este apartamento con otras fechas.
+         exists (
+           select 1
+             from public.calendar_reservations r
+            where r.property_id = n.property_id
+              and r.reservation_code = n.reservation_code
+              and r.id <> n.id
+              and (r.starts_on, r.ends_on) is distinct from (n.starts_on, n.ends_on))
+         -- R2: otra reserva del mismo apartamento SE ACORTÓ O DESAPARECIÓ y la
+         -- nueva empieza exactamente en su `ends_on`, con código distinto.
+         -- `ends_on <> ends_on_anterior` es para lo que existe esa columna de
+         -- la migración 11: el paso (a) escribe en ella el valor VIEJO en cada
+         -- update, así que una reserva que no cambió tiene las dos iguales y
+         -- la condición la deja fuera. Es la línea que salva el turnover sano.
+         or exists (
+           select 1
+             from public.calendar_reservations r
+            where r.property_id = n.property_id
+              and r.ends_on = n.starts_on
+              and r.id <> n.id
+              and r.reservation_code is distinct from n.reservation_code
+              and (r.disappeared_at is not null
+                   or (r.ends_on_anterior is not null
+                       and r.ends_on <> r.ends_on_anterior)))
+    ), marcadas as (
+      update public.cleanings c
+         set needs_review  = true,
+             review_reason = 'extension_sospechosa'
+        from sospechosas s
+       where c.property_id = v_property
+         and c.scheduled_date = s.fecha_union
+         and c.origin = 'ical'
+         and c.is_managed
+         and c.state is distinct from 'cancelada'
+         and not c.needs_review
+      returning c.id
+    )
+    select coalesce(array_agg(id), '{}'::uuid[]) into v_ext_ids from marcadas;
+
+    v_reviews_flagged := v_reviews_flagged + coalesce(array_length(v_ext_ids, 1), 0);
+  end if;
+
+  -- =========================================================================
+  -- (h) NOTIFICACIONES — una fila por admin activo, con dedupe_key
+  -- =========================================================================
+  -- `notifications.recipient_id` es NOT NULL y referencia `profiles`, así que
+  -- no existe "una notificación para el rol": cada alerta se inserta una vez
+  -- POR ADMIN ACTIVO. El `cross join` es el fan-out y el `is_active` es lo que
+  -- impide que un admin desactivado siga recibiendo la bandeja.
+  --
+  -- LA TRAMPA DEL CUBO HORARIO, Y SE LEE AL REVÉS DE COMO ES: el cubo de tiempo
+  -- dentro de la `dedupe_key` es lo que produce REPETICIÓN, no lo que la evita.
+  -- Sin cubo, una alerta se emite una vez y nunca más, y el admin que la marcó
+  -- como leída no vuelve a saber. Por eso:
+  --
+  --   * las alertas de HECHO PUNTUAL sobre un aseo concreto van SIN cubo
+  --     (`cancel:<id>`, `rev:<id>`, `ext:<id>`): repetirlas cada media hora es
+  --     acoso y el hecho no cambia;
+  --   * las alertas de ESTADO CONTINUO llevan cubo. Aquí solo hay una, la de
+  --     formato desconocido, con cubo DIARIO (`fmt:<feed>:<YYYYMMDD>`): es un
+  --     problema de formato, no algo que empeore hora a hora.
+  --
+  -- `title`, `body` y `payload` son LITERALES. Nunca se interpola nada derivado
+  -- del cuerpo del feed —que trae los últimos cuatro dígitos del teléfono del
+  -- huésped— ni la URL del feed, que es una credencial. El motivo va como
+  -- literal escrito aquí y NO leído de vuelta de `cancel_reason` o
+  -- `review_reason`: esas dos columnas son editables por el admin en la Fase 4,
+  -- y leerlas de vuelta abriría una ruta de texto libre hacia el payload.
+  --
+  -- `on conflict do nothing` sin destino cubre `notifications_dedupe_idx`.
+
+  -- Aseos cancelados porque la reserva desapareció.
+  if coalesce(array_length(v_cancel_desap, 1), 0) > 0 then
+    insert into public.notifications
+      (recipient_id, type, title, body, cleaning_id, property_id, payload, dedupe_key)
+    select p.id,
+           'aseo_cancelado'::public.notification_type,
+           'Aseo cancelado por el calendario',
+           'La reserva desapareció del calendario en dos lecturas seguidas y el aseo se canceló automáticamente.',
+           c.id,
+           v_property,
+           jsonb_build_object('scope',   'aseo',
+                              'motivo',  'reserva_desaparecida',
+                              'feed_id', p_feed_id),
+           'cancel:' || c.id::text
+      from public.cleanings c
+      cross join public.profiles p
+     where c.id = any (v_cancel_desap)
+       and p.role = 'admin'
+       and p.is_active
+    on conflict do nothing;
+  end if;
+
+  -- Aseos cancelados porque la reserva se movió.
+  if coalesce(array_length(v_cancel_movida, 1), 0) > 0 then
+    insert into public.notifications
+      (recipient_id, type, title, body, cleaning_id, property_id, payload, dedupe_key)
+    select p.id,
+           'aseo_cancelado'::public.notification_type,
+           'Aseo cancelado por el calendario',
+           'La reserva cambió de fechas y el aseo de la fecha anterior se canceló automáticamente.',
+           c.id,
+           v_property,
+           jsonb_build_object('scope',   'aseo',
+                              'motivo',  'reserva_movida',
+                              'feed_id', p_feed_id),
+           'cancel:' || c.id::text
+      from public.cleanings c
+      cross join public.profiles p
+     where c.id = any (v_cancel_movida)
+       and p.role = 'admin'
+       and p.is_active
+    on conflict do nothing;
+  end if;
+
+  -- Aseos que NO se pudieron cancelar y quedaron en revisión, por desaparición.
+  if coalesce(array_length(v_rev_desap, 1), 0) > 0 then
+    insert into public.notifications
+      (recipient_id, type, title, body, cleaning_id, property_id, payload, dedupe_key)
+    select p.id,
+           'aseo_cancelado'::public.notification_type,
+           'Aseo marcado para revisión',
+           'La reserva desapareció del calendario pero el aseo no se pudo cancelar automáticamente. Revísalo.',
+           c.id,
+           v_property,
+           jsonb_build_object('scope',   'aseo',
+                              'motivo',  'reserva_desaparecida_no_cancelable',
+                              'feed_id', p_feed_id),
+           'rev:' || c.id::text
+      from public.cleanings c
+      cross join public.profiles p
+     where c.id = any (v_rev_desap)
+       and p.role = 'admin'
+       and p.is_active
+    on conflict do nothing;
+  end if;
+
+  -- Aseos que NO se pudieron cancelar y quedaron en revisión, por movimiento.
+  if coalesce(array_length(v_rev_movida, 1), 0) > 0 then
+    insert into public.notifications
+      (recipient_id, type, title, body, cleaning_id, property_id, payload, dedupe_key)
+    select p.id,
+           'aseo_cancelado'::public.notification_type,
+           'Aseo marcado para revisión',
+           'La reserva cambió de fechas pero el aseo de la fecha anterior no se pudo cancelar automáticamente. Revísalo.',
+           c.id,
+           v_property,
+           jsonb_build_object('scope',   'aseo',
+                              'motivo',  'reserva_movida_no_cancelable',
+                              'feed_id', p_feed_id),
+           'rev:' || c.id::text
+      from public.cleanings c
+      cross join public.profiles p
+     where c.id = any (v_rev_movida)
+       and p.role = 'admin'
+       and p.is_active
+    on conflict do nothing;
+  end if;
+
+  -- Extensión sospechosa.
+  if coalesce(array_length(v_ext_ids, 1), 0) > 0 then
+    insert into public.notifications
+      (recipient_id, type, title, body, cleaning_id, property_id, payload, dedupe_key)
+    select p.id,
+           'extension_sospechosa'::public.notification_type,
+           'Posible extensión de reserva',
+           'Una reserva nueva empieza donde terminaba otra que cambió o desapareció. Revisa el aseo de esa fecha antes de asignarlo.',
+           c.id,
+           v_property,
+           jsonb_build_object('scope',   'aseo',
+                              'motivo',  'extension_sospechosa',
+                              'feed_id', p_feed_id),
+           'ext:' || c.id::text
+      from public.cleanings c
+      cross join public.profiles p
+     where c.id = any (v_ext_ids)
+       and p.role = 'admin'
+       and p.is_active
+    on conflict do nothing;
+  end if;
+
+  -- Formato desconocido: llegaron eventos y NINGUNO clasificó como reserva.
+  -- Es la contraparte visible de la guarda de colapso: sin esta alerta, un feed
+  -- cuyo formato cambió se quedaría congelado en silencio, sin cancelar nada
+  -- —que es lo correcto— pero también sin que nadie se enterara nunca.
+  --
+  -- El enum `notification_type` NO se toca (decisión fijada en el plan 03-03):
+  -- se reutiliza `calendario_caido` y el discriminador va en `payload.motivo`.
+  if v_event_count > 0 and v_reservation_count = 0 then
+    insert into public.notifications
+      (recipient_id, type, title, body, property_id, payload, dedupe_key)
+    select p.id,
+           'calendario_caido'::public.notification_type,
+           'Calendario con formato desconocido',
+           'El calendario respondió pero ningún evento se pudo interpretar como reserva. No se canceló ningún aseo.',
+           v_property,
+           jsonb_build_object('scope',        'feed',
+                              'motivo',       'formato_desconocido',
+                              'feed_id',      p_feed_id,
+                              'eventos',      v_event_count,
+                              'desconocidos', v_unknown_count),
+           'fmt:' || p_feed_id::text || ':' || to_char(public.today_bog(), 'YYYYMMDD')
+      from public.profiles p
+     where p.role = 'admin'
+       and p.is_active
+    on conflict do nothing;
+  end if;
 
   -- =========================================================================
   -- (i) SALUD DEL FEED Y FILA DE LA CORRIDA — dentro de esta transacción
