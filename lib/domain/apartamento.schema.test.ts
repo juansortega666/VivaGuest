@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
+import type { Tables } from '@/lib/database.types';
+
 import {
   type ApartamentoInput,
   esquemaActivar,
   esquemaBorrador,
   faltantesParaActivar,
+  valoresDesdeFilaGuardada,
 } from './apartamento.schema';
 
 const UID_A = '11111111-1111-4111-8111-111111111111';
@@ -289,5 +292,85 @@ describe('faltantesParaActivar y esquemaActivar no se pueden desincronizar', () 
     const puedeActivarSegunLista = faltantesParaActivar(valor).length === 0;
     const puedeActivarSegunEsquema = esquemaActivar.safeParse(valor).success;
     expect(puedeActivarSegunLista).toBe(puedeActivarSegunEsquema);
+  });
+});
+
+describe('valoresDesdeFilaGuardada', () => {
+  /** Una fila de `properties` tal como la devuelve PostgREST, lista para activar. */
+  function filaGuardada(sobre: Partial<Tables<'properties'>> = {}): Tables<'properties'> {
+    return {
+      id: '33333333-3333-4333-8333-333333333333',
+      nombre: 'Apto 101',
+      cluster: 'Laureles',
+      direccion: null,
+      maps_url: null,
+      maps_lat: null,
+      maps_lng: null,
+      // `time` de Postgres: PostgREST la serializa CON segundos.
+      hora_limite: '11:30:00',
+      gestion_vivaguest: true,
+      tarifa_huesped: 320_000,
+      pago_aseador: 60_000,
+      fee_discriminado: false,
+      responsable_id: UID_A,
+      suplente_id: null,
+      contacto_externo: null,
+      is_active: false,
+      created_at: '2026-09-01T00:00:00Z',
+      updated_at: '2026-09-01T00:00:00Z',
+      ...sobre,
+    };
+  }
+
+  it('recorta los segundos de hora_limite: HH:MM:SS -> HH:MM', () => {
+    expect(valoresDesdeFilaGuardada(filaGuardada()).hora_limite).toBe('11:30');
+  });
+
+  it('una fila completa pasa esquemaActivar', () => {
+    // ESTA ES LA ASERCIÓN QUE PROTEGE LA FUNCIONALIDAD ENTERA. Sin el recorte de
+    // los segundos, `RE_HORA` rechaza '11:30:00' y NINGÚN apartamento del
+    // catálogo se puede activar desde el menú de la tabla, con un mensaje sobre
+    // el formato de la hora que no explica nada.
+    const resultado = esquemaActivar.safeParse(valoresDesdeFilaGuardada(filaGuardada()));
+
+    expect(resultado.success).toBe(true);
+  });
+
+  it('CONTROL: la misma fila SIN recortar los segundos NO pasa', () => {
+    // El control demuestra que el test de arriba mide el recorte y no otra cosa.
+    const crudo = { ...valoresDesdeFilaGuardada(filaGuardada()), hora_limite: '11:30:00' };
+    const resultado = esquemaActivar.safeParse(crudo);
+
+    expect(resultado.success).toBe(false);
+    expect(resultado.error?.issues[0].path).toEqual(['hora_limite']);
+  });
+
+  it('una fila incompleta falla por el campo que le falta, no por la hora', () => {
+    const resultado = esquemaActivar.safeParse(
+      valoresDesdeFilaGuardada(filaGuardada({ responsable_id: null })),
+    );
+
+    expect(resultado.success).toBe(false);
+    expect(resultado.error?.issues[0].path).toEqual(['responsable_id']);
+  });
+
+  it('una informativa sin contacto falla por contacto_externo', () => {
+    // La puerta que NO tiene 23514 detrás: `props_active_requires_owner` está
+    // condicionado a `gestion_vivaguest`, así que para una unidad informativa la
+    // base dejaría activar sin contacto. Esta revalidación es la única red.
+    const resultado = esquemaActivar.safeParse(
+      valoresDesdeFilaGuardada(
+        filaGuardada({
+          gestion_vivaguest: false,
+          tarifa_huesped: null,
+          pago_aseador: null,
+          responsable_id: null,
+          contacto_externo: null,
+        }),
+      ),
+    );
+
+    expect(resultado.success).toBe(false);
+    expect(resultado.error?.issues[0].path).toEqual(['contacto_externo']);
   });
 });
