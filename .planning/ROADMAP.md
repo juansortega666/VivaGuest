@@ -104,8 +104,21 @@ habla del **fin de una reserva**, que es lo que libera el apartamento y genera e
 criterio 3 habla de los **bloqueos del propietario**, fechas que el anfitrión cierra a mano y
 que no traen huésped ni generan aseo. Son cosas distintas.
 
-**Prerequisito humano (bloqueante, no es una tarea de la fase):** hay que capturar y versionar un `.ics` real de Airbnb de la cuenta propia de VivaGuest antes de planear esta fase. Las muestras públicas están desactualizadas y la más citada en GitHub es falsa. Sin esos archivos no hay fixtures de test ni forma de resolver empíricamente la estabilidad del `UID`.
-**Plans**: TBD
+**Prerequisito humano:** RESUELTO el 2026-09-02. `lib/domain/__fixtures__/ical/airbnb-real-anonimizado.ics` es un feed real de un anuncio propio, con 15 eventos. Queda una laguna: **cero bloqueos del propietario** en esa captura, así que la distinción reserva/bloqueo está en confianza MEDIA y la cierra el checkpoint humano del plan 03-10.
+
+**Plans**: 10 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Wave 0: guardarraíles de CI, las nueve fixtures que faltaban y el pgTAP de la fase en rojo
+- [ ] 03-02-PLAN.md — Dominio puro del iCal: parser sin dependencias, clasificador de tres valores y normalizador donde muere el teléfono
+- [ ] 03-03-PLAN.md — Migración 11: `pg_cron` y `pg_net`, `feed_sync_runs` como instrumento, y el CHECK de privacidad
+- [ ] 03-04-PLAN.md — Migración 12: `sync_feed_apply()` en su mitad aditiva, con la urgencia recalculada y la salud dentro de la transacción
+- [ ] 03-05-PLAN.md — Migración 13: el reconcile destructivo con sus cuatro candados, la extensión sospechosa y las notificaciones
+- [ ] 03-06-PLAN.md — El worker: secreto compartido en tiempo constante, guardas de transporte y la guarda de colapso sobre reservas clasificadas
+- [ ] 03-07-PLAN.md — Migración 14: dispatcher con fan-out, watchdog anti-tormenta, poda del historial y el lazo local
+- [ ] 03-08-PLAN.md — Integración de los criterios 1, 2 y 3 contra el feed real
+- [ ] 03-09-PLAN.md — Integración de los criterios 4 y 5: el diff entre corridas y las cinco alertas
+- [ ] 03-10-PLAN.md — Privacidad transversal, los dos checkpoints humanos y el cierre de la fase
 
 ### Phase 4: Dashboard operativo del admin
 **Goal**: El admin ve toda la operación del día en una pantalla y confirma, reasigna o cierra cualquier aseo sin salir de ahí
