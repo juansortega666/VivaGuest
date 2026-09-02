@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '@/lib/database.types';
+import type { ConteosDeLectura, MotivoDeLecturaInutil } from '@/lib/domain/ical-guardas';
 import type { EventoNormalizado } from '@/lib/domain/ical-normalizar';
 
 /**
@@ -69,13 +70,13 @@ import type { EventoNormalizado } from '@/lib/domain/ical-normalizar';
  */
 export type CodigoHttp = `http_${number}`;
 
-export type CodigoDeFalloEnumerado =
-  /** 2xx con `Content-Type` de HTML: un feed muerto responde 200 con su pagina de error. */
-  | 'content_type_html'
-  /** 2xx con un cuerpo que no abre calendario. */
-  | 'no_es_ical'
-  /** El sniff de cabecera lo dejo pasar, pero el documento no cierra. */
-  | 'cuerpo_truncado'
+/**
+ * Los codigos de TRANSPORTE: nacen del `fetch`, no del cuerpo. Los del cuerpo
+ * —HTML con 200, no es calendario, truncado, colapso— los define
+ * `lib/domain/ical-guardas.ts` y se importan de ahi, para que la lista viva en
+ * un solo sitio. La direccion de la dependencia es `data -> domain`.
+ */
+export type CodigoDeTransporte =
   /** Presupuesto de bytes agotado durante la descarga. */
   | 'cuerpo_excede_5mib'
   /** El proveedor respondio 3xx y no se sigue: es la segunda mitad anti-SSRF. */
@@ -84,10 +85,12 @@ export type CodigoDeFalloEnumerado =
   | 'timeout'
   /** No se pudo establecer la conexion. Sin status que registrar. */
   | 'red'
-  /** La guarda de colapso: hubo cuerpo, pero CERO reservas clasificadas. */
-  | 'cero_reservas_clasificadas'
+  /** La direccion guardada dejo de pasar la allowlist. No se sale a la red. */
+  | 'destino_no_permitido'
   /** El RPC lanzo. Nada quedo escrito, ni siquiera la salud. */
   | 'rpc_fallido';
+
+export type CodigoDeFalloEnumerado = CodigoDeTransporte | MotivoDeLecturaInutil;
 
 export type CodigoDeFallo = CodigoDeFalloEnumerado | CodigoHttp;
 
@@ -236,13 +239,13 @@ export async function aplicarSync(
 // La salud de lo que no se diffeo
 // ───────────────────────────────────────────────────────────────────────────
 
-/** Los contadores de la corrida, cuando hubo cuerpo que contar. */
-export type ConteosDeCorrida = {
-  event_count: number;
-  reservation_count: number;
-  block_count: number;
-  unknown_count: number;
-};
+/**
+ * Los contadores de la corrida, cuando hubo cuerpo que contar. Es el mismo tipo
+ * que produce `contarPorClasificacion()` en el dominio: se reexporta con el
+ * nombre de esta capa en vez de redeclararlo, porque dos copias de la misma
+ * forma se desincronizan y la que se olvidaria de actualizar es esta.
+ */
+export type ConteosDeCorrida = ConteosDeLectura;
 
 export type ParametrosDeFallo = {
   feedId: string;
