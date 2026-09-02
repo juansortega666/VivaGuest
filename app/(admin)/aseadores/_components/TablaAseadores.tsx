@@ -1,6 +1,6 @@
 'use client';
 
-import { CircleCheck, CircleMinus, MoreHorizontal } from 'lucide-react';
+import { CircleCheck, CircleMinus } from 'lucide-react';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -12,7 +12,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import type { AseadorConAsignaciones, AsignacionApartamento } from '@/lib/data/aseadores';
+import { apartamentos } from '@/lib/domain/plural';
 import { cn } from '@/lib/utils';
+
+import { MenuAseador } from './MenuAseador';
 
 /**
  * Lista de aseadores (ASEADOR-03, UI-SPEC §11.1).
@@ -20,11 +23,6 @@ import { cn } from '@/lib/utils';
  * Client Component por el `Popover` que abre la lista de nombres. Los datos
  * llegan ya resueltos desde el RSC: aqui no hay ninguna consulta.
  */
-
-/** `1 apartamento` / `N apartamentos`. Sin esto la fila dice "1 apartamentos". */
-function apartamentos(n: number): string {
-  return n === 1 ? '1 apartamento' : `${n} apartamentos`;
-}
 
 /**
  * Celda de conteo con `Popover` que lista los nombres.
@@ -177,23 +175,18 @@ export function TablaAseadores({ aseadores }: { aseadores: AseadorConAsignacione
 
               <TableCell className="w-col-menu px-md">
                 {/*
-                  El menu queda MONTADO Y VACIO en este plan: sus items (Editar,
-                  Desactivar, Reactivar) llegan en el 02-09 junto con sus guards y
-                  su dialogo de consecuencias. Se monta ahora, y no despues, porque
-                  la columna de 48px es la que fija el ancho de las demas: anadirla
-                  luego movria toda la tabla.
-
-                  Es el mismo trato que el boton `Crear aseador` de la cabecera y
-                  la misma disposicion del registro de amenazas (T-02-33): un boton
-                  sin handler no es superficie de ataque.
+                  El plan 02-07 dejo este menu montado y VACIO para no mover el
+                  ancho de las otras cinco columnas al anadirlo despues. Aqui se
+                  cablea: `Desactivar` con su dialogo de consecuencias reales y
+                  `Reactivar` directo, segun el estado de la fila.
                 */}
-                <button
-                  type="button"
-                  aria-label={`Acciones de ${aseador.full_name}`}
-                  className="transicion flex size-10 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                >
-                  <MoreHorizontal className="size-3.5" strokeWidth={2} aria-hidden="true" />
-                </button>
+                <MenuAseador
+                  aseador={{
+                    id: aseador.id,
+                    full_name: aseador.full_name,
+                    is_active: aseador.is_active,
+                  }}
+                />
               </TableCell>
             </TableRow>
           ))}
