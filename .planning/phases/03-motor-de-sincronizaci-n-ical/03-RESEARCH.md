@@ -1720,7 +1720,16 @@ Se declara aquí para que el verificador de la fase no lo cuente como cubierto:
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> Las cinco quedaron resueltas o instrumentadas, verificado por `gsd-plan-checker` el 2026-09-02.
+> Vocabulario del ROADMAP → fijado en `03-01` y en `ROADMAP.md`. Enum de notificaciones → decidido
+> en `03-03` (discriminador en `payload`, no enum nuevo). Estabilidad del `UID` y hora de
+> desaparición del checkout de hoy → **instrumentadas**, no bloqueantes: el piso del feed hace el
+> diseño correcto bajo las dos respuestas, y `03-10` trae el checkpoint de lectura. Bloqueo real
+> del propietario → el usuario lo captura; hasta entonces, falla cerrada.
+
+### Detalle original
 
 1. **¿La reserva que termina hoy desaparece mañana, o hoy mismo?**
    - Se sabe: a las 12:51 de Bogotá del día del checkout, sigue presente.

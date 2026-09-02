@@ -21,14 +21,14 @@ progress:
 Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 
 **Core value:** Que ningún aseo se pierda: todo checkout detectado en calendario termina en un aseo confirmado, asignado y ejecutado con evidencia, sin coordinación manual por WhatsApp.
-**Current focus:** Fase 2 cerrada con checkpoints abiertos; Fase 3 bloqueada por el `.ics` real
+**Current focus:** Fase 3 — Motor de sincronización iCal, planeada y lista para ejecutar
 
 ## Current Position
 
 Phase: 02 (acceso-y-administraci-n-del-cat-logo) — EXECUTING
 Plan: 1 of 15
 Status: Executing Phase 02
-Last activity: 2026-09-02 — Fase 2 ejecutada: login, CRUD de apartamentos, aseadores y validación de calendario. 57 señuelos, 53 detectados, 4 declarados sin red
+Last activity: 2026-09-02 — Fase 3 planeada: feed real capturado y anonimizado, research midió que node-ical produce el off-by-one que la fase existe para evitar
 
 Progress: [██░░░░░░░░] 22% (2 de 9 fases)
 

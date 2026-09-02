@@ -88,6 +88,7 @@ Plans:
 **UI hint**: yes
 
 ### Phase 3: Motor de sincronización iCal
+**Status**: Planned 2026-09-02 — 10 planes en 9 waves, verificados sin bloqueantes. Desbloqueada por la captura del feed real de Airbnb
 **Goal**: Todo checkout publicado en los calendarios se convierte en un aseo pendiente, sin duplicados y sin cancelaciones falsas
 **Depends on**: Fases 1 y 2
 **Requirements**: SYNC-01, SYNC-02, SYNC-03, SYNC-04, SYNC-05, SYNC-06, SYNC-07, SYNC-08, SYNC-09, SYNC-10, SYNC-11
@@ -232,7 +233,7 @@ Fases con patrón ya documentado en el research (se puede saltar):
 |-------|----------------|--------|-----------|
 | 1. Fundación, schema y RLS | 9/9 | Complete (passed_with_gaps) | 2026-09-01 |
 | 2. Acceso y administración del catálogo | 15/15 | Executed — 2 checkpoints humanos abiertos | 2026-09-02 |
-| 3. Motor de sincronización iCal | 0/TBD | Not started | - |
+| 3. Motor de sincronización iCal | 0/10 | Planned | - |
 | 4. Dashboard operativo del admin | 0/TBD | Not started | - |
 | 5. Notificaciones push e instalación de la PWA | 0/TBD | Not started | - |
 | 6. PWA del aseador, offline-first | 0/TBD | Not started | - |
