@@ -10,6 +10,7 @@
 #   5. La fabrica administrativa solo se importa desde Server Actions, app/api/ o lib/test/
 #   6. Ningun archivo de UI lleva un valor de color literal fuera de globals.css
 #   7. Quien construye la fabrica administrativa llama antes a un guard de sesion
+#   8. La tabla de secretos del apartamento solo se nombra donde se construyo la fabrica
 #
 # Se corre en el job `arquitectura` de ci/db.yml y en local con `npm run ci:arch`.
 #
@@ -261,6 +262,86 @@ EOF
   if [ -n "$SIN_GUARD" ]; then
     err "una Server Action es un endpoint HTTP publico: el guard va ANTES de construir la fabrica administrativa:"
     printf '%s' "$SIN_GUARD" >&2
+  fi
+fi
+
+# ── 8. La tabla de secretos, solo con la fabrica administrativa ────────────────
+# `public.property_secrets` guarda dos credenciales: el codigo fisico de la
+# cerradura y la URL de exportacion del calendario (un GET a esa URL revela la
+# ocupacion completa del apartamento sin autenticarse). La migracion 07 NO le
+# otorga ningun privilegio de tabla a `authenticated`, asi que con el JWT de un
+# usuario —admin incluido— cualquier consulta devuelve 42501. La unica ruta
+# posible es la fabrica administrativa.
+#
+# MEDIDO en el plan 02-10: se cambio `leerSecretos()` para que usara el cliente
+# del usuario en vez de la fabrica, y NADA lo atrapo. Ni el compilador, ni los
+# 197 tests unitarios, ni los 41 de integracion, ni los guardarrailes 1 a 7. El
+# 7 no dice nada porque la funcion, sin fabrica, deja de tener nada que vigilar:
+# es un falso verde por AUSENCIA.
+#
+# Los dos sentidos del error importan y este guardarrail cubre los dos:
+#   - hacia el fallo: la seccion de secretos del formulario se queda vacia para
+#     siempre y el admin no puede editar el codigo de ninguna cerradura;
+#   - hacia la fuga: alguien "arregla" el 42501 anadiendo un grant en una
+#     migracion, y entonces la columna pasa a depender de una sola policy en vez
+#     de ser inalcanzable por construccion (T-02-49).
+#
+# Se comprueba POR FUNCION y no por archivo, por la misma razon medida en el
+# guardarrail 7: en un archivo con varias exportaciones, la fabrica de una tapa
+# la ausencia en otra. Las menciones de nivel de modulo (JSDoc de cabecera) no
+# cuentan: el recorrido solo mira dentro de cuerpos de funcion.
+#
+# EXCEPCIONES, las mismas dos de siempre y por la misma razon acotada:
+#   - lib/test/, que siembra y limpia a proposito con el cliente de servicio;
+#   - los *.test.ts, donde nombrar la tabla CON el JWT del usuario es justamente
+#     la asercion: `apartamento.integration.test.ts` existe para medir el 42501.
+if [ ${#SRC_DIRS[@]} -gt 0 ]; then
+  TOCAN=$(grep -rl --include='*.ts' --include='*.tsx' \
+    -F 'property_secrets' "${SRC_DIRS[@]}" 2>/dev/null || true)
+
+  SIN_FABRICA=""
+  while IFS= read -r archivo; do
+    [ -z "$archivo" ] && continue
+    case "$archivo" in
+      lib/test/*) continue ;;
+      *.test.ts) continue ;;
+      *.test.tsx) continue ;;
+    esac
+
+    HALLAZGOS=$(awk -v archivo="$archivo" '
+      function esComentario(l) { return l ~ /^[[:space:]]*(\/\/|\/\*|\*)/ }
+
+      dentro && /^\}/ { dentro = 0; next }
+
+      dentro {
+        if (esComentario($0)) next
+        if ($0 ~ /(^|[^A-Za-z0-9_])createAdminClient[[:space:]]*\(/) fabrica = 1
+        if ($0 ~ /property_secrets/ && !fabrica && !reportado) {
+          printf "  %s:%d: %s() nombra la tabla de secretos sin la fabrica administrativa antes\n", archivo, FNR, nombre
+          reportado = 1
+        }
+        next
+      }
+
+      /^(export[[:space:]]+)?(async[[:space:]]+)?function[[:space:]]+[A-Za-z_$]/ {
+        dentro = 1; fabrica = 0; reportado = 0
+        nombre = $0
+        sub(/^.*function[[:space:]]+/, "", nombre)
+        sub(/[[:space:]]*[(<].*$/, "", nombre)
+      }
+    ' "$archivo")
+
+    if [ -n "$HALLAZGOS" ]; then
+      SIN_FABRICA="${SIN_FABRICA}${HALLAZGOS}
+"
+    fi
+  done <<EOF
+$TOCAN
+EOF
+
+  if [ -n "$SIN_FABRICA" ]; then
+    err "la tabla de secretos del apartamento no tiene grant para authenticated: solo se alcanza con la fabrica administrativa:"
+    printf '%s' "$SIN_FABRICA" >&2
   fi
 fi
 
