@@ -364,6 +364,19 @@
      Tailwind v4 resuelve `min-w-*` con nombre desde `--container-*`, igual que
      `max-w-*` (medido en el plan 02-06). */
   --container-boton-alta: 148px;
+
+  /* Los dos botones de la barra de acciones del formulario (UI-SPEC §8.2), por
+     la misma razon de §9.3: `Guardar y activar` pasa a `Activando…` y `Guardar`
+     pasa a `Guardando…`, y sin `min-width` los dos encogen a mitad de operacion.
+     Son dos tokens y no uno porque los labels miden distinto: compartirlos
+     dejaria al secundario con 60px de aire muerto a la izquierda del primario. */
+  --container-boton-activar: 168px;
+  --container-boton-guardar: 116px;
+
+  /* Ancho del formulario de apartamento. Mas estrecho que el contenedor de
+     pagina de 1440px a proposito: una linea de input de 1400px obliga al ojo a
+     recorrer la pantalla entera entre la etiqueta y el final del campo. */
+  --container-formulario: 720px;
 }
 
 /* ── Movimiento — 02-UI-SPEC.md §6.4 ──────────────────────────────────────────

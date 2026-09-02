@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Controller, type UseFormReturn } from 'react-hook-form';
 
 import {
@@ -68,9 +68,19 @@ interface Props {
    * el filtrado de abajo.
    */
   aseadores: AseadorElegible[];
+  /**
+   * Los ids de los campos los reparte el FORMULARIO, no esta sección.
+   *
+   * No es un capricho de estilo: los ítems del checklist de §8.2 hacen
+   * `scrollIntoView` y `focus()` sobre `responsable_id` y `contacto_externo`, que
+   * viven aquí dentro. Si esta sección acuñara sus ids con `useId()`, la barra de
+   * acciones no tendría forma de nombrarlos y el `focus()` fallaría en silencio:
+   * `getElementById` devolvería `null` y el clic no haría nada visible.
+   */
+  idDe: (campo: keyof ApartamentoInput) => string;
 }
 
-export function SeccionGestion({ form, aseadores }: Props) {
+export function SeccionGestion({ form, aseadores, idDe }: Props) {
   const {
     control,
     register,
@@ -80,13 +90,15 @@ export function SeccionGestion({ form, aseadores }: Props) {
     formState: { errors },
   } = form;
 
-  const idGestion = useId();
-  const idResponsable = useId();
-  const idSuplente = useId();
-  const idContacto = useId();
+  const idGestion = idDe('gestion_vivaguest');
+  const idResponsable = idDe('responsable_id');
+  const idSuplente = idDe('suplente_id');
+  const idContacto = idDe('contacto_externo');
 
-  // Suscripción GRANULAR, con array. `watch()` sin argumentos re-renderiza el
-  // formulario entero en cada tecla de cualquiera de los 12 campos.
+  // Suscripción GRANULAR, con array de nombres. La forma sin argumentos de esta
+  // misma API re-renderiza el formulario entero en cada tecla de cualquiera de
+  // los 12 campos; está prohibida en este directorio y hay un `grep` que lo
+  // verifica, por lo que su nombre no se escribe literal ni aquí.
   const [gestion, responsable, suplente] = watch([
     'gestion_vivaguest',
     'responsable_id',
