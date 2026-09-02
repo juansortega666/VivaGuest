@@ -9,6 +9,7 @@ import {
   listarApartamentos,
   listarAseadoresActivos,
   listarClusters,
+  listarTiposDeCuarto,
 } from '@/lib/data/apartamentos';
 import { createClient } from '@/lib/supabase/server';
 
@@ -51,13 +52,17 @@ export default async function EditarApartamentoPage({
   const apartamento = await leerApartamento(supabase, id);
   if (!apartamento) notFound();
 
-  const [filas, aseadores, secretos] = await Promise.all([
+  const [filas, aseadores, tipos, secretos] = await Promise.all([
     listarApartamentos(supabase),
     listarAseadoresActivos(supabase),
+    listarTiposDeCuarto(supabase),
     leerSecretos(id),
   ]);
 
-  const { propiedad } = apartamento;
+  // `leerApartamento` ya trajo las dos colecciones de la sección 5. Los cuartos
+  // vienen solo ACTIVOS y los faltantes vienen TODOS: los dos criterios son
+  // distintos a propósito y la razón está en el propio `lib/data/apartamentos.ts`.
+  const { propiedad, cuartos, faltantes } = apartamento;
 
   return (
     <div className="flex flex-col gap-xl">
@@ -83,8 +88,11 @@ export default async function EditarApartamentoPage({
       <FormularioApartamento
         clusters={listarClusters(filas)}
         aseadores={aseadores}
+        tipos={tipos}
         fila={propiedad}
         secretosGuardados={secretos}
+        cuartosGuardados={cuartos}
+        faltantesGuardados={faltantes}
       />
     </div>
   );

@@ -78,6 +78,9 @@ export interface ApartamentoCompleto {
   faltantes: Tables<'missing_item_catalog'>[];
 }
 
+/** Un tipo de cuarto del catalogo global, para el `Select` de cada fila. */
+export type TipoDeCuarto = Pick<Tables<'room_types'>, 'id' | 'nombre' | 'slug' | 'sort_order'>;
+
 /** Un aseador tal como lo consumen los dos `Select` de UI-SPEC §8.3. */
 export interface AseadorElegible {
   id: string;
@@ -253,6 +256,47 @@ export async function listarAseadoresActivos(
     .select('id, full_name, is_active')
     .eq('role', 'aseador')
     .order('full_name', { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  return data ?? [];
+}
+
+/**
+ * El catalogo global de tipos de cuarto (`public.room_types`), para el `Select`
+ * de cada fila del editor de cuartos de UI-SPEC §8.1 seccion 5 (APTO-06).
+ *
+ * SE LEE DE LA BASE, NO SE CODIFICA. La lista de 8 tipos que hoy siembra
+ * `supabase/seeds/020_room_types.sql` es PROVISIONAL y su propio comentario lo
+ * dice: la definitiva es un abierto de producto y es "editable en base de datos
+ * sin migracion". Un array literal en el codigo convertiria ese abierto en un
+ * deploy, y ademas se desincronizaria de `checklist_tasks`, que cuelga de estos
+ * mismos ids con maximo 3 tareas por tipo y es de donde sale el checklist del
+ * aseo en la Fase 6.
+ *
+ * NO FILTRA POR ACTIVOS, Y NO ES UN OLVIDO: `public.room_types` NO TIENE una
+ * bandera de activacion. Sus cuatro columnas son `id`, `slug`, `nombre` y
+ * `sort_order` (migracion 03; confirmado en `lib/database.types.ts`). Esa
+ * bandera la tienen `checklist_tasks` y `property_rooms`, que son otras dos
+ * tablas. Filtrar por una columna inexistente devuelve `42703` y dejaria el
+ * `Select` de tipo vacio en TODAS las filas, con lo que no se podria crear ni un
+ * solo cuarto.
+ *
+ * El orden va por `sort_order` y no por nombre: refleja el recorrido fisico del
+ * apartamento (general primero, exterior ultimo), que es el mismo orden en el
+ * que se va a pintar el checklist.
+ */
+export async function listarTiposDeCuarto(
+  supabase: SupabaseClient<Database>,
+): Promise<TipoDeCuarto[]> {
+  const { data, error } = await supabase
+    .from('room_types')
+    .select('id, nombre, slug, sort_order')
+    .order('sort_order', { ascending: true })
+    // Desempate estable: `sort_order` no es unico en el schema, y dos tipos que
+    // lo compartan saldrian en orden arbitrario, cambiando el orden del `Select`
+    // entre dos cargas de la misma pantalla.
+    .order('nombre', { ascending: true });
 
   if (error) throw new Error(error.message);
 
