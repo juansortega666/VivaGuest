@@ -21,16 +21,16 @@ progress:
 Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 
 **Core value:** Que ningún aseo se pierda: todo checkout detectado en calendario termina en un aseo confirmado, asignado y ejecutado con evidencia, sin coordinación manual por WhatsApp.
-**Current focus:** Phase 02 — acceso-y-administraci-n-del-cat-logo
+**Current focus:** Fase 2 cerrada con checkpoints abiertos; Fase 3 bloqueada por el `.ics` real
 
 ## Current Position
 
 Phase: 02 (acceso-y-administraci-n-del-cat-logo) — EXECUTING
 Plan: 1 of 15
 Status: Executing Phase 02
-Last activity: 2026-09-01 -- Phase 02 execution started
+Last activity: 2026-09-02 — Fase 2 ejecutada: login, CRUD de apartamentos, aseadores y validación de calendario. 57 señuelos, 53 detectados, 4 declarados sin red
 
-Progress: [█░░░░░░░░░] 11% (1 de 9 fases completas)
+Progress: [██░░░░░░░░] 22% (2 de 9 fases)
 
 ## Performance Metrics
 
@@ -111,5 +111,5 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 ## Session Continuity
 
 Last session: 2026-08-31
-Stopped at: Fase 2 planeada. Siguiente: /gsd:execute-phase 2
+Stopped at: Fase 2 ejecutada. Bloqueantes: `.ics` real de Airbnb (Fase 3), proyectos Supabase (producción)
 Resume file: None
