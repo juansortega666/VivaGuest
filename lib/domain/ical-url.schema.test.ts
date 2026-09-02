@@ -129,7 +129,19 @@ describe('la concesión de 127.0.0.1 y su candado de dos vueltas', () => {
     expect(esUrlIcalDeAirbnb(VALIDA)).toBe(true);
   });
 
-  test('CANDADO 2: en producción con la variable de build, el loopback vuelve', () => {
+  test('CANDADO 2: en un runtime de Vercel la concesión NO se puede reabrir', () => {
+    // Medido sobre el bundle: en el artefacto compilado la rama del candado 1
+    // desaparece y solo queda la lectura de la variable del candado 3, que en el
+    // servidor SÍ es de runtime. Este es el candado que impide que ponerla en el
+    // panel del proyecto convierta a `validarFeed` en un lector de loopback.
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('VERCEL', '1');
+    vi.stubEnv('NEXT_PUBLIC_VIVAGUEST_FEED_LOCAL', '1');
+    expect(permiteHostLocal()).toBe(false);
+    expect(esUrlIcalDeAirbnb('http://127.0.0.1:4599/calendar/ical/feliz.ics')).toBe(false);
+  });
+
+  test('CANDADO 3: en producción fuera de Vercel y con la variable, el loopback vuelve', () => {
     // Es lo que hace `playwright.config.ts`, que arranca `next start` y por
     // tanto corre con NODE_ENV='production'.
     vi.stubEnv('NODE_ENV', 'production');

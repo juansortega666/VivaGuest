@@ -76,6 +76,43 @@ export function hoyBog(): string {
 }
 
 /**
+ * `DTSTAMP` de un `VCALENDAR` en su forma UTC basica: `20260901T120000Z`.
+ * Airbnb lo emite siempre asi. Cualquier otra forma se ignora.
+ */
+const RE_DTSTAMP_UTC = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/;
+
+/**
+ * Horas enteras transcurridas desde el `DTSTAMP` del feed. Alimenta la linea
+ * `El feed se actualizo hace 2 h.` del estado 4 (UI-SPEC §10.3).
+ *
+ * Devuelve `null` si el feed no trae `DTSTAMP` o si viene en una forma que no es
+ * la UTC basica: la linea es OPCIONAL y el UI-SPEC ya la condiciona, asi que
+ * adivinar un valor seria peor que omitirla.
+ *
+ * AQUI SI SE CONSTRUYE UN `Date`, y es correcto: `DTSTAMP` es un INSTANTE con su
+ * `Z`, no un dia calendario. La prohibicion de `Date` de `ical-preview.ts` aplica
+ * a `DTEND`, que es un dia de negocio y donde un `Date` produce el off-by-one.
+ * Se usa `Date.UTC` en vez de `new Date(cadena)` porque el formato basico de
+ * RFC 5545 (sin guiones ni dos puntos) no es ISO 8601 extendido y su parseo por
+ * `Date` no esta especificado.
+ */
+export function horasDesdeDtstamp(dtstamp: string | null, ahoraMs: number): number | null {
+  if (!dtstamp) return null;
+
+  const m = RE_DTSTAMP_UTC.exec(dtstamp.trim());
+  if (!m) return null;
+
+  const [, ano, mes, dia, hh, mm, ss] = m.map(Number) as unknown as number[];
+  const instante = Date.UTC(ano, mes - 1, dia, hh, mm, ss);
+
+  const horas = Math.floor((ahoraMs - instante) / 3_600_000);
+
+  // Un feed con el reloj adelantado daria negativo. Se trunca a 0: "hace 0 h" es
+  // cierto y "hace -3 h" no significa nada para quien mira la pantalla.
+  return horas < 0 ? 0 : horas;
+}
+
+/**
  * Formatea la `hora_limite` que PostgREST devuelve para una columna `time`:
  * `'11:30:00'` produce `"11:30"`.
  *

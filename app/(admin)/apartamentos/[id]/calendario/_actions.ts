@@ -4,8 +4,11 @@ import 'server-only';
 
 import { createHash } from 'node:crypto';
 
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+
+import type { Database } from '@/lib/database.types';
 
 import { NoAutorizado, exigirAdmin } from '@/lib/auth/guards';
 import {
@@ -17,7 +20,7 @@ import {
   type SaludDelFeed,
 } from '@/lib/data/feeds';
 import type { ResultadoAccion } from '@/lib/domain/acciones';
-import { hoyBog } from '@/lib/domain/dates';
+import { horasDesdeDtstamp, hoyBog } from '@/lib/domain/dates';
 import { mapDbError } from '@/lib/domain/errors';
 import { previsualizarIcs } from '@/lib/domain/ical-preview';
 import { esquemaUrlIcal, MENSAJE_FORMATO_INVALIDO } from '@/lib/domain/ical-url.schema';
@@ -113,7 +116,13 @@ export type ResultadoValidacion =
       totalEventos: number;
       /** El `DTEND` tal cual, sin sumar ni restar un día. */
       proximoCheckout: string;
-      dtstamp: string | null;
+      /**
+       * Horas desde el `DTSTAMP`, o `null` si el feed no lo trae. Se calcula en
+       * el SERVIDOR: hacerlo en el navegador ataría la línea `El feed se
+       * actualizó hace N h.` al reloj del portátil del admin, que puede estar
+       * corrido.
+       */
+      horasDesdeActualizacion: number | null;
       httpStatus: number;
       payloadHash: string;
     }
@@ -122,7 +131,6 @@ export type ResultadoValidacion =
       estado: 'sin-reservas';
       totalEventos: number;
       httpStatus: number;
-      dtstamp: string | null;
       payloadHash: string;
     }
   /** Estado 6: 2xx con un cuerpo que no es un calendario. */
@@ -239,18 +247,36 @@ export async function validarFeed(
     return { estado: 'formato-invalido', mensaje: MENSAJE_FORMATO_INVALIDO };
   }
 
-  const feedExistente = await leerFeedDeApartamento(supabase, revisadoId.data);
+  return ejecutarValidacion(supabase, revisadoId.data, revisadaUrl.data);
+}
+
+/**
+ * El cuerpo compartido de la validación: el fetch, la clasificación y el
+ * escáner. NO es una action: no está exportada, así que no genera ningún
+ * endpoint. La comparten `validarFeed` (link recién pegado) y
+ * `revalidarFeedGuardado` (el botón `Validar de nuevo`).
+ *
+ * Recibe la URL YA VALIDADA contra la allowlist. Es precondición y por eso no se
+ * vuelve a comprobar: los dos llamadores lo hacen antes, uno con el valor que
+ * escribió el admin y el otro con el que ya está guardado.
+ */
+async function ejecutarValidacion(
+  supabase: SupabaseClient<Database>,
+  propertyId: string,
+  url: string,
+): Promise<ResultadoValidacion> {
+  const feedExistente = await leerFeedDeApartamento(supabase, propertyId);
   const fallosPrevios = feedExistente?.consecutive_failures ?? 0;
 
   const anotar = async (salud: SaludDelFeed): Promise<void> => {
     if (!feedExistente) return;
-    await actualizarSaludSiExiste(supabase, revisadoId.data, salud);
+    await actualizarSaludSiExiste(supabase, propertyId, salud);
   };
 
   // ── 3. EL FETCH, CON LAS DOS DEFENSAS Y EL TIMEOUT DURO ───────────────────
   let res: Response;
   try {
-    res = await fetch(revisadaUrl.data, {
+    res = await fetch(url, {
       // `AbortSignal.timeout` y NO un `Promise.race` con `setTimeout`: el
       // primero aborta la conexión de verdad, el segundo resuelve la promesa y
       // deja el socket colgando hasta que el sistema lo cierre.
@@ -317,7 +343,6 @@ export async function validarFeed(
       estado: 'sin-reservas',
       totalEventos: preview.totalEventos,
       httpStatus: res.status,
-      dtstamp: preview.dtstamp,
       payloadHash,
     };
   }
@@ -338,10 +363,52 @@ export async function validarFeed(
     bloqueos: preview.bloqueos,
     totalEventos: preview.totalEventos,
     proximoCheckout: preview.proximoCheckout,
-    dtstamp: preview.dtstamp,
+    horasDesdeActualizacion: horasDesdeDtstamp(preview.dtstamp, Date.now()),
     httpStatus: res.status,
     payloadHash,
   };
+}
+
+/**
+ * `Validar de nuevo` (UI-SPEC §10.4, regla 4): revalida el link YA GUARDADO.
+ *
+ * LA URL NO SALE DEL SERVIDOR. Se lee con la fábrica administrativa, se valida y
+ * se descarta; lo que vuelve al navegador son los conteos. La alternativa obvia
+ * —`revelarUrlIcal` + `validarFeed` desde el cliente— pondría la credencial en
+ * el DOM solo para poder revalidarla, que es exactamente lo que T-02-74 prohíbe.
+ *
+ * La URL guardada se vuelve a pasar por `esquemaUrlIcal` aunque la escribiera
+ * `guardarFeed`: la fila pudo escribirse por otra vía (una migración, un script)
+ * y el fetch no debe salir de la allowlist por confiar en la base.
+ */
+export async function revalidarFeedGuardado(propertyId: string): Promise<ResultadoValidacion> {
+  const contexto = await exigirAdmin().catch((e: unknown) => {
+    if (e instanceof NoAutorizado) return null;
+    throw e;
+  });
+  if (!contexto) {
+    return { estado: 'no-autorizado', mensaje: 'No tienes permiso para esta operación.' };
+  }
+
+  const revisadoId = esquemaId.safeParse(propertyId);
+  if (!revisadoId.success) {
+    return { estado: 'formato-invalido', mensaje: MENSAJE_FORMATO_INVALIDO };
+  }
+
+  const admin = createAdminClient();
+
+  const { data } = await admin
+    .from('property_secrets')
+    .select('ical_url')
+    .eq('property_id', revisadoId.data)
+    .maybeSingle();
+
+  const revisadaUrl = esquemaUrlIcal.safeParse(data?.ical_url ?? '');
+  if (!revisadaUrl.success) {
+    return { estado: 'formato-invalido', mensaje: MENSAJE_FORMATO_INVALIDO };
+  }
+
+  return ejecutarValidacion(contexto.supabase, revisadoId.data, revisadaUrl.data);
 }
 
 /**
@@ -481,19 +548,24 @@ export async function revelarUrlIcal(propertyId: string): Promise<string | null>
 }
 
 /**
- * `maxDuration`, y por qué está aquí Y en `page.tsx`.
+ * `maxDuration = 20` VIVE EN `page.tsx`, Y NO ES UNA ELECCIÓN DE ESTILO.
  *
- * Vercel Hobby permite 60 s por función, así que los 10 s del `AbortSignal` de
- * arriba caben de sobra; los 20 s de techo existen para que un feed lento falle
- * por el timeout CONTROLADO del fetch —con su copy de UI-SPEC §10.3— y no por
- * el corte de la plataforma, que no produce ningún mensaje.
+ * MEDIDO EN ESTE PLAN, y merece quedar escrito porque la primera medición fue un
+ * FALSO VERDE: con `export const maxDuration = 20;` al final de este archivo,
+ * `npm run build` pasó — pero solo porque todavía no existía `page.tsx` y nada
+ * importaba este módulo, así que Next ni lo compiló. En cuanto
+ * `ConectarCalendario.tsx` lo importó, el build se cayó con
  *
- * Next 15.5 acepta este `export const` en un archivo con la directiva de Server
- * Action (medido en este plan: el build pasa). Pero la configuración de segmento
- * que la plataforma lee es la de la ROUTE, y `_actions.ts` no es una route: los
- * archivos con `_` delante quedan fuera del enrutador. Por eso el valor que de
- * verdad aplica es el de `page.tsx`, que lo declara igual. Este de aquí es
- * documentación colocalizada con el `fetch` que lo necesita; borrar el de
- * `page.tsx` creyendo que este basta deja el techo en el default.
+ *     Only async functions are allowed to be exported in a "use server" file.
+ *
+ * Un archivo con la directiva de Server Action solo puede exportar funciones
+ * async. Y aunque pudiera, no serviría: la configuración de segmento que la
+ * plataforma lee es la de la ROUTE, y los archivos con `_` delante quedan fuera
+ * del enrutador. El techo que de verdad aplica a estas actions es el de la
+ * página que las invoca.
+ *
+ * Por qué 20 s con un `AbortSignal.timeout` de 10: para que un feed lento falle
+ * por el timeout CONTROLADO del fetch —con su copy de UI-SPEC §10.3— y no por el
+ * corte de la plataforma, que no produce ningún mensaje. Vercel Hobby permite
+ * 60 s por función, así que cabe de sobra.
  */
-export const maxDuration = 20;

@@ -57,26 +57,33 @@ export const MENSAJE_FORMATO_INVALIDO =
  *   1. `NODE_ENV !== 'production'` cubre `vitest` (`'test'`) y `next dev`
  *      (`'development'`). Es el candado que pide 02-RESEARCH §7.3.
  *
- *   2. `NEXT_PUBLIC_VIVAGUEST_FEED_LOCAL === '1'` cubre la suite de Playwright,
- *      y hace falta porque el candado 1 NO PUEDE distinguirla de un despliegue
- *      real: `playwright.config.ts` arranca el servidor con
- *      `next build && next start`, que corre con `NODE_ENV=production` igual que
- *      producción, y además Next INLINEA `process.env.NODE_ENV` en tiempo de
- *      build, así que en el bundle compilado no queda ninguna lectura que se
- *      pueda cambiar en runtime. Medido: ver 02-14-SUMMARY.md.
+ *   2. `VERCEL === '1'` cierra la puerta en el ÚNICO sitio donde hay algo que
+ *      proteger. Vercel pone esa variable en todos sus runtimes; ningún
+ *      despliegue puede reabrir la concesión, ni siquiera poniendo a mano la
+ *      variable del candado 3 en el panel del proyecto.
  *
- * Por qué `NEXT_PUBLIC_` y no una variable de servidor a secas, que sería el
- * instinto: el prefijo hace que el valor se INLINEE EN TIEMPO DE BUILD, y eso
- * aquí es MÁS fuerte, no más débil. Un build de producción que no la lleva
- * puesta compila esta rama a `false` constante; ya no queda ninguna variable de
- * entorno que alguien pueda poner en el panel de Vercel para reabrirla. Y hace
- * falta que el valor exista también en el cliente, porque este mismo esquema es
- * el que valida en `blur`/`change` sin red (estado 2): si el navegador
- * rechazara `127.0.0.1` mientras el servidor lo acepta, el botón de validar
- * nunca se habilitaría en la suite.
+ *   3. `NEXT_PUBLIC_VIVAGUEST_FEED_LOCAL === '1'` es lo que enciende la
+ *      concesión para la suite de Playwright, y hace falta porque el candado 1
+ *      NO PUEDE distinguirla de un despliegue: `playwright.config.ts` arranca el
+ *      servidor con `next build && next start`, que corre con
+ *      `NODE_ENV=production` exactamente igual que producción.
+ *
+ * MEDIDO SOBRE EL BUNDLE COMPILADO, no supuesto. Tras `npm run build` sin la
+ * variable puesta, la rama del candado 1 NO EXISTE en la salida: Next sustituye
+ * `process.env.NODE_ENV` por su literal y el minificador pliega el `if` entero.
+ * Lo que queda, tanto en `.next/server/…/page.js` como en el chunk de cliente,
+ * es solo `"1" === process.env.NEXT_PUBLIC_VIVAGUEST_FEED_LOCAL`. Es decir: en
+ * el artefacto compilado NO HAY forma de reabrir el candado 1 en runtime, y por
+ * eso el segundo y el tercero no son redundancia.
+ *
+ * Por qué el prefijo `NEXT_PUBLIC_`: este mismo esquema es el que valida en
+ * `blur`/`change` sin red (estado 2), así que el valor tiene que existir también
+ * en el navegador. Sin él, el cliente rechazaría `127.0.0.1` mientras el
+ * servidor lo acepta y el botón `Validar link` nunca se habilitaría en la suite.
  */
 export function permiteHostLocal(): boolean {
   if (process.env.NODE_ENV !== 'production') return true;
+  if (process.env.VERCEL === '1') return false;
   return process.env.NEXT_PUBLIC_VIVAGUEST_FEED_LOCAL === '1';
 }
 
