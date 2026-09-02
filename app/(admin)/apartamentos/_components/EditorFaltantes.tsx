@@ -27,6 +27,12 @@ import type { FormularioInput } from '@/lib/domain/cuartos.schema';
  *
  * `field.id` como clave y no el índice, por la misma razón medida que en
  * `EditorCuartos`: ver su cabecera.
+ *
+ * Y por la MISMA razón medida allí, `append` va con `shouldFocus: false` y el
+ * manejador de blur de `register()` queda neutralizado: con los dos por defecto,
+ * uno de cada dos `Agregar faltante` no hacía nada. Medido: 1 fila, 1 fila,
+ * 2 filas, 2 filas tras cuatro pulsaciones. La explicación completa está en la
+ * cabecera de `EditorCuartos`.
  */
 
 /** El id del input de la fila `indice`. Ver la nota de `idDeFilaCuarto`. */
@@ -51,7 +57,7 @@ export function EditorFaltantes({ form, prefijo }: Props) {
   const erroresFaltantes = errors.faltantes;
 
   function agregar() {
-    append({ nombre: '', sort_order: fields.length });
+    append({ nombre: '', sort_order: fields.length }, { shouldFocus: false });
   }
 
   return (
@@ -73,6 +79,9 @@ export function EditorFaltantes({ form, prefijo }: Props) {
                     autoComplete="off"
                     className="flex-1"
                     {...register(`faltantes.${indice}.nombre`)}
+                    // Neutralizado a propósito. Ver la cabecera de este archivo
+                    // y la de `EditorCuartos`.
+                    onBlur={() => {}}
                     aria-invalid={Boolean(error) || undefined}
                     aria-describedby={error ? `${idNombre}-error` : undefined}
                   />

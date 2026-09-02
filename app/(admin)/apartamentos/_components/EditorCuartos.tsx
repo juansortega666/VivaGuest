@@ -37,14 +37,50 @@ import { EstadoVacio } from '../../_components/EstadoVacio';
  * bloquearía las 39 unidades del catálogo. Hay un test de Playwright dedicado a
  * que el botón siga habilitado con la sección vacía.
  *
- * ── LA CLAVE DE CADA FILA ES `field.id`, NO EL INDICE ───────────────────────
- * `useFieldArray` entrega un `id` propio y estable por fila justamente para
- * esto. Con `key={indice}`, React reutiliza el nodo de la fila borrada para la
- * siguiente: el estado no controlado que vive dentro (el foco, la posición del
- * cursor, el popup abierto del `Select`) se queda en la fila equivocada, y
- * quitar la primera de dos filas deja en pantalla los datos de la que se fue.
- * El bug es invisible mientras todas las filas se parezcan, y por eso el spec de
- * este plan quita la PRIMERA de dos filas con tipos y etiquetas distintos.
+ * ── LA CLAVE DE CADA FILA ES `field.id`, Y NINGUN TEST LO DEFIENDE ──────────
+ * `useFieldArray` entrega un `id` propio y estable por fila, y usarlo es el
+ * contrato documentado de esa API: con la clave por índice, React reutiliza el
+ * nodo de la fila borrada para la siguiente y el estado no controlado que vive
+ * dentro (foco, posición del cursor, popup abierto) se queda en la fila
+ * equivocada.
+ *
+ * HONESTIDAD SOBRE LA COBERTURA, porque lo contrario sería una afirmación falsa
+ * en un comentario: se sustituyó `field.id` por el índice y **los 9 tests de
+ * `e2e/apartamento-cuartos.spec.ts` siguieron en verde**, incluido el que quita
+ * la PRIMERA de dos filas con tipo y etiqueta distintos, que es el montaje
+ * pensado para atraparlo. Con esta composición —`Input` no controlado
+ * registrado por nombre más un `Controller` que se re-suscribe por nombre— el
+ * cambio no produce un síntoma observable desde Playwright. La clave se queda en
+ * `field.id` por contrato, no porque haya una red debajo; quien la cambie no va
+ * a ver nada rojo.
+ *
+ * ── EL AÑADIDO QUE SE PERDIA UNA VEZ DE CADA DOS (medido, no supuesto) ──────
+ * `useFieldArray` combinado con `mode: 'onBlur'` y un resolver de esquema
+ * DESCARTA EN SILENCIO el `append` que ocurre en el mismo gesto en el que una
+ * fila del array pierde el foco. Medido con este mismo formulario, pulsando
+ * `Agregar cuarto` cuatro veces seguidas: 1 fila, 1 fila, 2 filas, 2 filas. La
+ * mitad de los clics no hacía nada y nada fallaba.
+ *
+ * Se aisló a dos causas que se suman:
+ *
+ *  1. `append` FOCALIZA la fila nueva por defecto. Eso deja el cursor dentro del
+ *     array, así que el clic siguiente en `Agregar cuarto` es a la vez un blur
+ *     de una fila y un `append`, que es exactamente la combinación que se pierde.
+ *     Se pasa `shouldFocus: false`: el foco se queda en el botón, que no es un
+ *     campo registrado.
+ *  2. Aun así el admin puede pulsar dentro de una etiqueta y añadir sin escribir
+ *     nada, y ahí volvía a perderse (medido aparte: 1 fila donde debía haber 2).
+ *     Lo que dispara la pérdida es el manejador de blur que `register()` instala,
+ *     no el blur del DOM: neutralizándolo, las dos filas aparecen. Con el foco en
+ *     un campo AJENO al array (`Dirección`) nunca se perdió nada, que es lo que
+ *     acota la causa al array y descarta "el clic no llegó".
+ *
+ * Consecuencia asumida y declarada: los errores de estas filas se pintan al
+ * ENVIAR, no al salir de cada campo. Es lo que pide la sección 5 de §8.1 —el
+ * duplicado se bloquea en el cliente antes de enviar— y a partir del primer
+ * envío fallido la revalidación por cambio los va limpiando conforme se
+ * corrigen. Perder una fila entera sin avisar es mucho peor que pintar su error
+ * un gesto más tarde.
  */
 
 /**
@@ -94,7 +130,8 @@ export function EditorCuartos({ form, tipos, prefijo }: Props) {
    * decidiera. El esquema bloquea el vacío con `Elige un tipo de cuarto`.
    */
   function agregar() {
-    append({ room_type_id: '', etiqueta: '', sort_order: fields.length });
+    // `shouldFocus: false` NO es cosmético: ver la causa 1 de la cabecera.
+    append({ room_type_id: '', etiqueta: '', sort_order: fields.length }, { shouldFocus: false });
   }
 
   function nombreDeTipo(id: unknown): string {
@@ -191,6 +228,13 @@ export function EditorCuartos({ form, tipos, prefijo }: Props) {
                   autoComplete="off"
                   className="flex-1"
                   {...register(`cuartos.${indice}.etiqueta`)}
+                  // El manejador de blur que instala `register()` queda
+                  // NEUTRALIZADO a propósito: es la causa 2 de la cabecera, y
+                  // dejarlo puesto hace que añadir una fila justo después de
+                  // salir de esta se pierda sin decir nada. La validación de
+                  // estas filas ocurre al enviar, que es donde el contrato la
+                  // pide.
+                  onBlur={() => {}}
                   aria-invalid={Boolean(errorEtiqueta) || undefined}
                   aria-describedby={errorEtiqueta ? `${idEtiqueta}-error` : undefined}
                 />
