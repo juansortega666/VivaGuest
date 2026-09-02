@@ -122,16 +122,27 @@ describe('privacidad: el telefono del huesped muere aqui', () => {
     expect(serializado).not.toMatch(/airbnb\.com\/hosting/i);
     expect(serializado).not.toMatch(/Reservation URL/i);
 
-    // LOS DIGITOS PELADOS SE COMPARAN SIN EL HASH, y es deliberado. El hash son 64
-    // caracteres hexadecimales: la probabilidad de que una corrida de cuatro
-    // digitos decimales aparezca por casualidad en alguno de los 15 no es
-    // despreciable, y un rojo por esa razon no tiene NADA que ver con privacidad y
-    // acabaria borrado por alguien con prisa. Que el telefono no entre en el hash lo
-    // mide, aparte, el test de estabilidad de mas abajo.
-    const sinHash = JSON.stringify(
-      eventos.map(({ payloadHash: _h, ...resto }) => resto),
+    // LOS DIGITOS PELADOS SE COMPARAN SOLO SOBRE LOS CAMPOS LEGIBLES, y esta MEDIDO
+    // por que. La receta obvia —buscar los cuatro digitos en la salida entera— es
+    // ROJO PERMANENTE contra esta misma fixture, y por una razon que no tiene nada
+    // que ver con privacidad: el telefono 2781 aparece dentro del identificador
+    // hexadecimal anonimizado del evento 6 (…f327'8171'…, la corrida f3278171). El
+    // hash tiene el mismo problema por construccion: 64 caracteres hexadecimales por
+    // evento. Un test rojo por coincidencia acaba borrado por alguien con prisa.
+    //
+    // Los dos campos opacos quedan cubiertos por otra via, y no por confianza: que
+    // el telefono no entre en el hash lo mide el test de estabilidad de mas abajo, y
+    // el identificador viene tal cual del feed, sin pasar por la descripcion.
+    const legible = JSON.stringify(
+      eventos.map((e) => ({
+        reservationCode: e.reservationCode,
+        summary: e.summary,
+        startsOn: e.startsOn,
+        endsOn: e.endsOn,
+        clasificacion: e.clasificacion,
+      })),
     );
-    for (const t of telefonos) expect(sinHash).not.toContain(t);
+    for (const t of telefonos) expect(legible).not.toContain(t);
 
     // CONTROL POSITIVO, en el MISMO test: sin el, un normalizador que devolviera la
     // lista vacia pasaria todas las aserciones de ausencia de arriba.
