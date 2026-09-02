@@ -240,12 +240,26 @@ export function SeccionGestion({ form, aseadores, idDe }: Props) {
       ) : (
         <>
           <Field data-invalid={Boolean(errors.responsable_id) || undefined}>
-            <FieldLabel htmlFor={idResponsable}>Aseador responsable</FieldLabel>
+            <FieldLabel id={`${idResponsable}-label`} htmlFor={idResponsable}>
+              Aseador responsable
+            </FieldLabel>
             <Select
               value={idResponsable_}
               onValueChange={(valor) => elegirResponsable(comoTexto(valor))}
             >
-              <SelectTrigger id={idResponsable} className="w-full">
+              {/*
+                MEDIDO EN ESTA PANTALLA: con solo `<label htmlFor>`, el nombre
+                accesible del disparador es "Aseador responsable" A SECAS. Un
+                `<button>` es un elemento etiquetable, así que la etiqueta gana
+                sobre su contenido y el VALOR SELECCIONADO desaparece del nombre:
+                un lector de pantalla anuncia el campo pero no quién está
+                asignado. Nombrando etiqueta y disparador se recuperan los dos.
+              */}
+              <SelectTrigger
+                id={idResponsable}
+                aria-labelledby={`${idResponsable}-label ${idResponsable}`}
+                className="w-full"
+              >
                 <SelectValue>{(v: string) => etiqueta(v)}</SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -268,7 +282,9 @@ export function SeccionGestion({ form, aseadores, idDe }: Props) {
           </Field>
 
           <Field data-invalid={Boolean(errors.suplente_id) || undefined}>
-            <FieldLabel htmlFor={idSuplente}>Aseador suplente</FieldLabel>
+            <FieldLabel id={`${idSuplente}-label`} htmlFor={idSuplente}>
+              Aseador suplente
+            </FieldLabel>
             <Controller
               control={control}
               name="suplente_id"
@@ -277,7 +293,11 @@ export function SeccionGestion({ form, aseadores, idDe }: Props) {
                   value={comoTexto(field.value)}
                   onValueChange={(valor) => field.onChange(comoTexto(valor))}
                 >
-                  <SelectTrigger id={idSuplente} className="w-full">
+                  <SelectTrigger
+                    id={idSuplente}
+                    aria-labelledby={`${idSuplente}-label ${idSuplente}`}
+                    className="w-full"
+                  >
                     <SelectValue>{(v: string) => etiqueta(v)}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>

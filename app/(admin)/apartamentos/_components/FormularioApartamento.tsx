@@ -451,7 +451,12 @@ export function FormularioApartamento({
         </Field>
 
         <Field data-invalid={errorSecreto?.campo === 'tipo_cerradura' || undefined}>
-          <FieldLabel htmlFor={`${prefijo}-tipo_cerradura`}>Tipo de cerradura</FieldLabel>
+          <FieldLabel
+            id={`${prefijo}-tipo_cerradura-label`}
+            htmlFor={`${prefijo}-tipo_cerradura`}
+          >
+            Tipo de cerradura
+          </FieldLabel>
           <Select
             value={secretos.tipo_cerradura}
             onValueChange={(valor) =>
@@ -461,7 +466,14 @@ export function FormularioApartamento({
               }))
             }
           >
-            <SelectTrigger id={`${prefijo}-tipo_cerradura`} className="w-full">
+            {/* Etiqueta MAS contenido en el nombre accesible: con solo
+                `htmlFor`, el disparador se anuncia sin el valor elegido. Medido;
+                ver la nota de `SeccionGestion`. */}
+            <SelectTrigger
+              id={`${prefijo}-tipo_cerradura`}
+              aria-labelledby={`${prefijo}-tipo_cerradura-label ${prefijo}-tipo_cerradura`}
+              className="w-full"
+            >
               <SelectValue>
                 {(v: string) =>
                   TIPOS_CERRADURA.find((t) => t.valor === v)?.etiqueta ?? 'Elige un tipo'
