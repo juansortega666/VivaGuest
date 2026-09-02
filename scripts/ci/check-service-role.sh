@@ -11,6 +11,8 @@
 #   6. Ningun archivo de UI lleva un valor de color literal fuera de globals.css
 #   7. Quien construye la fabrica administrativa llama antes a un guard de sesion
 #   8. La tabla de secretos del apartamento solo se nombra donde se construyo la fabrica
+#   9. La columna de descripcion cruda de la reserva no se nombra en codigo de aplicacion
+#  10. El parser de iCal no construye objetos de fecha de JavaScript
 #
 # Se corre en el job `arquitectura` de ci/db.yml y en local con `npm run ci:arch`.
 #
@@ -202,6 +204,27 @@ fi
 #
 # Los patrones buscan la LLAMADA (con parentesis) y no el identificador a secas,
 # para que la linea del `import` no cuente como si fuera una invocacion.
+#
+# TERCER GUARD LEGITIMO, anadido en el plan 03-01: `exigirSecretoCron`. El worker
+# de sincronizacion de calendarios lo invoca un job de la base, no un navegador:
+# no hay cookie, no hay sesion y por tanto ni `exigirAdmin` ni `exigirSesion` son
+# aplicables. Se autentica comparando un secreto compartido que viaja en un header,
+# en tiempo constante (decision bloqueada de 03-CONTEXT.md). Es un guard de pleno
+# derecho: responde la misma pregunta que los otros dos, "quien esta preguntando",
+# antes de que exista un cliente que salta la RLS.
+#
+# Y NO se exceptua app/api/: la propiedad que este guardarrail protege es "ninguna
+# funcion construye la fabrica sin comprobar antes quien pregunta". Exceptuar un
+# directorio la borraria entera para todos los route handlers presentes y futuros,
+# que es justo la clase de agujero que el guardarrail existe para cerrar. Esa
+# excepcion vive solo en el guardarrail 5 y ahi tiene otra razon (quien puede
+# IMPORTAR la fabrica, no quien puede construirla a ciegas).
+#
+# Corolario medido, y por eso esta escrito aqui: el recorrido solo reconoce la
+# forma `function <nombre>` de nivel superior. Un handler declarado como constante
+# con una funcion flecha asignada es INVISIBLE para este `awk`, y entonces el guard
+# pasa por vacuidad. Todo route handler que construya la fabrica tiene que
+# declararse con la palabra clave de funcion.
 if [ ${#SRC_DIRS[@]} -gt 0 ]; then
   USUARIOS=$(grep -rl --include='*.ts' --include='*.tsx' \
     -F '@/lib/supabase/admin' "${SRC_DIRS[@]}" 2>/dev/null || true)
@@ -237,17 +260,32 @@ if [ ${#SRC_DIRS[@]} -gt 0 ]; then
       dentro {
         if (esComentario($0)) next
         # El guard solo cuenta si aparece ANTES de construir la fabrica.
-        if ($0 ~ /(^|[^A-Za-z0-9_])(exigirAdmin|exigirSesion)[[:space:]]*\(/ && !fabrica) guard = 1
+        if ($0 ~ /(^|[^A-Za-z0-9_])(exigirAdmin|exigirSesion|exigirSecretoCron)[[:space:]]*\(/ && !fabrica) guard = 1
         if ($0 ~ /(^|[^A-Za-z0-9_])createAdminClient[[:space:]]*\(/) fabrica = 1
         next
       }
 
-      # Apertura de una funcion de nivel superior, exportada o no.
+      # Apertura de una funcion de nivel superior, exportada o no, en su forma
+      # de declaracion con palabra clave.
       /^(export[[:space:]]+)?(async[[:space:]]+)?function[[:space:]]+[A-Za-z_$]/ {
         dentro = 1; guard = 0; fabrica = 0
         nombre = $0
         sub(/^.*function[[:space:]]+/, "", nombre)
         sub(/[[:space:]]*[(<].*$/, "", nombre)
+        next
+      }
+
+      # MEDIDO en el plan 03-01, senuelo 3: la forma de arriba era la UNICA que
+      # reconocia este recorrido, asi que el mismo cuerpo escrito como enlace de
+      # nivel superior con una funcion asignada quedaba INVISIBLE y el guardarrail
+      # devolvia OK con el agujero abierto. Es la cuarta forma de falso verde que
+      # la Fase 2 catalogo: el guard que pasa por vacuidad. Este patron la cierra.
+      /^(export[[:space:]]+)?(const|let|var)[[:space:]]+[A-Za-z_$][A-Za-z0-9_$]*[[:space:]]*(:[^=]*)?=[[:space:]]*(async[[:space:]]+)?(\(|function|<)/ {
+        dentro = 1; guard = 0; fabrica = 0
+        nombre = $0
+        sub(/^[[:space:]]*(export[[:space:]]+)?(const|let|var)[[:space:]]+/, "", nombre)
+        sub(/[[:space:]]*[:=(<].*$/, "", nombre)
+        next
       }
     ' "$archivo")
 
@@ -260,7 +298,7 @@ $USUARIOS
 EOF
 
   if [ -n "$SIN_GUARD" ]; then
-    err "una Server Action es un endpoint HTTP publico: el guard va ANTES de construir la fabrica administrativa:"
+    err "una Server Action y un route handler son endpoints HTTP publicos: el guard (exigirAdmin, exigirSesion o exigirSecretoCron) va ANTES de construir la fabrica administrativa:"
     printf '%s' "$SIN_GUARD" >&2
   fi
 fi
@@ -328,6 +366,20 @@ if [ ${#SRC_DIRS[@]} -gt 0 ]; then
         nombre = $0
         sub(/^.*function[[:space:]]+/, "", nombre)
         sub(/[[:space:]]*[(<].*$/, "", nombre)
+        next
+      }
+
+      # MEDIDO en el plan 03-01, senuelo 3: la forma de arriba era la UNICA que
+      # reconocia este recorrido, asi que el mismo cuerpo escrito como enlace de
+      # nivel superior con una funcion asignada quedaba INVISIBLE y el guardarrail
+      # devolvia OK con el agujero abierto. Es la cuarta forma de falso verde que
+      # la Fase 2 catalogo: el guard que pasa por vacuidad. Este patron la cierra.
+      /^(export[[:space:]]+)?(const|let|var)[[:space:]]+[A-Za-z_$][A-Za-z0-9_$]*[[:space:]]*(:[^=]*)?=[[:space:]]*(async[[:space:]]+)?(\(|function|<)/ {
+        dentro = 1; fabrica = 0; reportado = 0
+        nombre = $0
+        sub(/^[[:space:]]*(export[[:space:]]+)?(const|let|var)[[:space:]]+/, "", nombre)
+        sub(/[[:space:]]*[:=(<].*$/, "", nombre)
+        next
       }
     ' "$archivo")
 
@@ -343,6 +395,90 @@ EOF
     err "la tabla de secretos del apartamento no tiene grant para authenticated: solo se alcanza con la fabrica administrativa:"
     printf '%s' "$SIN_FABRICA" >&2
   fi
+fi
+
+# ── 9. La columna de descripcion cruda de la reserva, prohibida en codigo ──────
+# El campo libre que Airbnb manda dentro de cada evento reservado trae los ultimos
+# cuatro digitos del telefono del huesped. Es dato personal, y la decision bloqueada
+# de 03-CONTEXT.md es que NO se persiste: muere en la normalizacion, y la columna
+# homologa de la tabla de reservas se queda nula para siempre, impuesto por un CHECK
+# en la migracion 11.
+#
+# El CHECK garantiza que el dato no ENTRE. Este guardarrail garantiza algo distinto
+# y complementario: que ningun archivo de aplicacion siquiera NOMBRE esa columna, ni
+# para leerla, ni en un select explicito, ni en un tipo de dominio. Sin el, alguien
+# la anade a un `select` "para diagnosticar", el CHECK no dice nada porque leer no
+# es escribir, y el dato personal vuelve a viajar por la aplicacion.
+#
+# TRES EXCLUSIONES, y sin ellas esto es un rojo permanente:
+#   1. lib/database.types.ts, por ruta exacta: lo genera el CLI de Supabase y
+#      contiene el nombre de TODAS las columnas del schema, incluida esta. Editarlo
+#      a mano rompe la puerta de deriva de tipos de ci/db.yml, asi que la exclusion
+#      es la unica salida correcta.
+#   2. Las lineas de comentario, con el filtro comun que este script ya define: un
+#      comentario que explique por que la columna no se usa no es un uso.
+#   3. supabase/migrations/ no hace falta excluirlo porque no esta en SRC_DIRS. La
+#      migracion 11 la nombra por obligacion, para declarar el CHECK.
+#
+# El patron se arma abajo en codigo y NO se escribe en ningun comentario de este
+# archivo, por la REGLA AL EDITAR de la cabecera.
+TYPES_FILE="lib/database.types.ts"
+
+if [ ${#SRC_DIRS[@]} -gt 0 ]; then
+  DESC=$(grep -rnE --include='*.ts' --include='*.tsx' \
+    '(^|[^A-Za-z0-9_])raw_description([^A-Za-z0-9_]|$)' \
+    "${SRC_DIRS[@]}" 2>/dev/null \
+    | grep -vE "$COMENTARIO_RE" \
+    | grep -vE "^${TYPES_FILE}:" || true)
+  if [ -n "$DESC" ]; then
+    err "la columna de descripcion cruda de calendar_reservations guarda dato personal del huesped y es NULL por CHECK: ningun codigo de aplicacion la nombra (03-CONTEXT.md, privacidad):"
+    echo "$DESC" >&2
+  fi
+fi
+
+# ── 10. El parser de iCal no construye objetos de fecha ────────────────────────
+# MEDIDO contra el feed real de Airbnb: el fin de una reserva llega como un valor de
+# dia completo, ocho digitos sin hora y sin zona. Convertirlo al tipo temporal de
+# JavaScript lo ancla a medianoche UTC; formatearlo despues al dia de Bogota (UTC-5)
+# devuelve el dia ANTERIOR. Traducido a operacion: el aseo se agenda un dia antes,
+# con el huesped todavia dentro del apartamento.
+#
+# Y no es un riesgo teorico de produccion que los tests atraparian: la sesion de la
+# base corre en UTC, Vercel corre en UTC, CI corre en UTC y el propio vitest.config.ts
+# fija la zona a UTC a proposito. Bajo esa zona el error es SILENCIOSO en toda la
+# suite y solo aparece cuando una persona mira la agenda en Bogota.
+#
+# La regla del proyecto: de los ocho digitos crudos a la forma con guiones se llega
+# con un corte de cadena, y las fechas de negocio se comparan lexicograficamente
+# sobre esa forma. Nunca hay que instanciar un tipo temporal para eso.
+#
+# ALCANCE: los modulos de dominio del parser de calendario. Se excluyen sus tests,
+# donde instanciar el tipo temporal es legitimo (por ejemplo para congelar el reloj
+# o para construir la fecha esperada de una asercion), y queda fuera por ruta el
+# generador de fixtures, que vive en el subdirectorio de fixtures y cuya aritmetica
+# de dias sobre un calendario si necesita el tipo: no esta en el camino de la fecha
+# del aseo.
+#
+# El patron se arma abajo en codigo y NO se escribe en ningun comentario de este
+# archivo, por la REGLA AL EDITAR de la cabecera.
+PARSER_HITS=""
+for archivo in lib/domain/ical*.ts; do
+  [ -e "$archivo" ] || continue
+  case "$archivo" in
+    *.test.ts) continue ;;
+  esac
+  HALLAZGOS=$(grep -nE '(^|[^A-Za-z0-9_])new[[:space:]]+Date[[:space:]]*\(' "$archivo" 2>/dev/null \
+    | sed "s|^|${archivo}:|" \
+    | grep -vE "$COMENTARIO_RE" || true)
+  if [ -n "$HALLAZGOS" ]; then
+    PARSER_HITS="${PARSER_HITS}${HALLAZGOS}
+"
+  fi
+done
+
+if [ -n "$PARSER_HITS" ]; then
+  err "el parser de iCal no instancia el tipo temporal de JavaScript: bajo la zona UTC que usan CI, Vercel y vitest, el fin de reserva de dia completo retrocede un dia al mostrarlo en Bogota y el aseo cae con el huesped dentro. Usa corte de cadena y comparacion lexicografica:"
+  printf '%s' "$PARSER_HITS" >&2
 fi
 
 if [ "$fallo" -ne 0 ]; then
