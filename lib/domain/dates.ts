@@ -18,6 +18,8 @@
  * CI y en el portatil del que programa.
  */
 
+import { TZ_BOGOTA } from './constants';
+
 /**
  * Se construye una vez: instanciar `Intl.DateTimeFormat` por fila es caro, y ademas un
  * formateador sin `timeZone` explicito congelaria la zona del proceso al importar el
@@ -41,6 +43,36 @@ const FECHA_CORTA = new Intl.DateTimeFormat('es-CO', {
 export function formatFechaBog(iso: string): string {
   const [ano, mes, dia] = iso.split('-').map(Number);
   return FECHA_CORTA.format(new Date(Date.UTC(ano, mes - 1, dia)));
+}
+
+/**
+ * Igual que `FECHA_CORTA` pero para leer el dia calendario de Bogota a partir de un
+ * instante. `TZ_BOGOTA` es la unica constante de zona del repo y esta es la unica
+ * conversion instante -> dia que hace falta en la fase.
+ */
+const HOY_BOGOTA = new Intl.DateTimeFormat('en-CA', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  timeZone: TZ_BOGOTA,
+});
+
+/**
+ * El dia de negocio de HOY en Bogota, como `'YYYY-MM-DD'`.
+ *
+ * Es el equivalente en TypeScript de `public.today_bog()`, y existe por la misma
+ * razon: el proceso corre en UTC (Vercel y el CI) y pasadas las 19:00 de Bogota un
+ * `new Date().toISOString().slice(0,10)` ya devuelve MANANA. En APTO-12 eso movería
+ * el "proximo checkout" un dia entero durante las cinco horas mas tranquilas de la
+ * noche, que es cuando nadie lo estaria mirando para descubrirlo.
+ *
+ * `en-CA` no es una locale de negocio: es el truco estandar para que
+ * `Intl.DateTimeFormat` emita ISO `YYYY-MM-DD` directamente. Restarle cinco horas a
+ * `Date.now()` a mano tambien funciona hoy —Colombia no tiene DST desde 1993— pero
+ * codifica el offset en vez de la zona, y este es el sitio donde no hay que hacerlo.
+ */
+export function hoyBog(): string {
+  return HOY_BOGOTA.format(new Date());
 }
 
 /**

@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { formatFechaBog, formatHoraLimite } from './dates';
+import { formatFechaBog, formatHoraLimite, hoyBog } from './dates';
 
 /**
  * Estos tests corren con `TZ=UTC` (fijado en `vitest.config.ts`). Es la zona en la que
@@ -52,5 +52,33 @@ describe('formatHoraLimite', () => {
 
   it('acepta tambien la forma sin segundos', () => {
     expect(formatHoraLimite('11:30')).toBe('11:30');
+  });
+});
+
+describe('hoyBog', () => {
+  /**
+   * La suite corre con `TZ=UTC` (vitest.config.ts). El caso que importa es el de
+   * las cinco horas en que UTC ya cambio de dia y Bogota todavia no: si `hoyBog`
+   * leyera el dia en UTC, el "proximo checkout" de APTO-12 se correria un dia
+   * entero cada noche entre las 19:00 y la medianoche de Bogota.
+   */
+  it('devuelve el dia de BOGOTA, no el de UTC, en la ventana de las 19:00 a las 24:00', () => {
+    vi.useFakeTimers();
+    // 2026-09-05T02:30:00Z = 2026-09-04 21:30 en Bogota.
+    vi.setSystemTime(new Date('2026-09-05T02:30:00Z'));
+    expect(hoyBog()).toBe('2026-09-04');
+    // CONTROL: sin la zona, el mismo instante da el dia siguiente. Sin esta
+    // linea la asercion de arriba pasaria igual con una implementacion en UTC
+    // si el instante elegido no cruzara la medianoche.
+    expect(new Date().toISOString().slice(0, 10)).toBe('2026-09-05');
+    vi.useRealTimers();
+  });
+
+  it('emite ISO `YYYY-MM-DD`, que es lo que compara `previsualizarIcs`', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-09T18:00:00Z'));
+    expect(hoyBog()).toBe('2026-01-09');
+    expect(hoyBog()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    vi.useRealTimers();
   });
 });
