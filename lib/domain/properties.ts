@@ -84,3 +84,136 @@ function derivarClave(p: EntradaEstadoApartamento): ClaveEstadoApartamento {
 export function normalizar(s: string): string {
   return s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 }
+
+/**
+ * Lo minimo que necesita el filtrado de la tabla (UI-SPEC §7.2). Extiende la
+ * entrada del estado porque `Ver solo pendientes` se decide con la MISMA
+ * derivacion: si el filtro reimplementara "gestionada y apagada", la tabla
+ * podria ocultar una fila cuyo icono dice otra cosa.
+ */
+export type EntradaFiltroApartamento = EntradaEstadoApartamento & {
+  nombre: string;
+  cluster: string;
+  /** Nombre del aseador responsable, o `null` si no hay o la RLS no lo deja ver. */
+  responsableNombre: string | null;
+  /** Lo que la columna RESPONSABLE pinta en una unidad informativa. */
+  contacto_externo: string | null;
+};
+
+/** Los tres controles de la toolbar, tal como los ve el filtrado. */
+export interface CriteriosDeFiltro {
+  /** Texto libre del buscador. Vacio o solo espacios significa "sin filtro". */
+  busqueda: string;
+  /** Cluster exacto, o `null` para todos. */
+  cluster: string | null;
+  /** El filtro del banner de montaje: deja `Incompleta` + `Inactiva`. */
+  soloPendientes: boolean;
+}
+
+/**
+ * Filtra el catalogo EN CLIENTE, sobre las filas ya cargadas (UI-SPEC §7.2).
+ *
+ * Son 39 filas: un round-trip al servidor por tecla es peor UX y mas carga.
+ *
+ * ── POR QUE ES UNA FUNCION PURA EN `lib/domain/` Y NO UN `useMemo` DENTRO DEL
+ *    COMPONENTE ────────────────────────────────────────────────────────────────
+ * Porque asi tiene tests. Dentro del componente, la unica forma de comprobar que
+ * `bogota` encuentra `Bogotá 1` seria levantar el navegador entero, y las tres
+ * trampas de esta funcion (la conjuncion de los tres criterios, la comparacion
+ * sin tildes y que `soloPendientes` use la derivacion unica) son de logica pura.
+ *
+ * ── LOS TRES CRITERIOS SE COMBINAN CON **Y**, NO CON **O** ────────────────────
+ * Buscar `bogota` con el cluster `Cartagena` seleccionado tiene que dar cero, no
+ * las 25 de Bogota. Un `||` aqui hace que el `Select` de cluster parezca roto.
+ *
+ * El texto se compara con `normalizar()` en los campos que la tabla pinta como
+ * texto buscable: nombre, cluster, nombre del responsable y —solo para las
+ * informativas, que es donde la columna RESPONSABLE lo muestra— el contacto
+ * externo. Buscar algo que esta a la vista en pantalla y no encontrarlo es un
+ * buscador roto.
+ */
+export function filtrarApartamentos<T extends EntradaFiltroApartamento>(
+  filas: readonly T[],
+  criterios: CriteriosDeFiltro,
+): T[] {
+  // Se normaliza UNA vez, fuera del bucle. Dentro serian 39 normalizaciones del
+  // mismo texto por pulsacion.
+  const termino = normalizar(criterios.busqueda.trim());
+
+  return filas.filter((fila) => {
+    if (criterios.cluster !== null && fila.cluster.trim() !== criterios.cluster) {
+      return false;
+    }
+
+    if (criterios.soloPendientes) {
+      const { clave } = estadoDeApartamento(fila);
+      // `informativa` NO es un pendiente: no se monta y no cuenta en el banner.
+      // `activa` ya esta lista. Queda exactamente lo que falta por terminar.
+      if (clave !== 'incompleta' && clave !== 'inactiva') return false;
+    }
+
+    if (termino.length === 0) return true;
+
+    return camposBuscables(fila).some((campo) => normalizar(campo).includes(termino));
+  });
+}
+
+/** Los campos que el buscador mira, en el orden en que la tabla los pinta. */
+function camposBuscables(fila: EntradaFiltroApartamento): string[] {
+  const campos = [fila.nombre, fila.cluster];
+  if (fila.responsableNombre) campos.push(fila.responsableNombre);
+  // Solo cuenta donde la tabla lo ENSEÑA: en una gestionada la columna muestra al
+  // responsable, y encontrar una fila por un contacto externo invisible seria un
+  // resultado que el admin no puede explicar mirando la pantalla.
+  if (!fila.gestion_vivaguest && fila.contacto_externo) campos.push(fila.contacto_externo);
+  return campos;
+}
+
+/** Los conteos del pie de tabla (§7.2) y del banner de montaje (§9.1). */
+export interface ResumenDelCatalogo {
+  /** Todas las unidades del catalogo. */
+  total: number;
+  /** Las que se montan dentro del sistema. Es el DENOMINADOR del banner. */
+  gestionadas: number;
+  /** Las de gestion externa. Nunca se montan. */
+  informativas: number;
+  /** Gestionadas y activas: el numerador del banner. */
+  listas: number;
+  /** Gestionadas que todavia no estan activas. */
+  pendientes: number;
+}
+
+/**
+ * Cuenta el catalogo para el pie de tabla y el banner de montaje.
+ *
+ * EL DENOMINADOR DEL BANNER SE DERIVA, NO SE ESCRIBE. Hoy son 34 gestionadas de
+ * 39 unidades, pero el dia que el admin marque una como gestion externa desde el
+ * formulario, un `34` escrito a mano dejaria el banner mintiendo hasta que
+ * alguien lo notara. Y `39` como denominador seria mentira desde el primer dia:
+ * las informativas no se montan.
+ *
+ * Se cuenta sobre la lista COMPLETA y no sobre la filtrada: un banner de progreso
+ * que cambia de denominador al teclear en el buscador no mide el montaje, mide el
+ * filtro.
+ */
+export function resumenDelCatalogo(
+  filas: readonly EntradaEstadoApartamento[],
+): ResumenDelCatalogo {
+  let gestionadas = 0;
+  let listas = 0;
+
+  for (const fila of filas) {
+    const { clave } = estadoDeApartamento(fila);
+    if (clave === 'informativa') continue;
+    gestionadas += 1;
+    if (clave === 'activa') listas += 1;
+  }
+
+  return {
+    total: filas.length,
+    gestionadas,
+    informativas: filas.length - gestionadas,
+    listas,
+    pendientes: gestionadas - listas,
+  };
+}
