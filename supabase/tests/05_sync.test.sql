@@ -1,18 +1,22 @@
 -- ============================================================================
 -- 05_sync.test.sql — los invariantes de base del motor de sincronización iCal
 --
--- ESTE ARCHIVO NACE EN ROJO, A PROPÓSITO. Es Wave 0 de la Fase 3: enumera, antes
--- de que exista una línea del motor, los catorce invariantes que las migraciones
--- 11 a 14 tienen que hacer verdaderos. Ninguna tarea posterior de la fase puede
--- declararse hecha con una verificación inventada sobre la marcha: la
+-- ESTE ARCHIVO NACIÓ EN ROJO, A PROPÓSITO. Es Wave 0 de la Fase 3: enumeró, antes
+-- de que existiera una línea del motor, los catorce invariantes que las
+-- migraciones 11 a 14 tienen que hacer verdaderos. Ninguna tarea posterior de la
+-- fase puede declararse hecha con una verificación inventada sobre la marcha: la
 -- verificación ya está escrita aquí y ya falla.
+--
+-- Las aserciones 15 a 26 las añadió el plan 03-04 y NO nacen en rojo: miden el
+-- comportamiento de `sync_feed_apply()`, que ese mismo plan entrega en la
+-- migración 12. Son el contrato ejecutable de la mitad ADITIVA del diff.
 --
 -- CONSECUENCIA OPERATIVA, y hay que conocerla antes de correr nada:
 -- mientras este archivo esté en rojo, `npm run db:test` sale con código distinto
 -- de cero. El plan 03-07 es el que devuelve la suite completa a verde. Los otros
 -- cuatro archivos pgTAP siguen verdes desde el primer momento y ninguno de ellos
--- se toca aquí: la corrida completa de hoy es `Files=6, Tests=61` con los 12
--- fallos concentrados en este archivo y en ningún otro.
+-- se toca aquí: los 6 fallos que quedan están concentrados en este archivo y en
+-- ningún otro.
 --
 -- CÓMO CORRER SOLO ESTE ARCHIVO. `pgtap` NO está instalada de forma permanente
 -- en el stack local (medido: `installed_version` vacío en
@@ -26,7 +30,12 @@
 --   { echo 'begin;';
 --     echo 'create extension if not exists pgtap with schema extensions;';
 --     sed '0,/^begin;$/s/^begin;$//' supabase/tests/05_sync.test.sql;
---   } | docker exec -i supabase_db_vivaguest psql -U postgres -d postgres -q -f -
+--   } | docker exec -i supabase_db_vivaguest psql -U postgres -d postgres -qAtX -f -
+--
+-- Las banderas `-A -t` importan y se añadieron en el plan 03-04: sin ellas psql
+-- imprime cada línea TAP dentro de una tabla con cabecera y con un espacio
+-- delante, y un `grep '^not ok'` sobre esa salida devuelve CERO con el archivo
+-- entero en rojo. Es un falso verde de la herramienta de medición, no del código.
 --
 -- El `rollback;` del final deshace también la extensión, así que la base local
 -- compartida entre worktrees queda exactamente como estaba.
@@ -35,12 +44,23 @@
 -- no relacionadas se cancelan en el agregado y la wave pasa igual. Hay que
 -- extraer los identificadores y compararlos contra la lista esperada.
 -- `pg_prove`, que es lo que usa `supabase test db`, ya los imprime literalmente
--- (`Failed tests:  1-12`). Al escribirse este archivo, la lista de
--- identificadores en rojo es:
+-- (`Failed tests:  4-9`). La lista de identificadores en rojo, por plan:
 --
---   1 2 3 4 5 6 7 8 9 10 11 12         (doce)
+--   tras 03-01 (archivo nuevo)     1 2 3 4 5 6 7 8 9 10 11 12    (doce)
+--   tras 03-03 (migración 11)      4 5 6 7 8 9                   (seis)
+--   tras 03-04 (migración 12)      4 5 6 7 8 9                   (seis, LAS MISMAS)
 --
--- y las aserciones 13 y 14 pasan DESDE EL PRIMER MOMENTO. No es vacuidad: son
+-- QUE 03-04 NO MUEVA NINGUNA DE LAS CATORCE ORIGINALES ES LO ESPERADO, y merece
+-- leerse despacio porque invita a un falso rojo y a un falso verde a la vez:
+-- las aserciones 7, 8 y 9 son COLECTIVAS sobre las TRES funciones del motor, así
+-- que crear una sola de las tres no puede ponerlas verdes. Se quedan rojas
+-- nombrando únicamente a `dispatch_feed_syncs` y `feed_health_watchdog`, que son
+-- de las migraciones 13 y 14. `sync_feed_apply` ya NO aparece en su diagnóstico:
+-- esa desaparición, y no el total, es la evidencia de que el plan 03-04 hizo su
+-- parte de las tres. Contar `not ok` habría dicho "6 antes y 6 después, no pasó
+-- nada".
+--
+-- Las aserciones 13 y 14 pasan DESDE EL PRIMER MOMENTO. No es vacuidad: son
 -- invariantes que ya existen desde la Fase 1 (el trigger de la máquina de estados
 -- y el índice parcial de un aseo activo por apartamento y fecha). Están aquí
 -- porque el motor de sync depende de ellas y porque `service_role` salta la RLS
@@ -77,7 +97,7 @@
 -- ============================================================================
 
 begin;
-select plan(14);
+select plan(26);
 
 -- ---------------------------------------------------------------------------
 -- Helper: leer un escalar de un catálogo que quizá todavía no existe.
@@ -429,6 +449,409 @@ select lives_ok(
               where id = 'cc222222-2222-2222-2222-222222222222'));
   $q$,
   'cancelar y recrear el aseo del mismo apartamento y día en la misma transacción es legal');
+
+-- ===========================================================================
+-- EL RPC ADITIVO — sync_feed_apply(), migración 12 (plan 03-04)
+--
+-- Doce aserciones sobre la mitad ADITIVA del diff: pasos (a) a (d), (f) e (i).
+-- La cancelación, `needs_review`, la detección de extensión y las
+-- notificaciones son de la migración 13; aquí lo que se afirma sobre ellas es
+-- justamente que NO ocurren todavía (aserción 24).
+--
+-- REGLA DEL ARNÉS, la del plan 02-14 y la que separa un test de una tautología:
+-- ninguna igualdad puede ser `0 = 0`. Cada aserción de abajo compara contra un
+-- valor que solo puede salir de una escritura que de verdad ocurrió —un arreglo
+-- de fechas, un identificador, un contador que se movió— y varias llevan su
+-- control positivo DENTRO de la misma comparación.
+--
+-- Cinco apartamentos nuevos, uno por propiedad que se mide, para que ninguna
+-- aserción dependa del estado que dejó otra:
+--   c4 aseos creados, idempotencia, bloqueo y desconocido
+--   c5 turnover del mismo día y apagado de la urgencia
+--   c6 gestión externa: fila inerte y el 23514 que NO ocurre
+--   c7 aseo manual preexistente en la fecha de checkout
+--   c8 ausencia y rotación de uid
+-- ---------------------------------------------------------------------------
+
+-- El RPC devuelve jsonb, así que llamarlo con un `select` a secas imprimiría
+-- una fila en medio del flujo TAP. Se invoca siempre con `perform` dentro de un
+-- bloque anónimo, que no produce salida.
+create function pg_temp.evento(
+  p_uid    text,
+  p_codigo text,
+  p_desde  date,
+  p_hasta  date,
+  p_clas   text default 'reserva'
+) returns jsonb
+language sql stable as $fn$
+  select jsonb_build_object(
+    'uid',             p_uid,
+    'reservationCode', p_codigo,
+    'summary',         case when p_clas = 'reserva' then 'Reserved'
+                            else 'Airbnb (Not available)' end,
+    'startsOn',        p_desde::text,
+    'endsOn',          p_hasta::text,
+    'clasificacion',   p_clas,
+    -- El hash del evento normalizado. Basta con que sea estable por contenido:
+    -- el RPC no lo interpreta, solo lo guarda.
+    'payloadHash',     md5(p_uid || coalesce(p_codigo,'') || p_desde::text || p_hasta::text));
+$fn$;
+
+create function pg_temp.correr(p_feed uuid, p_eventos jsonb) returns void
+language plpgsql as $fn$
+begin
+  perform public.sync_feed_apply(p_feed, p_eventos, now(), null,
+                                 md5(p_eventos::text), 200);
+end;
+$fn$;
+
+insert into public.properties
+  (id, nombre, cluster, gestion_vivaguest, tarifa_huesped, pago_aseador, responsable_id) values
+  ('c4444444-4444-4444-4444-444444444444', 'Apto sync 4', 'Cluster Sync', true,
+   130000::bigint, 48000::bigint, null),
+  ('c5555555-5555-5555-5555-555555555555', 'Apto sync 5', 'Cluster Sync', true,
+   130000::bigint, 48000::bigint, null),
+  -- El único de gestión externa. En la semilla real hay CINCO.
+  ('c6666666-6666-6666-6666-666666666666', 'Apto sync 6', 'Cluster Sync', false,
+   null, null, null),
+  ('c7777777-7777-7777-7777-777777777777', 'Apto sync 7', 'Cluster Sync', true,
+   130000::bigint, 48000::bigint, null),
+  ('c8888888-8888-8888-8888-888888888888', 'Apto sync 8', 'Cluster Sync', true,
+   130000::bigint, 48000::bigint, null);
+
+insert into public.calendar_feeds (id, property_id, provider) values
+  ('cfee0004-4444-4444-4444-444444444444', 'c4444444-4444-4444-4444-444444444444', 'airbnb'),
+  ('cfee0005-5555-5555-5555-555555555555', 'c5555555-5555-5555-5555-555555555555', 'airbnb'),
+  ('cfee0006-6666-6666-6666-666666666666', 'c6666666-6666-6666-6666-666666666666', 'airbnb'),
+  ('cfee0007-7777-7777-7777-777777777777', 'c7777777-7777-7777-7777-777777777777', 'airbnb'),
+  ('cfee0008-8888-8888-8888-888888888888', 'c8888888-8888-8888-8888-888888888888', 'airbnb');
+
+
+-- ---------------------------------------------------------------------------
+-- c4 — primera corrida: dos reservas.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfee0004-4444-4444-4444-444444444444',
+    jsonb_build_array(
+      pg_temp.evento('uid-4A@airbnb.com', 'HMSYNC4A', public.today_bog() + 2,  public.today_bog() + 6),
+      pg_temp.evento('uid-4B@airbnb.com', 'HMSYNC4B', public.today_bog() + 9,  public.today_bog() + 13)));
+end $$;
+
+-- 15  El aseo cae en el DTEND, SIN RESTAR UN DÍA. Es la regla de dominio que
+--     más veces se ha roto en proyectos de este tipo, y restarle un día
+--     significa mandar a la aseadora con el huésped todavía dentro.
+--
+--     Se compara el ARREGLO de fechas y no un conteo: un conteo de 2 pasaría
+--     igual con las dos fechas corridas un día, que es exactamente el defecto
+--     que esta aserción existe para atrapar. Y `array_agg` sobre cero filas da
+--     NULL, que nunca es igual al arreglo esperado: no puede pasar por ausencia.
+select is(
+  (select array_agg(scheduled_date order by scheduled_date)
+     from public.cleanings
+    where property_id = 'c4444444-4444-4444-4444-444444444444'),
+  array[public.today_bog() + 6, public.today_bog() + 13]::date[],
+  'SYNC-02 el RPC crea un aseo por reserva, con scheduled_date = ends_on y sin restar un día');
+
+-- ---------------------------------------------------------------------------
+-- c4 — dos corridas más con el MISMO payload. Tres en total.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfee0004-4444-4444-4444-444444444444',
+    jsonb_build_array(
+      pg_temp.evento('uid-4A@airbnb.com', 'HMSYNC4A', public.today_bog() + 2,  public.today_bog() + 6),
+      pg_temp.evento('uid-4B@airbnb.com', 'HMSYNC4B', public.today_bog() + 9,  public.today_bog() + 13)));
+  perform pg_temp.correr('cfee0004-4444-4444-4444-444444444444',
+    jsonb_build_array(
+      pg_temp.evento('uid-4A@airbnb.com', 'HMSYNC4A', public.today_bog() + 2,  public.today_bog() + 6),
+      pg_temp.evento('uid-4B@airbnb.com', 'HMSYNC4B', public.today_bog() + 9,  public.today_bog() + 13)));
+end $$;
+
+-- 16  Idempotencia: tres corridas dejan DOS aseos, no seis. La propiedad es
+--     ESTRUCTURAL —la dan `cleanings_one_active_per_property_date` y el
+--     `on conflict do nothing`— y no un `if exists`, que tendría carrera.
+--
+--     Se afirma también que las reservas siguen siendo dos: si el paso (a)
+--     insertara en vez de actualizar, los aseos seguirían siendo dos por el
+--     índice y el defecto pasaría inadvertido.
+select is(
+  (select array[
+     (select count(*) from public.cleanings
+       where property_id = 'c4444444-4444-4444-4444-444444444444'),
+     (select count(*) from public.calendar_reservations
+       where feed_id = 'cfee0004-4444-4444-4444-444444444444')]),
+  array[2, 2]::bigint[],
+  'SYNC-02 correr el mismo payload tres veces deja dos aseos y dos reservas, no seis y seis');
+
+-- ---------------------------------------------------------------------------
+-- c4 — una corrida con un bloqueo del propietario añadido.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfee0004-4444-4444-4444-444444444444',
+    jsonb_build_array(
+      pg_temp.evento('uid-4A@airbnb.com', 'HMSYNC4A', public.today_bog() + 2,  public.today_bog() + 6),
+      pg_temp.evento('uid-4B@airbnb.com', 'HMSYNC4B', public.today_bog() + 9,  public.today_bog() + 13),
+      pg_temp.evento('uid-4C@airbnb.com', null, public.today_bog() + 20, public.today_bog() + 24, 'bloqueo')));
+end $$;
+
+-- 17  Un bloqueo del propietario NO genera aseo. La comparación es contra el
+--     mismo arreglo de dos fechas de la aserción 15, así que afirma las dos
+--     cosas a la vez: que el bloqueo no creó nada Y que las dos reservas
+--     siguen produciendo su aseo. Un `is_empty` sobre la fecha del bloqueo
+--     pasaría en verde con la tabla entera vacía.
+select is(
+  (select array_agg(scheduled_date order by scheduled_date)
+     from public.cleanings
+    where property_id = 'c4444444-4444-4444-4444-444444444444'),
+  array[public.today_bog() + 6, public.today_bog() + 13]::date[],
+  'SYNC-03 un evento de bloqueo no crea ningún aseo, y no perturba a los de reserva');
+
+-- ---------------------------------------------------------------------------
+-- c4 — una corrida con un evento desconocido añadido.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfee0004-4444-4444-4444-444444444444',
+    jsonb_build_array(
+      pg_temp.evento('uid-4A@airbnb.com', 'HMSYNC4A', public.today_bog() + 2,  public.today_bog() + 6),
+      pg_temp.evento('uid-4B@airbnb.com', 'HMSYNC4B', public.today_bog() + 9,  public.today_bog() + 13),
+      pg_temp.evento('uid-4D@airbnb.com', null, public.today_bog() + 30, public.today_bog() + 33, 'desconocido')));
+end $$;
+
+-- 18  Un evento `desconocido` tampoco crea aseo: la falla es CERRADA. Es la
+--     mitad que hace segura la clasificación de tres valores del plan 03-02, y
+--     su contraparte —la guarda de colapso, que alerta cuando TODOS los eventos
+--     caen a desconocido— vive en el worker del plan 03-06.
+select is(
+  (select array_agg(scheduled_date order by scheduled_date)
+     from public.cleanings
+    where property_id = 'c4444444-4444-4444-4444-444444444444'),
+  array[public.today_bog() + 6, public.today_bog() + 13]::date[],
+  'SYNC-03 un evento desconocido no crea ningún aseo: la falla es cerrada');
+
+-- ---------------------------------------------------------------------------
+-- c6 — gestión externa, primera corrida SIN turnover.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfee0006-6666-6666-6666-666666666666',
+    jsonb_build_array(
+      pg_temp.evento('uid-6A@airbnb.com', 'HMSYNC6A', public.today_bog() + 3, public.today_bog() + 7)));
+end $$;
+
+-- 19  SYNC-11. La fila del apartamento de gestión externa nace INERTE: sin
+--     estado, sin aseador, sin tarifas y sin urgencia. Y lo hace
+--     `tg_cleanings_snapshot()` SOLO: el RPC inserta cinco columnas y ninguna
+--     de estas. El primer elemento del arreglo es el control positivo —hay
+--     exactamente un aseo— sin el cual el segundo sería `0 = 0`.
+select is(
+  (select array[
+     count(*),
+     count(*) filter (where is_managed is false
+                        and state          is null
+                        and aseador_id     is null
+                        and tarifa_huesped is null
+                        and pago_aseador   is null
+                        and is_urgent      is false)]
+     from public.cleanings
+    where property_id = 'c6666666-6666-6666-6666-666666666666'),
+  array[1, 1]::bigint[],
+  'SYNC-11 el aseo de una unidad de gestión externa nace inerte: sin estado, sin aseador y sin tarifas');
+
+-- 20  EL RECÁLCULO DE URGENCIA SOBRE UNA UNIDAD DE GESTIÓN EXTERNA NO LANZA.
+--
+--     Esta corrida trae un turnover del mismo día (`ends_on` de la primera =
+--     `starts_on` de la segunda), así que el paso (f) SÍ evaluaría la urgencia
+--     a verdadera para ese aseo. `cl_unmanaged_is_inert` exige `is_urgent`
+--     falso cuando `is_managed` es falso: sin el filtro `and c.is_managed` en
+--     el `where`, esto revienta con 23514.
+--
+--     Es la aserción que justifica ese filtro. Sin ella el filtro parece
+--     decorativo y el primer plan que "limpie" el `where` lo borra. Medido: con
+--     el filtro quitado, esta aserción se pone roja con 23514 sobre
+--     `cl_unmanaged_is_inert`.
+select lives_ok(
+  $q$select pg_temp.correr('cfee0006-6666-6666-6666-666666666666',
+        jsonb_build_array(
+          pg_temp.evento('uid-6A@airbnb.com', 'HMSYNC6A', public.today_bog() + 3, public.today_bog() + 7),
+          pg_temp.evento('uid-6B@airbnb.com', 'HMSYNC6B', public.today_bog() + 7, public.today_bog() + 9)))$q$,
+  'SYNC-07 el recálculo de is_urgent sobre una unidad de gestión externa no viola cl_unmanaged_is_inert (and c.is_managed)');
+
+-- ---------------------------------------------------------------------------
+-- c5 — turnover del mismo día en un apartamento GESTIONADO.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfee0005-5555-5555-5555-555555555555',
+    jsonb_build_array(
+      pg_temp.evento('uid-5A@airbnb.com', 'HMSYNC5A', public.today_bog() + 2, public.today_bog() + 6),
+      pg_temp.evento('uid-5B@airbnb.com', 'HMSYNC5B', public.today_bog() + 6, public.today_bog() + 9)));
+end $$;
+
+-- 21  SYNC-07. Checkout y checkin el mismo día: el aseo de ese día nace urgente
+--     y NINGÚN otro. La comparación es sobre la cadena completa
+--     `fecha=urgencia,fecha=urgencia`, así que en una sola aserción quedan
+--     fijados los tres hechos: cuántos aseos hay, en qué fechas, y cuál de
+--     ellos es el urgente. Un `count(*) where is_urgent = 1` no distinguiría
+--     "el correcto" de "otro".
+--
+--     Es el caso real del feed: `DTEND=20261010` de una reserva y
+--     `DTSTART=20261010` de otra.
+select is(
+  (select string_agg(scheduled_date::text || '=' || is_urgent::text, ',' order by scheduled_date)
+     from public.cleanings
+    where property_id = 'c5555555-5555-5555-5555-555555555555'),
+  (public.today_bog() + 6)::text || '=true,' || (public.today_bog() + 9)::text || '=false',
+  'SYNC-07 checkout y checkin el mismo día marcan urgente ese aseo y solo ese');
+
+-- ---------------------------------------------------------------------------
+-- c5 — segunda corrida: la reserva ENTRANTE se movió un día.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfee0005-5555-5555-5555-555555555555',
+    jsonb_build_array(
+      pg_temp.evento('uid-5A@airbnb.com', 'HMSYNC5A', public.today_bog() + 2, public.today_bog() + 6),
+      pg_temp.evento('uid-5B@airbnb.com', 'HMSYNC5B', public.today_bog() + 7, public.today_bog() + 9)));
+end $$;
+
+-- 22  LA URGENCIA SE APAGA SOLA. Es la diferencia entre RECALCULAR y ACUMULAR:
+--     el paso (f) es `set is_urgent = exists (...)`, no un `set is_urgent =
+--     true` condicional. Con la forma condicional esta aserción es la única de
+--     las doce que se pone roja, y en producción el aseo se quedaría marcado
+--     urgente para siempre aunque el huésped entrante ya no llegue ese día.
+--
+--     Las fechas de los dos aseos no cambian —solo se movió el `starts_on` de
+--     la entrante—, así que la comparación de la cadena completa demuestra
+--     además que no se creó ni se borró ningún aseo por el camino.
+select is(
+  (select string_agg(scheduled_date::text || '=' || is_urgent::text, ',' order by scheduled_date)
+     from public.cleanings
+    where property_id = 'c5555555-5555-5555-5555-555555555555'),
+  (public.today_bog() + 6)::text || '=false,' || (public.today_bog() + 9)::text || '=false',
+  'SYNC-07 si la reserva entrante se mueve, la urgencia se apaga sola: se recalcula, no se acumula');
+
+-- ---------------------------------------------------------------------------
+-- c7 — un aseo MANUAL preexistente justo en la fecha de checkout, con aseadora
+--      ya asignada. Es trabajo humano y el sync no lo puede tocar.
+-- ---------------------------------------------------------------------------
+insert into public.cleanings
+  (id, property_id, origin, tipo, scheduled_date, aseador_id) values
+  ('cc777777-7777-7777-7777-777777777777',
+   'c7777777-7777-7777-7777-777777777777', 'manual', 'repaso',
+   public.today_bog() + 6, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
+
+do $$ begin
+  perform pg_temp.correr('cfee0007-7777-7777-7777-777777777777',
+    jsonb_build_array(
+      pg_temp.evento('uid-7A@airbnb.com', 'HMSYNC7A', public.today_bog() + 2, public.today_bog() + 6)));
+end $$;
+
+-- 23  El aseo manual no se duplica NI se modifica. Los cinco elementos cubren
+--     los cinco modos de fallo distintos: que se duplicara (el conteo), que se
+--     sustituyera por otra fila (el identificador), que el sync se lo apropiara
+--     (`origin` y `tipo`), que le re-apuntara la reserva (el `reservation_id`,
+--     que el paso (d) no toca porque filtra por `origin = 'ical'`) y que le
+--     quitara la aseadora ya asignada.
+select is(
+  (select array[
+     count(*)::text,
+     min(id::text),
+     min(origin),
+     min(tipo::text),
+     (count(*) filter (where reservation_id is null))::text,
+     (count(*) filter (where aseador_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'))::text]
+     from public.cleanings
+    where property_id = 'c7777777-7777-7777-7777-777777777777'),
+  array['1', 'cc777777-7777-7777-7777-777777777777', 'manual', 'repaso', '1', '1'],
+  'el sync no duplica ni modifica un aseo manual que ya ocupa la fecha de checkout');
+
+-- ---------------------------------------------------------------------------
+-- c8 — dos reservas y luego una sola: la segunda desaparece del payload.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfee0008-8888-8888-8888-888888888888',
+    jsonb_build_array(
+      pg_temp.evento('uid-8A@airbnb.com', 'HMSYNC8A', public.today_bog() + 2,  public.today_bog() + 5),
+      pg_temp.evento('uid-8B@airbnb.com', 'HMSYNC8B', public.today_bog() + 8,  public.today_bog() + 11)));
+  perform pg_temp.correr('cfee0008-8888-8888-8888-888888888888',
+    jsonb_build_array(
+      pg_temp.evento('uid-8A@airbnb.com', 'HMSYNC8A', public.today_bog() + 2,  public.today_bog() + 5)));
+end $$;
+
+-- 24  LA PRIMERA AUSENCIA NO CANCELA NADA. La reserva ausente recibe
+--     `disappeared_at` y su aseo SIGUE VIVO: la cancelación exige dos ausencias
+--     consecutivas y es del plan 03-05. Los cuatro elementos afirman que la
+--     marca cayó en la fila correcta —no en cualquiera— y que ni un solo aseo
+--     pasó a cancelada. `delete` sobre `calendar_reservations` está prohibido
+--     en todo el pipeline: por eso el conteo de reservas sigue siendo dos.
+select is(
+  (select array[
+     (select count(*)::text from public.calendar_reservations
+       where feed_id = 'cfee0008-8888-8888-8888-888888888888'),
+     (select coalesce(string_agg(reservation_code, ',' order by reservation_code), '<ninguna>')
+        from public.calendar_reservations
+       where feed_id = 'cfee0008-8888-8888-8888-888888888888'
+         and disappeared_at is not null),
+     (select count(*)::text from public.cleanings
+       where property_id = 'c8888888-8888-8888-8888-888888888888'
+         and state is distinct from 'cancelada'),
+     (select count(*)::text from public.cleanings
+       where property_id = 'c8888888-8888-8888-8888-888888888888'
+         and state = 'cancelada')]),
+  array['2', 'HMSYNC8B', '2', '0'],
+  'SYNC-04 la reserva ausente se marca con disappeared_at, no se borra, y su aseo sigue vivo');
+
+-- ---------------------------------------------------------------------------
+-- c8 — tercera corrida: el MISMO código de reserva llega con otro uid.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  perform pg_temp.correr('cfee0008-8888-8888-8888-888888888888',
+    jsonb_build_array(
+      pg_temp.evento('uid-8A-rotado@airbnb.com', 'HMSYNC8A', public.today_bog() + 2, public.today_bog() + 5)));
+end $$;
+
+-- 25  El emparejamiento de NIVEL 1 y el instrumento que contesta la pregunta
+--     abierta de la fase. El código de negocio manda sobre el uid: la fila se
+--     actualiza en vez de nacer una segunda, y el hecho se CUENTA.
+--
+--     El cuarto elemento es el control del arnés: la PRIMERA corrida de este
+--     feed dejó el contador en cero. Sin él, un contador roto que devolviera
+--     siempre 1 pasaría esta aserción sin haber medido nada.
+select is(
+  (select array[
+     (select uid from public.calendar_reservations
+       where feed_id = 'cfee0008-8888-8888-8888-888888888888'
+         and reservation_code = 'HMSYNC8A'),
+     (select count(*)::text from public.calendar_reservations
+       where feed_id = 'cfee0008-8888-8888-8888-888888888888'),
+     (select uid_rotations::text from public.feed_sync_runs
+       where feed_id = 'cfee0008-8888-8888-8888-888888888888' order by id desc limit 1),
+     (select uid_rotations::text from public.feed_sync_runs
+       where feed_id = 'cfee0008-8888-8888-8888-888888888888' order by id asc limit 1)]),
+  array['uid-8A-rotado@airbnb.com', '2', '1', '0'],
+  'SYNC-04 un código conocido con uid nuevo actualiza la fila y deja uid_rotations = 1 en feed_sync_runs');
+
+-- 26  T-03-30. `sync_feed_apply` es `security definer` y escribe aseos y
+--     reservas: invocable por `anon` sería escalada de privilegio directa con
+--     solo la clave publicable, que es pública por diseño.
+--
+--     `alter default privileges ... revoke execute ... from public, anon` NO
+--     basta en PG 17.6 (medido en el plan 01-07): hace falta el revoke
+--     explícito al lado de la definición.
+--
+--     La aserción 9 ya afirma lo de `anon` sobre las tres funciones del motor.
+--     Esta añade `authenticated` —ni el admin llama a este RPC— y, sobre todo,
+--     el CONTROL POSITIVO de que `service_role` SÍ puede: sin él, revocar de
+--     más pasaría en verde aquí y rompería el worker del plan 03-06 con permiso
+--     denegado. Contar 1 exige además que la función exista.
+select is(
+  (select count(*)::int
+     from pg_proc p
+     join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname = 'sync_feed_apply'
+      and p.prokind = 'f'
+      and not has_function_privilege('anon', p.oid, 'execute')
+      and not has_function_privilege('authenticated', p.oid, 'execute')
+      and has_function_privilege('service_role', p.oid, 'execute')),
+  1,
+  'sync_feed_apply no es ejecutable por anon ni por authenticated, y sí por service_role');
 
 select * from finish();
 rollback;

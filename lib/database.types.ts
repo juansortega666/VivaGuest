@@ -1305,6 +1305,17 @@ export type Database = {
         }[]
       }
       start_cleaning: { Args: { p_cleaning: string }; Returns: undefined }
+      sync_feed_apply: {
+        Args: {
+          p_etag: string
+          p_events: Json
+          p_feed_id: string
+          p_fetched_at: string
+          p_http_status?: number
+          p_payload_hash: string
+        }
+        Returns: Json
+      }
       today_bog: { Args: never; Returns: string }
       toggle_checklist_item: {
         Args: { p_done: boolean; p_item: string; p_nota: string }
