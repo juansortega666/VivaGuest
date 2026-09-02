@@ -319,6 +319,28 @@
   --spacing-avatar:           28px;  /* circulo de iniciales del menu de usuario */
 }
 
+/* ── Anchos de la tabla de apartamentos — 02-UI-SPEC.md §7.1 ──────────────────
+   SON OTROS que los de la lista de aseadores, y por eso llevan sufijo en vez de
+   reutilizar los de arriba: ESTADO mide 96px alli y 112px aqui (cabe la etiqueta
+   `Informativa`, la mas larga de las cuatro), y RESPONSABLE mide 200px alli y
+   168px aqui. Compartir el token haria que tocar una tabla moviera la otra.
+
+   `--spacing-col-dinero` sirve a TARIFA y a PAGO: §7.1 les da 120px a las dos y
+   son la misma clase de dato, asi que un unico token evita que se separen por
+   descuido y dejen de alinearse.                                              */
+@theme {
+  --spacing-col-estado-apto:      112px;  /* ESTADO: icono 14px + etiqueta 12/600 */
+  --spacing-col-cluster:          140px;  /* CLUSTER, texto plano sin badge */
+  --spacing-col-dinero:           120px;  /* TARIFA y PAGO, alineadas a la derecha */
+  --spacing-col-responsable-apto: 168px;  /* RESPONSABLE, o contacto externo */
+  --spacing-col-calendario:        96px;  /* CALENDARIO, icono centrado */
+
+  /* Toolbar de §6.2. Van como token por lo mismo que los anchos de columna:
+     `w-[320px]` seria el valor arbitrario que §2 prohibe. */
+  --spacing-buscador:             320px;
+  --spacing-filtro-cluster:       200px;
+}
+
 /* Encabezados de columna: 12px/600 uppercase con 0.04em de letter-spacing
    (UI-SPEC §3). Va como token por lo mismo que los anchos: para que ninguna
    celda escriba el valor entre corchetes. */

@@ -4,11 +4,25 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+function Table({
+  className,
+  containerClassName,
+  ...props
+}: React.ComponentProps<"table"> & { containerClassName?: string }) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      // `containerClassName` es un anadido de VivaGuest sobre el archivo del CLI,
+      // y existe por una razon medida en el plan 02-07: el `overflow-x-auto` de
+      // aqui convierte ESTE div en el scrollport de cualquier `position: sticky`
+      // de la tabla, en vez del viewport, asi que el encabezado sticky que pide
+      // UI-SPEC §7.2 no engancha nunca. Con ~8 aseadores no se nota; con las 39
+      // filas de apartamentos el encabezado se va con el scroll.
+      //
+      // No se puede arreglar desde fuera: sin esta prop el div no acepta clases,
+      // y `cn()` deja pasar la ultima de un mismo grupo, asi que quien necesite
+      // el viewport como scrollport manda `overflow-x-visible` y lo recupera.
+      className={cn("relative w-full overflow-x-auto", containerClassName)}
     >
       <table
         data-slot="table"
