@@ -82,11 +82,20 @@ export function BarraAccionesFormulario({
   return (
     <div
       className={cn(
-        // §8.2: fija al fondo, 64px, fondo opaco y borde superior de 1px. El
-        // fondo NO puede ser transparente: la barra se superpone al último campo
-        // del formulario mientras se hace scroll.
-        'sticky bottom-0 z-30 -mx-xl mt-xl flex min-h-barra-acciones items-center',
-        'justify-between gap-xl border-t border-border bg-background px-xl py-md',
+        // §8.2: fija al fondo, 64px, fondo opaco y borde superior de 1px, con el
+        // contenido dentro del mismo ancho que el formulario.
+        //
+        // El fondo NO puede ser transparente: la barra se superpone al contenido
+        // que pasa por debajo mientras se hace scroll, y con fondo transparente se
+        // leerían los dos textos encima del otro.
+        //
+        // Y NO lleva margen negativo. Con `-mx`, la barra sangra hacia el borde
+        // izquierdo de la ventana mientras por la derecha se corta en el ancho del
+        // formulario: el resultado es un panel asimétrico con un canto suelto en
+        // medio de la pantalla. Alineada con el formulario, su borde superior
+        // continúa la misma regla de 1px que separa las secciones.
+        'sticky bottom-0 z-30 mt-xl flex min-h-barra-acciones items-center',
+        'justify-between gap-xl border-t border-border bg-background py-md',
       )}
     >
       <div id={idChecklist} className="flex flex-col gap-xs text-micro">

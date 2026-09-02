@@ -437,8 +437,20 @@ export function FormularioApartamento({
       <Seccion titulo="Operación">
         <Field data-invalid={Boolean(errors.hora_limite) || undefined}>
           <FieldLabel htmlFor={idDe('hora_limite')}>Hora límite</FieldLabel>
-          {/* `step="60"` deja fuera los segundos del selector nativo: la columna
-              es `time` y el esquema exige `HH:MM` exacto. */}
+          {/*
+            `step="60"` deja fuera los segundos del selector nativo: la columna es
+            `time` y el esquema exige `HH:MM` exacto.
+
+            DIVERGENCIA MEDIDA CON §8.4, que pide formato 24h: el control nativo
+            se pinta según la LOCALE DEL NAVEGADOR, y `es-CO` es de 12 horas, así
+            que en pantalla se lee `11:30 AM`. Se probó poner `lang` en el propio
+            input y Chrome lo ignora (comprobado con captura). El VALOR que viaja
+            sigue siendo `11:30` en 24h, que es lo que la base guarda, y forzar el
+            formato exigiría sustituir el control nativo por uno propio, con lo
+            que se pierden el teclado, el selector del sistema y la
+            accesibilidad que trae de fábrica. Se acepta la divergencia; queda
+            escrita para que no se reporte como hallazgo nuevo.
+          */}
           <Input
             id={idDe('hora_limite')}
             type="time"
