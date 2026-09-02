@@ -93,10 +93,16 @@ Plans:
 **Requirements**: SYNC-01, SYNC-02, SYNC-03, SYNC-04, SYNC-05, SYNC-06, SYNC-07, SYNC-08, SYNC-09, SYNC-10, SYNC-11
 **Success Criteria** (qué debe ser VERDAD):
   1. Cada feed configurado se lee cada 30 minutos en una invocación aislada, y un feed caído no impide que los demás corran
-  2. Un fin de bloqueo genera exactamente un aseo `normal` en la fecha correcta, corridas sucesivas sobre el mismo feed no crean duplicados, y los apartamentos con `gestion_vivaguest = false` generan un aseo informativo sin estado ni asignación
-  3. Los bloqueos del propietario no generan aseos, y un feed vacío, inválido o truncado no cancela ningún aseo existente y queda registrado como intento fallido
+  2. El fin de una **reserva** genera exactamente un aseo `normal` en la fecha correcta (su `DTEND`), corridas sucesivas sobre el mismo feed no crean duplicados, y los apartamentos con `gestion_vivaguest = false` generan un aseo informativo sin estado ni asignación
+  3. Los **bloqueos del propietario** (fechas que el anfitrión cierra a mano, distintas de una reserva) no generan aseos, y un feed vacío, inválido o truncado no cancela ningún aseo existente y queda registrado como intento fallido
   4. Cuando la reserva se mueve o desaparece, el aseo viejo se cancela y aparece uno nuevo sin confirmar, salvo que el aseo ya tenga `started_at`
   5. El admin queda alertado cuando un link deja de responder, cuando el propio job de sincronización deja de correr, cuando checkout y checkin caen el mismo día, y cuando una reserva parece una extensión creada como reserva nueva
+
+**Aclaración de vocabulario (fijada 2026-09-02):** los criterios 2 y 3 usaban la palabra
+"bloqueo" con dos sentidos y se leían como contradictorios. Lectura correcta: el criterio 2
+habla del **fin de una reserva**, que es lo que libera el apartamento y genera el aseo. El
+criterio 3 habla de los **bloqueos del propietario**, fechas que el anfitrión cierra a mano y
+que no traen huésped ni generan aseo. Son cosas distintas.
 
 **Prerequisito humano (bloqueante, no es una tarea de la fase):** hay que capturar y versionar un `.ics` real de Airbnb de la cuenta propia de VivaGuest antes de planear esta fase. Las muestras públicas están desactualizadas y la más citada en GitHub es falsa. Sin esos archivos no hay fixtures de test ni forma de resolver empíricamente la estabilidad del `UID`.
 **Plans**: TBD
