@@ -7,6 +7,7 @@ import {
   listarApartamentos,
   listarAseadoresActivos,
   listarClusters,
+  listarTiposDeCuarto,
 } from '@/lib/data/apartamentos';
 import { createClient } from '@/lib/supabase/server';
 
@@ -36,9 +37,13 @@ export default async function NuevoApartamentoPage() {
 
   // Los clusters salen de las filas YA cargadas: `listarClusters` es pura y
   // `properties.cluster` es `text not null` sin ninguna tabla que consultar.
-  const [filas, aseadores] = await Promise.all([
+  const [filas, aseadores, tipos] = await Promise.all([
     listarApartamentos(supabase),
     listarAseadoresActivos(supabase),
+    // El catálogo de tipos de cuarto se LEE: es provisional y editable en base
+    // de datos sin migración, así que codificarlo aquí convertiría un cambio de
+    // producto en un deploy.
+    listarTiposDeCuarto(supabase),
   ]);
 
   return (
@@ -57,7 +62,11 @@ export default async function NuevoApartamentoPage() {
         <h1 className="text-display text-foreground">Nuevo apartamento</h1>
       </div>
 
-      <FormularioApartamento clusters={listarClusters(filas)} aseadores={aseadores} />
+      <FormularioApartamento
+        clusters={listarClusters(filas)}
+        aseadores={aseadores}
+        tipos={tipos}
+      />
     </div>
   );
 }

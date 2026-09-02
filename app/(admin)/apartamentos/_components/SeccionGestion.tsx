@@ -25,6 +25,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import type { AseadorElegible } from '@/lib/data/apartamentos';
 import type { ApartamentoInput } from '@/lib/domain/apartamento.schema';
+import type { FormularioInput } from '@/lib/domain/cuartos.schema';
 
 /**
  * Sección 2 del formulario: el switch que reconfigura medio formulario
@@ -62,7 +63,13 @@ function comoTexto(v: unknown): string {
 }
 
 interface Props {
-  form: UseFormReturn<ApartamentoInput>;
+  /**
+   * El formulario COMPLETO, incluidos los dos arrays de la sección 5 que añadió
+   * el plan 02-13. Esta sección no los toca, pero el tipo tiene que ser el mismo
+   * que el del `useForm` de arriba: con `UseFormReturn<ApartamentoInput>` los
+   * `setValue` de aquí dejarían de compilar contra el formulario real.
+   */
+  form: UseFormReturn<FormularioInput>;
   /**
    * Aseadores del catálogo. Llega con los INACTIVOS incluidos a propósito: ver
    * el filtrado de abajo.

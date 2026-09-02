@@ -2,6 +2,7 @@
 
 import 'server-only';
 
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
@@ -14,6 +15,13 @@ import {
   type ApartamentoInput,
   type ApartamentoOutput,
 } from '@/lib/domain/apartamento.schema';
+import {
+  esquemaCuartos,
+  esquemaFaltantes,
+  claveDeTexto,
+  type CuartoOutput,
+  type FaltanteOutput,
+} from '@/lib/domain/cuartos.schema';
 import { campoDeConstraint, mapDbError, type DbErrorLike } from '@/lib/domain/errors';
 import type { Database } from '@/lib/database.types';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -191,6 +199,210 @@ function noEncontrado(): { ok: false; error: string } {
   return { ok: false, error: mapDbError({ code: 'PGRST116' }) };
 }
 
+/** Un fallo de escritura de la sección 5, o `null` si todo salió bien. */
+type FalloDeColeccion = { ok: false; error: string; campo?: string } | null;
+
+/**
+ * Reparte las filas entrantes entre "actualizar una que ya existe" e "insertar
+ * una nueva", y dice cuáles de las existentes hay que desactivar.
+ *
+ * LA SEGUNDA PASADA ES LA QUE RESUELVE LA TRAMPA DE LA ETIQUETA RESERVADA. Una
+ * fila sin `id` que coincide en clave con una fila existente —normalmente una
+ * que el admin desactivó hace tiempo y que ya no ve— NO se inserta: se reutiliza
+ * la que hay. Sin esta pasada, insertar chocaría con el UNIQUE, que no excluye
+ * las inactivas.
+ *
+ * SE RECLAMA POR `id` PRIMERO Y POR CLAVE DESPUES, y en ese orden a propósito:
+ * al revés, renombrar una fila para darle la etiqueta que otra acaba de dejar
+ * libre haría que las dos reclamaran la MISMA fila existente, y un upsert con el
+ * mismo id dos veces revienta con `21000 ON CONFLICT DO UPDATE command cannot
+ * affect row a second time`.
+ */
+function repartirFilas<E extends { id: string; is_active: boolean }, F>(
+  existentes: readonly E[],
+  entrantes: readonly F[],
+  claveExistente: (fila: E) => string,
+  claveEntrante: (fila: F) => string,
+  idEntrante: (fila: F) => string | undefined,
+): { emparejadas: Array<{ id: string; fila: F; indice: number }>; nuevas: Array<{ fila: F; indice: number }>; aDesactivar: string[] } {
+  const porId = new Map(existentes.map((e) => [e.id, e]));
+  const porClave = new Map(existentes.map((e) => [claveExistente(e), e]));
+
+  const reclamadas = new Set<string>();
+  const emparejadas: Array<{ id: string; fila: F; indice: number }> = [];
+  const pendientes: Array<{ fila: F; indice: number }> = [];
+
+  // Pasada 1: las que traen un `id` que sigue existiendo.
+  entrantes.forEach((fila, indice) => {
+    const id = idEntrante(fila);
+    const existente = id ? porId.get(id) : undefined;
+    if (existente && !reclamadas.has(existente.id)) {
+      reclamadas.add(existente.id);
+      emparejadas.push({ id: existente.id, fila, indice });
+      return;
+    }
+    pendientes.push({ fila, indice });
+  });
+
+  // Pasada 2: las que coinciden en clave con una fila existente todavía libre.
+  const nuevas: Array<{ fila: F; indice: number }> = [];
+  for (const pendiente of pendientes) {
+    const existente = porClave.get(claveEntrante(pendiente.fila));
+    if (existente && !reclamadas.has(existente.id)) {
+      reclamadas.add(existente.id);
+      emparejadas.push({ id: existente.id, fila: pendiente.fila, indice: pendiente.indice });
+      continue;
+    }
+    nuevas.push(pendiente);
+  }
+
+  // Solo se desactiva lo que HOY está activo y ya nadie reclama. Volver a poner
+  // `is_active = false` sobre lo que ya estaba inactivo sería una escritura sin
+  // efecto en cada guardado.
+  const aDesactivar = existentes
+    .filter((e) => e.is_active && !reclamadas.has(e.id))
+    .map((e) => e.id);
+
+  return { emparejadas, nuevas, aDesactivar };
+}
+
+/**
+ * Los cuartos del apartamento. Ver el bloque de `guardarCuartosYFaltantes` para
+ * las dos decisiones que gobiernan esta función: nada se borra, y una etiqueta
+ * que ya existe se reutiliza en vez de insertarse.
+ *
+ * RESIDUO CONOCIDO, escrito porque no tiene arreglo barato: si en el MISMO envío
+ * el admin renombra un cuarto para darle la etiqueta de OTRO que está quitando,
+ * el segundo se desactiva conservando su etiqueta —esa es la decisión de arriba—
+ * y el update del primero choca con el UNIQUE. Sale por `mapDbError` con
+ * `Ya existe un cuarto con esa etiqueta en este apartamento.`, que es cierto.
+ * Arreglarlo exigiría borrar la fila que se va, y eso es exactamente lo que deja
+ * checklists huérfanos en la Fase 6.
+ */
+async function sincronizarCuartos(
+  supabase: SupabaseClient<Database>,
+  propertyId: string,
+  filas: CuartoOutput[],
+): Promise<FalloDeColeccion> {
+  // TODAS las del apartamento, activas E INACTIVAS. Leer solo las activas —que
+  // es lo que hace `leerApartamento` para pintar el formulario— dejaría fuera
+  // justo las filas cuya etiqueta sigue reservada.
+  const { data: existentes, error: errorLectura } = await supabase
+    .from('property_rooms')
+    .select('id, etiqueta, is_active')
+    .eq('property_id', propertyId);
+
+  if (errorLectura) return errorDeBase(errorLectura);
+
+  const { emparejadas, nuevas, aDesactivar } = repartirFilas(
+    existentes ?? [],
+    filas,
+    (e) => claveDeTexto(e.etiqueta),
+    (f) => claveDeTexto(f.etiqueta),
+    (f) => f.id,
+  );
+
+  // `sort_order` sale del INDICE de la fila en pantalla. El reordenamiento por
+  // arrastre no está en el alcance de esta fase, pero quitar la fila del medio
+  // sí tiene que renumerar el resto en vez de dejar un hueco.
+  const valores = (fila: CuartoOutput, indice: number) => ({
+    property_id: propertyId,
+    room_type_id: fila.room_type_id,
+    etiqueta: fila.etiqueta,
+    sort_order: indice,
+    is_active: true,
+  });
+
+  if (emparejadas.length > 0) {
+    // `upsert` por clave primaria: la fila emparejada YA existe, así que esto es
+    // un update que además la REACTIVA si estaba inactiva. Su `id` sobrevive, y
+    // ese id es lo que los checklists de la Fase 6 van a referenciar.
+    const { error } = await supabase
+      .from('property_rooms')
+      .upsert(emparejadas.map((e) => ({ id: e.id, ...valores(e.fila, e.indice) })));
+    if (error) return errorDeBase(error);
+  }
+
+  if (nuevas.length > 0) {
+    const { error } = await supabase
+      .from('property_rooms')
+      .insert(nuevas.map((n) => valores(n.fila, n.indice)));
+    if (error) return errorDeBase(error);
+  }
+
+  if (aDesactivar.length > 0) {
+    const { error } = await supabase
+      .from('property_rooms')
+      .update({ is_active: false })
+      .in('id', aDesactivar);
+    if (error) return errorDeBase(error);
+  }
+
+  return null;
+}
+
+/**
+ * Los faltantes PROPIOS del apartamento. Los globales (`property_id is null`)
+ * son la biblioteca compartida y esta función no los toca nunca: el filtro por
+ * `property_id` está en la lectura y en cada escritura.
+ *
+ * `mic_prop_uniq` es un índice parcial sobre `(property_id, lower(nombre))` que
+ * tampoco excluye los inactivos, así que aplica la misma reutilización que en
+ * los cuartos, con la ventaja de que aquí la comparación en minúsculas de la UI
+ * y la de la base coinciden exactamente.
+ */
+async function sincronizarFaltantes(
+  supabase: SupabaseClient<Database>,
+  propertyId: string,
+  filas: FaltanteOutput[],
+): Promise<FalloDeColeccion> {
+  const { data: existentes, error: errorLectura } = await supabase
+    .from('missing_item_catalog')
+    .select('id, nombre, is_active')
+    .eq('property_id', propertyId);
+
+  if (errorLectura) return errorDeBase(errorLectura);
+
+  const { emparejadas, nuevas, aDesactivar } = repartirFilas(
+    existentes ?? [],
+    filas,
+    (e) => claveDeTexto(e.nombre),
+    (f) => claveDeTexto(f.nombre),
+    (f) => f.id,
+  );
+
+  const valores = (fila: FaltanteOutput, indice: number) => ({
+    property_id: propertyId,
+    nombre: fila.nombre,
+    sort_order: indice,
+    is_active: true,
+  });
+
+  if (emparejadas.length > 0) {
+    const { error } = await supabase
+      .from('missing_item_catalog')
+      .upsert(emparejadas.map((e) => ({ id: e.id, ...valores(e.fila, e.indice) })));
+    if (error) return errorDeBase(error);
+  }
+
+  if (nuevas.length > 0) {
+    const { error } = await supabase
+      .from('missing_item_catalog')
+      .insert(nuevas.map((n) => valores(n.fila, n.indice)));
+    if (error) return errorDeBase(error);
+  }
+
+  if (aDesactivar.length > 0) {
+    const { error } = await supabase
+      .from('missing_item_catalog')
+      .update({ is_active: false })
+      .in('id', aDesactivar);
+    if (error) return errorDeBase(error);
+  }
+
+  return null;
+}
+
 /** Los 12 campos validados, en la forma que espera `properties`. */
 function filaDeProperties(
   campos: ApartamentoOutput,
@@ -316,6 +528,103 @@ export async function guardarApartamento(
     mensaje: entrada.modo === 'activar' ? 'Apartamento activado.' : 'Cambios guardados.',
     id,
   };
+}
+
+/**
+ * Los cuartos y los faltantes propios de un apartamento (APTO-06 y APTO-07).
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * EL CLIENTE ES EL DEL USUARIO, NO EL ADMINISTRATIVO, Y ESO ES DELIBERADO
+ *
+ * `property_rooms` y `missing_item_catalog` SI tienen grant para
+ * `authenticated` (migración 07), y sus policies `property_rooms_admin_all` y
+ * `mic_admin_all` casan para el admin. Todo lo que hay aquí se puede hacer con
+ * el JWT del llamador, así que construir el cliente de servicio sería privilegio
+ * gratis: saltarse la RLS para escribir lo que el llamador ya puede escribir.
+ *
+ * Solo `property_secrets` obliga al cliente administrativo, y es porque no tiene
+ * grant ninguno. Ver la cabecera de este archivo.
+ *
+ * Para un ASEADOR (T-02-67) esto no es una puerta: `exigirAdmin()` lo para
+ * primero, y si no lo parara, sus policies son de SELECT y el update afectaría 0
+ * filas. Dos capas, ninguna sobra.
+ * ════════════════════════════════════════════════════════════════════════════
+ *
+ * ── NADA SE BORRA. LO QUITADO SE MARCA INACTIVO (T-02-70) ───────────────────
+ * El atajo evidente es `delete` de todo y `insert` de lo que quedó. Es lo que NO
+ * se hace, y la razón llega dos fases después: en la Fase 6 los
+ * `property_rooms.id` van a estar referenciados por los checklists de los aseos
+ * ya generados (CHECK-01). Borrarlos y recrearlos con ids nuevos deja esos
+ * checklists apuntando a cuartos que ya no existen, y el síntoma aparece en la
+ * app del aseador, no aquí. `property_rooms.is_active` existe exactamente para
+ * esto y `missing_item_catalog.is_active` también.
+ *
+ * ── Y POR ESO UNA ETIQUETA QUITADA SE REACTIVA, NO SE DUPLICA ───────────────
+ * `property_rooms_etiqueta_uniq` es `unique (property_id, etiqueta)` A SECAS,
+ * NO un índice parcial sobre la bandera de activación (medido en el plan 02-10).
+ * Consecuencia: un cuarto desactivado SIGUE RESERVANDO SU ETIQUETA aunque el
+ * formulario no lo pinte. Si esta función insertara a ciegas, el admin que vuelve
+ * a escribir `Baño social` —una etiqueta que en su pantalla está libre— se
+ * llevaría un 23505 sobre una fila invisible que no puede arreglar desde ahí.
+ *
+ * La salida NO es relajar la validación ni explicarle al admin dónde está la
+ * fila fantasma: es REUSAR ESA FILA. Se busca por etiqueta entre TODAS las del
+ * apartamento, activas e inactivas, y si aparece se reactiva actualizándola en
+ * vez de insertar. El admin recupera su cuarto CON SU ID, que es justo lo que la
+ * Fase 6 necesita, y el 23505 no llega a existir.
+ *
+ * `mic_prop_uniq` es el mismo caso con `lower(nombre)`, y se resuelve igual.
+ *
+ * ── ESTA FASE NO CREA NINGUNA FUNCION EN `public` ───────────────────────────
+ * Un RPC `SECURITY DEFINER` haría atómico todo lo de abajo, que hoy son varias
+ * llamadas sin transacción común. No se hace, y el precio de hacerlo queda
+ * escrito: en PG 17.6 `alter default privileges` NO puede quitarle `EXECUTE` a
+ * PUBLIC (hallazgo 5 de `deferred-items.md`, medido dos veces), así que toda
+ * función nueva nace ejecutable por `anon` salvo que se revoque PEGADO a la
+ * definición, y merecería además su propia aserción pgTAP.
+ */
+export async function guardarCuartosYFaltantes(
+  propertyId: string,
+  cuartos: unknown,
+  faltantes: unknown,
+): Promise<ResultadoAccion> {
+  // ── 1. GUARD, ANTES QUE NADA ────────────────────────────────────────────────
+  let contexto;
+  try {
+    contexto = await exigirAdmin();
+  } catch (e) {
+    if (e instanceof NoAutorizado) return { ok: false, error: e.message };
+    throw e;
+  }
+  const { supabase } = contexto;
+
+  // ── 2. VALIDACIÓN ───────────────────────────────────────────────────────────
+  // Los mismos dos esquemas que usa el formulario, y no una versión relajada
+  // "porque el cliente ya validó": un Server Action es un endpoint HTTP público
+  // y el payload puede llegar sin pasar por ninguna pantalla. Aquí es donde vive
+  // el tope de longitud de los dos arrays (T-02-68).
+  const revisadoId = esquemaId.safeParse(propertyId);
+  if (!revisadoId.success) return problemaZod(revisadoId.error);
+
+  const filasCuartos = esquemaCuartos.safeParse(cuartos);
+  if (!filasCuartos.success) return problemaZod(filasCuartos.error);
+
+  const filasFaltantes = esquemaFaltantes.safeParse(faltantes);
+  if (!filasFaltantes.success) return problemaZod(filasFaltantes.error);
+
+  const id = revisadoId.data;
+
+  // ── 3. CUARTOS ──────────────────────────────────────────────────────────────
+  const errorCuartos = await sincronizarCuartos(supabase, id, filasCuartos.data);
+  if (errorCuartos) return errorCuartos;
+
+  // ── 4. FALTANTES PROPIOS ────────────────────────────────────────────────────
+  const errorFaltantes = await sincronizarFaltantes(supabase, id, filasFaltantes.data);
+  if (errorFaltantes) return errorFaltantes;
+
+  revalidatePath(`/apartamentos/${id}`);
+
+  return { ok: true, mensaje: 'Cambios guardados.' };
 }
 
 /**

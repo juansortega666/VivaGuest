@@ -19,28 +19,36 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import type { AseadorElegible } from '@/lib/data/apartamentos';
+import type { AseadorElegible, TipoDeCuarto } from '@/lib/data/apartamentos';
 import {
-  esquemaActivar,
-  esquemaBorrador,
   valoresDesdeFilaGuardada,
   type ApartamentoInput,
   type Faltante,
 } from '@/lib/domain/apartamento.schema';
+import {
+  esquemaFormularioActivar,
+  esquemaFormularioBorrador,
+  type FormularioInput,
+} from '@/lib/domain/cuartos.schema';
 import type { Tables } from '@/lib/database.types';
 
-import { guardarApartamento, type SecretosApartamento } from '../_actions';
+import {
+  guardarApartamento,
+  guardarCuartosYFaltantes,
+  type SecretosApartamento,
+} from '../_actions';
 import {
   BarraAccionesFormulario,
   type OperacionEnVuelo,
 } from './BarraAccionesFormulario';
 import { CampoMoneda, opcionesRegistroMoneda } from './CampoMoneda';
+import { EditorCuartos, idDeFilaCuarto } from './EditorCuartos';
+import { EditorFaltantes, idDeFilaFaltante } from './EditorFaltantes';
 import { SeccionGestion } from './SeccionGestion';
 import { SelectorCluster } from './SelectorCluster';
 
 /**
- * El formulario de apartamento (UI-SPEC §8), secciones 1 a 4. La 5 —cuartos y
- * faltantes— llega en el plan 02-13.
+ * El formulario de apartamento (UI-SPEC §8), las cinco secciones.
  *
  * ── PAGINA UNICA, SIN WIZARD ────────────────────────────────────────────────
  * El admin va a cargar 39 unidades de una sentada: un wizard multiplica los
@@ -64,12 +72,24 @@ import { SelectorCluster } from './SelectorCluster';
  * tiene grant para `authenticated` y responde `42501` incluso al admin. Fundirlos
  * en un solo objeto de formulario haría invisible la única frontera de seguridad
  * de esta pantalla.
+ *
+ * ── LA SECCION 5 SE GUARDA CON SU PROPIA ACCION, Y ESO SE VE ────────────────
+ * Los cuartos y los faltantes viven en `property_rooms` y en
+ * `missing_item_catalog`, dos tablas distintas de `properties` con su propia
+ * estrategia de persistencia (nada se borra: lo quitado se marca inactivo, para
+ * no dejar checklists huérfanos en la Fase 6). Van por
+ * `guardarCuartosYFaltantes`, DESPUES de `guardarApartamento`, porque al crear
+ * no hay id al que colgarlos hasta que la primera responde. Son dos operaciones
+ * sin transacción común, igual que los secretos, y el precio de eso está escrito
+ * en la cabecera de `_actions.ts`.
  */
 
 /** Los valores del formulario más lo que el admin ve de `property_secrets`. */
 interface Props {
   clusters: string[];
   aseadores: AseadorElegible[];
+  /** El catálogo global de `room_types`, leído de la base. Nunca codificado. */
+  tipos: TipoDeCuarto[];
   /** Sin fila se crea; con fila se edita. */
   fila?: Tables<'properties'>;
   /**
@@ -78,6 +98,13 @@ interface Props {
    * admin devuelve `42501`.
    */
   secretosGuardados?: SecretosApartamento | null;
+  /** Los cuartos ACTIVOS del apartamento, tal como los da `leerApartamento`. */
+  cuartosGuardados?: Tables<'property_rooms'>[];
+  /**
+   * Los faltantes propios del apartamento. Llegan SIN filtrar por activos —así
+   * los devuelve `leerApartamento`, a propósito— y se filtran aquí abajo.
+   */
+  faltantesGuardados?: Tables<'missing_item_catalog'>[];
 }
 
 /** Los tres campos de la sección 4 que no viven en `properties`. */
@@ -113,7 +140,33 @@ function texto(v: string | null | undefined): string {
  * Todos los nulos se convierten a `''`: es lo que un `<input>` muestra, y el
  * esquema los devuelve a `null` con `vacioANulo`.
  */
-function valoresIniciales(fila?: Tables<'properties'>): ApartamentoInput {
+function valoresIniciales(
+  fila: Tables<'properties'> | undefined,
+  cuartos: Tables<'property_rooms'>[],
+  faltantes: Tables<'missing_item_catalog'>[],
+): FormularioInput {
+  // Los dos arrays se ordenan por `sort_order` en `leerApartamento` y ese orden
+  // ES el del formulario: el índice de la fila es lo que se vuelve a guardar
+  // como `sort_order` al enviar.
+  const colecciones = {
+    cuartos: cuartos.map((c, i) => ({
+      id: c.id,
+      room_type_id: c.room_type_id,
+      etiqueta: c.etiqueta,
+      sort_order: i,
+    })),
+    // FILTRO POR ACTIVOS AQUI, y no en `leerApartamento`: esa función devuelve
+    // TODOS los faltantes del apartamento a propósito (el plan 02-10 lo dejó
+    // escrito), porque `mic_prop_uniq` tampoco excluye los inactivos y hay que
+    // poder reactivarlos en vez de chocar con su duplicado. Quien reactiva es
+    // `guardarCuartosYFaltantes`, en el servidor; el formulario solo pinta las
+    // filas vivas. Sin este filtro, un faltante que el admin quitó ayer vuelve a
+    // aparecer hoy como si nunca lo hubiera quitado.
+    faltantes: faltantes
+      .filter((f) => f.is_active)
+      .map((f, i) => ({ id: f.id, nombre: f.nombre, sort_order: i })),
+  };
+
   if (!fila) {
     return {
       nombre: '',
@@ -128,6 +181,7 @@ function valoresIniciales(fila?: Tables<'properties'>): ApartamentoInput {
       suplente_id: '',
       contacto_externo: '',
       hora_limite: '11:30',
+      ...colecciones,
     };
   }
 
@@ -141,14 +195,18 @@ function valoresIniciales(fila?: Tables<'properties'>): ApartamentoInput {
     contacto_externo: texto(fila.contacto_externo),
     tarifa_huesped: fila.tarifa_huesped ?? '',
     pago_aseador: fila.pago_aseador ?? '',
+    ...colecciones,
   };
 }
 
 export function FormularioApartamento({
   clusters,
   aseadores,
+  tipos,
   fila,
   secretosGuardados,
+  cuartosGuardados,
+  faltantesGuardados,
 }: Props) {
   const router = useRouter();
   const prefijo = useId();
@@ -158,13 +216,19 @@ export function FormularioApartamento({
   // recibe por prop en vez de acuñar los suyos por la misma razón.
   const idDe = (campo: keyof ApartamentoInput) => `${prefijo}-${campo}`;
 
-  const form = useForm<ApartamentoInput>({
+  const form = useForm<FormularioInput>({
     // El resolver POR DEFECTO es el de borrador: es lo que hace que al salir de
     // un campo se pinte su error inline sin exigir todavía lo que solo hace falta
     // para activar. El submit elige el esquema según el botón (§8.2).
-    resolver: zodResolver(esquemaBorrador),
+    //
+    // `esquemaFormularioBorrador` es `esquemaBorrador` MAS los dos arrays de la
+    // sección 5. Resolver con `esquemaBorrador` a secas dejaría los arrays sin
+    // mirar —un `z.object` descarta las claves que no conoce— y el duplicado de
+    // etiqueta llegaría a la base como un 23505 sobre una fila que el admin no
+    // sabría cuál es.
+    resolver: zodResolver(esquemaFormularioBorrador),
     mode: 'onBlur',
-    defaultValues: valoresIniciales(fila),
+    defaultValues: valoresIniciales(fila, cuartosGuardados ?? [], faltantesGuardados ?? []),
   });
 
   const {
@@ -223,7 +287,7 @@ export function FormularioApartamento({
     setErrorSecreto(null);
 
     const valores = getValues();
-    const esquema = modo === 'activar' ? esquemaActivar : esquemaBorrador;
+    const esquema = modo === 'activar' ? esquemaFormularioActivar : esquemaFormularioBorrador;
     const parseado = esquema.safeParse(valores);
 
     if (!parseado.success) {
@@ -231,13 +295,18 @@ export function FormularioApartamento({
       // llegar aquí con `modo === 'activar'` significa que la lista de faltantes
       // y el esquema discrepan. Se pinta inline igual, porque un submit que no
       // hace nada ni dice nada es peor que un mensaje redundante.
+      //
+      // El nombre del campo es el PATH COMPLETO (`cuartos.1.etiqueta`), no su
+      // primer segmento: con `problema.path[0]` los errores de los dos arrays se
+      // apilarían todos sobre `cuartos` y ninguna fila mostraría el suyo, que es
+      // exactamente lo que el issue por índice de `esquemaCuartos` evita.
       for (const problema of parseado.error.issues) {
-        const campo = problema.path[0];
-        if (typeof campo === 'string') {
-          setError(campo as keyof ApartamentoInput, { message: problema.message });
-        }
+        const nombre = nombreDeCampo(problema.path);
+        if (nombre) setError(nombre, { message: problema.message });
       }
-      enfocarPrimerError(parseado.error.issues[0]?.path[0]);
+      enfocarPorRuta(parseado.error.issues[0]?.path);
+      // El submit NO llega al servidor. Es la mitad de la regla de §8.1 sección
+      // 5 que el spec de este plan verifica contando las filas de la base.
       return;
     }
 
@@ -269,6 +338,36 @@ export function FormularioApartamento({
         return;
       }
 
+      // ── LA SECCION 5, DESPUES Y CON SU PROPIA ACCION ───────────────────────
+      // Va después a la fuerza: al crear no existe el `property_id` al que
+      // colgar los cuartos hasta que la llamada de arriba devuelve el id. Los
+      // `sort_order` se derivan del ORDEN DE LAS FILAS en pantalla, no del valor
+      // que traían: es lo que hace que quitar la fila del medio renumere el
+      // resto en vez de dejar un hueco.
+      const idGuardado = resultado.id;
+      if (idGuardado) {
+        const colecciones = await guardarCuartosYFaltantes(
+          idGuardado,
+          parseado.data.cuartos.map((c, i) => ({ ...c, sort_order: i })),
+          parseado.data.faltantes.map((f, i) => ({ ...f, sort_order: i })),
+        );
+
+        if (!colecciones.ok) {
+          // A TOAST, aunque el error traiga `campo`. `campoDeConstraint` traduce
+          // `property_rooms_etiqueta_uniq` a `etiqueta` y `mic_prop_uniq` a
+          // `nombre`, y ninguno de los dos es un campo de nivel superior de este
+          // formulario: son una fila de un array, y el error no dice CUAL.
+          // Pintarlo bajo una fila elegida al azar sería peor que un toast.
+          //
+          // En la práctica no debería verse: `esquemaFormularioBorrador` bloquea
+          // el duplicado antes de llegar aquí y la action reactiva el cuarto que
+          // solo estaba desactivado. Si un usuario lee este toast, es que la UI
+          // dejó pasar algo.
+          toast.error(colecciones.error);
+          return;
+        }
+      }
+
       toast.success(resultado.mensaje);
 
       if (!fila && resultado.id) {
@@ -291,6 +390,41 @@ export function FormularioApartamento({
   function enfocarPrimerError(campo: unknown) {
     if (typeof campo !== 'string') return;
     document.getElementById(`${prefijo}-${campo}`)?.focus();
+  }
+
+  /**
+   * De la ruta de un issue de Zod al nombre de campo de react-hook-form.
+   *
+   * Para los 12 campos planos la ruta tiene un solo segmento y el nombre es ese
+   * segmento. Para los dos arrays tiene tres (`['cuartos', 1, 'etiqueta']`) y el
+   * nombre es la ruta ENTERA unida por puntos, que es la notación con la que RHF
+   * indexa los `useFieldArray`. Quedarse con el primer segmento apilaría todos
+   * los errores de las ocho filas sobre `cuartos` y ninguna fila mostraría el
+   * suyo.
+   */
+  function nombreDeCampo(
+    ruta: readonly PropertyKey[],
+  ): Parameters<typeof setError>[0] | undefined {
+    if (ruta.length === 0 || typeof ruta[0] !== 'string') return undefined;
+    return ruta.join('.') as Parameters<typeof setError>[0];
+  }
+
+  /** Lleva el foco al control que falló, sea un campo plano o una fila. */
+  function enfocarPorRuta(ruta: readonly PropertyKey[] | undefined) {
+    if (!ruta || ruta.length === 0) return;
+    const [raiz, indice, campo] = ruta;
+
+    if (raiz === 'cuartos' && typeof indice === 'number') {
+      const cual = campo === 'room_type_id' ? 'tipo' : 'etiqueta';
+      document.getElementById(idDeFilaCuarto(prefijo, indice, cual))?.focus();
+      return;
+    }
+    if (raiz === 'faltantes' && typeof indice === 'number') {
+      document.getElementById(idDeFilaFaltante(prefijo, indice))?.focus();
+      return;
+    }
+
+    enfocarPrimerError(raiz);
   }
 
   return (
@@ -535,6 +669,30 @@ export function FormularioApartamento({
             onChange={(e) => setSecretos((s) => ({ ...s, notas_acceso: e.target.value }))}
           />
         </Field>
+      </Seccion>
+
+      {/*
+        SECCION 5 (UI-SPEC §8.1). Va después de Operación y antes de la barra.
+
+        Los dos editores NO alimentan la barra de acciones: los cuartos y los
+        faltantes no son puertas de activación, así que la suscripción granular
+        de arriba sigue teniendo los mismos ocho nombres y no se le añade ninguno.
+        Verificado con un test de Playwright que activa un apartamento completo
+        con la sección vacía.
+      */}
+      <Seccion titulo="Cuartos y faltantes">
+        <EditorCuartos form={form} tipos={tipos} prefijo={prefijo} />
+
+        {/*
+          UNA sola sección con las dos listas, no dos secciones: §8.1 dice
+          "cinco secciones" y las enumera, y la quinta es esta. El sub-encabezado
+          de 14/600 separa las dos listas sin acuñar una sexta regla de 1px, que
+          es lo que las convertiría en dos secciones de hecho.
+        */}
+        <h3 className="text-body font-semibold text-foreground">
+          Faltantes de este apartamento
+        </h3>
+        <EditorFaltantes form={form} prefijo={prefijo} />
       </Seccion>
 
       <BarraAccionesFormulario

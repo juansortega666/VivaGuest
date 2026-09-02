@@ -339,6 +339,13 @@
      `w-[320px]` seria el valor arbitrario que §2 prohibe. */
   --spacing-buscador:             320px;
   --spacing-filtro-cluster:       200px;
+
+  /* Columna del `Select` de tipo en cada fila del editor de cuartos
+     (UI-SPEC §8.1 seccion 5). Va como token porque §2 prohibe el valor
+     arbitrario, y como ancho fijo porque una columna elastica haria que las
+     ocho filas de un apartamento no alineen sus etiquetas entre si. 180px
+     alojan el nombre mas largo del catalogo (`Balcon / terraza`) sin recortar. */
+  --spacing-col-tipo-cuarto:      180px;
 }
 
 /* Encabezados de columna: 12px/600 uppercase con 0.04em de letter-spacing
