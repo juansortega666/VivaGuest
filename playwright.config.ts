@@ -69,6 +69,21 @@ export default defineConfig({
     // alguien mueva la pantalla de entrada.
     port: PUERTO,
 
+    // ── LA CONCESIÓN DE LOOPBACK DE APTO-12, ENCENDIDA SOLO AQUÍ ─────────────
+    // `e2e/calendario.spec.ts` levanta un servidor HTTP local que sirve las
+    // fixtures `.ics`, porque el fetch de validación lo hace el SERVIDOR de Next
+    // y `page.route()` no lo intercepta. Para que la allowlist de host admita
+    // `127.0.0.1` hace falta esta variable, y hace falta AQUÍ y no en `use`
+    // porque la lee el proceso del servidor, no el del navegador.
+    //
+    // El prefijo `NEXT_PUBLIC_` es deliberado: el mismo esquema valida en el
+    // cliente sin red (estado 2 de UI-SPEC §10.3), así que el valor tiene que
+    // estar también en el bundle. Y como se inyecta antes de `next build`, un
+    // build de producción que no la lleve compila la concesión apagada.
+    // La explicación completa, con la medición, está en
+    // `lib/domain/ical-url.schema.ts`.
+    env: { NEXT_PUBLIC_VIVAGUEST_FEED_LOCAL: '1' },
+
     reuseExistingServer: !process.env.CI,
     // `next build` en frío mide ~11s aquí, pero en CI sin caché es bastante más.
     timeout: 180_000,

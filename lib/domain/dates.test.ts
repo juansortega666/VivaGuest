@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { formatFechaBog, formatHoraLimite } from './dates';
+import { formatFechaBog, formatHoraLimite, horasDesdeDtstamp, hoyBog } from './dates';
 
 /**
  * Estos tests corren con `TZ=UTC` (fijado en `vitest.config.ts`). Es la zona en la que
@@ -52,5 +52,66 @@ describe('formatHoraLimite', () => {
 
   it('acepta tambien la forma sin segundos', () => {
     expect(formatHoraLimite('11:30')).toBe('11:30');
+  });
+});
+
+describe('hoyBog', () => {
+  /**
+   * La suite corre con `TZ=UTC` (vitest.config.ts). El caso que importa es el de
+   * las cinco horas en que UTC ya cambio de dia y Bogota todavia no: si `hoyBog`
+   * leyera el dia en UTC, el "proximo checkout" de APTO-12 se correria un dia
+   * entero cada noche entre las 19:00 y la medianoche de Bogota.
+   */
+  it('devuelve el dia de BOGOTA, no el de UTC, en la ventana de las 19:00 a las 24:00', () => {
+    vi.useFakeTimers();
+    // 2026-09-05T02:30:00Z = 2026-09-04 21:30 en Bogota.
+    vi.setSystemTime(new Date('2026-09-05T02:30:00Z'));
+    expect(hoyBog()).toBe('2026-09-04');
+    // CONTROL: sin la zona, el mismo instante da el dia siguiente. Sin esta
+    // linea la asercion de arriba pasaria igual con una implementacion en UTC
+    // si el instante elegido no cruzara la medianoche.
+    expect(new Date().toISOString().slice(0, 10)).toBe('2026-09-05');
+    vi.useRealTimers();
+  });
+
+  it('emite ISO `YYYY-MM-DD`, que es lo que compara `previsualizarIcs`', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-09T18:00:00Z'));
+    expect(hoyBog()).toBe('2026-01-09');
+    expect(hoyBog()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    vi.useRealTimers();
+  });
+});
+
+describe('horasDesdeDtstamp', () => {
+  const AHORA = Date.UTC(2026, 8, 1, 14, 30, 0); // 2026-09-01T14:30:00Z
+
+  it('cuenta horas ENTERAS desde el DTSTAMP del VCALENDAR', () => {
+    // El DTSTAMP de `__fixtures__/ical/feliz.ics`, 2h30m antes.
+    expect(horasDesdeDtstamp('20260901T120000Z', AHORA)).toBe(2);
+  });
+
+  it('trunca hacia abajo: 59 minutos siguen siendo 0 h', () => {
+    expect(horasDesdeDtstamp('20260901T133100Z', AHORA)).toBe(0);
+  });
+
+  it('sin DTSTAMP devuelve null y la linea se omite', () => {
+    expect(horasDesdeDtstamp(null, AHORA)).toBeNull();
+  });
+
+  it('una forma que no es la UTC basica devuelve null en vez de inventar', () => {
+    expect(horasDesdeDtstamp('2026-09-01T12:00:00Z', AHORA)).toBeNull();
+    expect(horasDesdeDtstamp('20260901T120000', AHORA)).toBeNull();
+    expect(horasDesdeDtstamp('basura', AHORA)).toBeNull();
+  });
+
+  it('un feed con el reloj adelantado no dice "hace -3 h"', () => {
+    expect(horasDesdeDtstamp('20260901T173000Z', AHORA)).toBe(0);
+  });
+
+  it('el mes se interpreta bien: no hay off-by-one de indice', () => {
+    // `Date.UTC` toma el mes en base 0. Sin el `-1` esto daria 744 h (un mes).
+    expect(horasDesdeDtstamp('20260901T143000Z', AHORA)).toBe(0);
+    expect(horasDesdeDtstamp('20260831T143000Z', AHORA)).toBe(24);
   });
 });
