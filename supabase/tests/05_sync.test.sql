@@ -18,12 +18,26 @@
 -- protegió llevan en la misma cadena comparada un aseo hermano de la misma
 -- corrida que SÍ se canceló.
 --
--- CONSECUENCIA OPERATIVA, y hay que conocerla antes de correr nada:
--- mientras este archivo esté en rojo, `npm run db:test` sale con código distinto
--- de cero. El plan 03-07 es el que devuelve la suite completa a verde. Los otros
--- cuatro archivos pgTAP siguen verdes desde el primer momento y ninguno de ellos
--- se toca aquí: los 6 fallos que quedan están concentrados en este archivo y en
--- ningún otro.
+-- Las aserciones 51 a 65 las añadió el plan 03-07 y tampoco nacen en rojo: son
+-- el contrato ejecutable del SCHEDULER, la migración 14. Cubren el dispatcher
+-- con su lease, el watchdog con su discriminador anti-tormenta, la alerta de
+-- colapso por condición propia, los tres jobs y la poda del historial.
+--
+-- ESTE ARCHIVO YA NO ESTÁ EN ROJO. El plan 03-07 aplicó la migración 14 y con
+-- ella las seis últimas aserciones rojas (4 a 9) pasaron a verde. Desde
+-- entonces `npm run db:test` sale con código CERO y los seis archivos pgTAP
+-- están en verde a la vez, por primera vez desde el plan 03-01.
+--
+-- CONSECUENCIA OPERATIVA, y hay que conocerla antes de tocar nada: a partir de
+-- aquí, un `not ok` en este archivo YA NO ES ESPERADO. Es una regresión. La
+-- lectura de "cuántos rojos hay" cambió de signo y el hábito de los cinco
+-- planes anteriores —"seis rojos, todo normal"— ahora es exactamente el error.
+--
+-- LO QUE ESTE ARCHIVO NO PUEDE MEDIR, dicho aquí arriba para que nadie añada
+-- una aserción que finja cubrirlo: **que el scheduler haya dejado de correr.**
+-- Ninguna aserción dentro de la base puede observar la ausencia de ejecución de
+-- la base. Esa mitad vive en `lib/domain/salud-sync.ts` y la ejerce el panel de
+-- la Fase 4 AL LEER, con `max(last_success_at)` sobre los feeds activos.
 --
 -- CÓMO CORRER SOLO ESTE ARCHIVO. `pgtap` NO está instalada de forma permanente
 -- en el stack local (medido: `installed_version` vacío en
@@ -57,6 +71,13 @@
 --   tras 03-03 (migración 11)      4 5 6 7 8 9                   (seis)
 --   tras 03-04 (migración 12)      4 5 6 7 8 9                   (seis, LAS MISMAS)
 --   tras 03-05 (migración 13)      4 5 6 7 8 9                   (seis, LAS MISMAS)
+--   tras 03-07 (migración 14)      —                             (NINGUNA)
+--
+-- Verificado en el plan 03-07 con el recorrido directo de abajo, no solo con el
+-- resumen de pg_prove: `1..65`, 65 `ok`, 0 `not ok`, y la última línea impresa
+-- es la 65. Las tres comprobaciones juntas —plan declarado, suma, y que la
+-- última aserción del archivo aparezca— son las que distinguen "verde" de
+-- "abortó pronto y salió con menos rojos".
 --
 -- Y NO BASTA CON LOS IDENTIFICADORES TAMPOCO: hay que comprobar que el archivo
 -- CORRIÓ ENTERO. Medido en el plan 03-05, con un señuelo: si una sentencia
@@ -129,7 +150,7 @@
 -- ============================================================================
 
 begin;
-select plan(50);
+select plan(65);
 
 -- ---------------------------------------------------------------------------
 -- Helper: leer un escalar de un catálogo que quizá todavía no existe.
@@ -1953,5 +1974,535 @@ select is(
   ],
   array['true', 'true', 'true', 'true', 'true', '0', '0', 'true', 'true', 'true'],
   'toda cancelación de la función lleva sus candados, no hay borrados, needs_review no se apaga y cancel_reason es una lista cerrada');
+
+
+-- ===========================================================================
+-- EL SCHEDULER — aserciones 51 a 64, añadidas por el plan 03-07 (SYNC-09,
+-- SYNC-10) sobre la migración 14.
+--
+-- Este bloque NO nace en rojo: mide el comportamiento de `dispatch_feed_syncs`
+-- y `feed_health_watchdog`, que entrega esa misma migración. Y es el bloque que
+-- devuelve el archivo entero a cero `not ok` por primera vez desde el plan
+-- 03-01.
+--
+-- LO QUE ESTE ARCHIVO PUEDE MEDIR Y LO QUE NO, y hay que tenerlo claro antes de
+-- leer una sola aserción:
+--
+--   SÍ se puede medir: que un feed obsoleto alerte; que no repita; que todos
+--   los feeds obsoletos a la vez produzcan UNA alerta de job y no 34; que el
+--   colapso de formato alerte por derecho propio; que el dispatcher respete el
+--   lease; que la poda borre lo viejo y respete lo reciente.
+--
+--   NO se puede medir aquí, y no por falta de ganas: **que el scheduler haya
+--   dejado de correr.** Ninguna aserción dentro de la base puede observar la
+--   ausencia de ejecución de la base. Esa mitad vive en `lib/domain/salud-sync.ts`
+--   y la ejerce el panel de la Fase 4 AL LEER. Está dicho en la cabecera de la
+--   migración 14 y se repite aquí para que nadie añada una aserción que finja
+--   cubrirlo.
+--
+-- EL ARNÉS, igual que en el bloque del plan 03-05: centinela y control. Se
+-- siembra una notificación de otro tipo ANTES de medir, para que las igualdades
+-- a cero no sean `0 = 0` sobre una tabla vacía, y cada aserción que afirma
+-- "ninguna de esta clase" lleva en la misma cadena una que SÍ se movió.
+--
+-- CONTROL TOTAL DEL CONJUNTO DE FEEDS ACTIVOS. Los bloques anteriores dejaron
+-- catorce feeds vivos, y el discriminador anti-tormenta depende de la IGUALDAD
+-- entre obsoletos y activos: sin desactivarlos todos primero, cada escenario de
+-- abajo mediría una población distinta de la que cree medir.
+-- ===========================================================================
+
+update public.calendar_feeds
+   set is_active            = false,
+       last_success_at      = null,
+       last_error           = null,
+       dead_alert_sent_at   = null,
+       claimed_at           = null,
+       consecutive_failures = 0;
+
+delete from public.notifications;
+
+-- El centinela. Es de OTRO tipo a propósito: si una aserción de abajo contara
+-- filas de la tabla en vez de filas de `calendario_caido`, esta fila lo delata.
+insert into public.notifications
+  (recipient_id, type, title, body, payload, dedupe_key)
+values
+  ('ad000001-0000-0000-0000-000000000001', 'aseo_cancelado'::public.notification_type,
+   'Centinela', 'Fila de control que ninguna aserción del watchdog debe contar.',
+   '{"scope":"centinela"}'::jsonb, 'centinela:03-07');
+
+-- ---------------------------------------------------------------------------
+-- ESCENARIO 1 — UN link caído entre varios sanos.
+-- Es el caso de SYNC-09 y el más común: Airbnb dejó de servir UN calendario.
+-- ---------------------------------------------------------------------------
+update public.calendar_feeds
+   set is_active = true, last_success_at = now() - interval '4 hours'
+ where id = 'cfd00001-0000-0000-0000-000000000001';
+update public.calendar_feeds
+   set is_active = true, last_success_at = now()
+ where id in ('cfd00002-0000-0000-0000-000000000002',
+              'cfd00003-0000-0000-0000-000000000003');
+
+select public.feed_health_watchdog();
+
+-- 51  Una alerta POR ADMIN ACTIVO sobre el feed obsoleto, y NINGUNA de job.
+--
+--     Los dos admins activos y el desactivado son del bloque anterior: con un
+--     solo admin, un `cross join` roto que emitiera una fila por FEED en vez de
+--     por destinatario daría el mismo número y no se vería.
+--
+--     El último elemento nombra el feed. Sin él, la aserción pasaría igual si
+--     el watchdog alertara del feed equivocado.
+select is(
+  array[
+    (select count(*)::text from public.notifications
+      where type = 'calendario_caido' and payload ->> 'scope' = 'feed'),
+    (select count(*)::text from public.notifications
+      where type = 'calendario_caido' and payload ->> 'scope' = 'job'),
+    (select count(distinct recipient_id)::text from public.notifications
+      where type = 'calendario_caido'),
+    (select coalesce(string_agg(distinct payload ->> 'motivo', '+'), '<ninguno>')
+       from public.notifications where type = 'calendario_caido'),
+    (select coalesce(string_agg(distinct payload ->> 'feed_id', '+'), '<ninguno>')
+       from public.notifications where type = 'calendario_caido')],
+  array['2', '0', '2', 'sin_respuesta',
+        'cfd00001-0000-0000-0000-000000000001'],
+  'SYNC-09 un link que deja de responder produce UNA alerta de feed por admin activo, y ninguna de job');
+
+-- 52  EL CONTROL DEL ARNÉS. El centinela sigue ahí y no lo contó nadie, y el
+--     `property_id` de la alerta apunta al apartamento del feed caído, que es
+--     lo que lleva al admin a algún sitio al tocar la notificación.
+--
+--     Sin este par, la aserción 51 sería compatible con un watchdog que
+--     escribiera notificaciones sin apartamento y con una tabla que ya venía
+--     sucia.
+select is(
+  array[
+    (select count(*)::text from public.notifications
+      where payload ->> 'scope' = 'centinela'),
+    (select count(*)::text from public.notifications),
+    (select coalesce(string_agg(distinct property_id::text, '+'), '<ninguno>')
+       from public.notifications where type = 'calendario_caido')],
+  array['1', '3', 'cd000001-0000-0000-0000-000000000001'],
+  'el centinela sobrevive sin ser contado y la alerta de feed lleva su property_id');
+
+-- 53  NO REPITE. Una segunda llamada inmediata no añade nada.
+--     Aquí actúan DOS mecanismos a la vez y conviene saberlo: la compuerta de
+--     `dead_alert_sent_at`, que la 54 aísla, y el índice único parcial sobre
+--     `(recipient_id, dedupe_key)`, que dentro de una misma transacción ve el
+--     mismo cubo horario porque `now()` no avanza. La 54 separa el primero.
+select public.feed_health_watchdog();
+
+select is(
+  (select count(*)::text from public.notifications where type = 'calendario_caido'),
+  '2',
+  'dos llamadas seguidas al watchdog producen UNA sola alerta, no dos');
+
+-- ---------------------------------------------------------------------------
+-- ESCENARIO 2 — la compuerta de seis horas, AISLADA y en las DOS direcciones.
+--
+-- No se puede demostrar contando notificaciones: dentro de una transacción
+-- `now()` está congelado, así que la `dedupe_key` no cambia de cubo horario y el
+-- índice único bloquearía la repetición aunque la compuerta estuviera rota. Lo
+-- que sí distingue una cosa de la otra es `dead_alert_sent_at`: el watchdog solo
+-- la pisa sobre los feeds que consideró elegibles.
+--
+-- Por eso cada dirección mide DOS cosas: cuántas alertas salieron con la tabla
+-- ya vacía, y si la marca se movió.
+-- ---------------------------------------------------------------------------
+delete from public.notifications;
+update public.calendar_feeds
+   set dead_alert_sent_at = now() - interval '1 hour'
+ where id = 'cfd00001-0000-0000-0000-000000000001';
+select public.feed_health_watchdog();
+
+create table pg_temp.compuerta_cerrada as
+select (select count(*) from public.notifications where type = 'calendario_caido') as alertas,
+       (select max(dead_alert_sent_at) from public.calendar_feeds
+         where id = 'cfd00001-0000-0000-0000-000000000001') as marca;
+
+delete from public.notifications;
+update public.calendar_feeds
+   set dead_alert_sent_at = now() - interval '7 hours'
+ where id = 'cfd00001-0000-0000-0000-000000000001';
+select public.feed_health_watchdog();
+
+create table pg_temp.compuerta_abierta as
+select (select count(*) from public.notifications where type = 'calendario_caido') as alertas,
+       (select max(dead_alert_sent_at) from public.calendar_feeds
+         where id = 'cfd00001-0000-0000-0000-000000000001') as marca;
+
+-- 54  A la hora NO alerta y no toca la marca; a las siete SÍ alerta y la pisa.
+--     Escrita solo con la primera mitad, un watchdog que no alertara nunca
+--     pasaría en verde.
+select is(
+  array[
+    (select alertas::text from pg_temp.compuerta_cerrada),
+    (select (marca = now() - interval '1 hour')::text from pg_temp.compuerta_cerrada),
+    (select alertas::text from pg_temp.compuerta_abierta),
+    (select (marca = now())::text from pg_temp.compuerta_abierta)],
+  array['0', 'true', '2', 'true'],
+  'SYNC-09 la cadencia es de una alerta por feed cada 6 horas: a la hora no repite, a las siete sí');
+
+-- ---------------------------------------------------------------------------
+-- ESCENARIO 3 — TODOS los feeds obsoletos. EL ANTI-TORMENTA.
+--
+-- Es la aserción central del plan y la razón de que el discriminador exista.
+-- Sin él, aquí saldrían tantas alertas de feed como feeds activos haya, y
+-- NINGUNA diría lo que de verdad pasó.
+-- ---------------------------------------------------------------------------
+delete from public.notifications;
+update public.calendar_feeds
+   set last_success_at = now() - interval '4 hours', dead_alert_sent_at = null
+ where is_active;
+select public.feed_health_watchdog();
+
+-- 55  UNA alerta de job por admin activo, CERO de feed.
+--
+--     El cuarto elemento es el que impide el falso verde por vacuidad: si el
+--     watchdog no hiciera nada en absoluto, los dos primeros serían '0' y '0',
+--     y "cero alertas de feed" se cumpliría de la peor forma posible.
+select is(
+  array[
+    (select count(*)::text from public.notifications
+      where type = 'calendario_caido' and payload ->> 'scope' = 'job'),
+    (select count(*)::text from public.notifications
+      where type = 'calendario_caido' and payload ->> 'scope' = 'feed'),
+    (select coalesce(string_agg(distinct payload ->> 'motivo', '+'), '<ninguno>')
+       from public.notifications where type = 'calendario_caido'),
+    ((select coalesce(string_agg(distinct dedupe_key, '+'), '<ninguno>')
+        from public.notifications where type = 'calendario_caido'
+          and payload ->> 'scope' = 'job')
+     = 'job_dead:' || to_char(date_trunc('hour', now()), 'YYYYMMDDHH24'))::text],
+  array['2', '0', 'todos_los_feeds_obsoletos', 'true'],
+  'SYNC-10 con TODOS los feeds obsoletos se emite UNA alerta de job y se suprimen las de feed');
+
+-- 56  Y la medida literal de la tormenta que el discriminador evita: hay TRES
+--     feeds activos obsoletos y, sin el discriminador, saldrían tres alertas de
+--     feed por admin. El número no se escribe a mano: se cuenta.
+select is(
+  (select count(*)::text from public.calendar_feeds
+    where is_active
+      and (last_success_at is null or last_success_at < now() - interval '3 hours')),
+  '3',
+  'los tres feeds activos están obsoletos: son las tres alertas de feed que el discriminador suprimió');
+
+-- ---------------------------------------------------------------------------
+-- ESCENARIO 4 — ningún feed activo.
+-- ---------------------------------------------------------------------------
+delete from public.notifications;
+update public.calendar_feeds set is_active = false;
+select public.feed_health_watchdog();
+
+create table pg_temp.sin_feeds as
+select (select count(*) from public.notifications) as alertas;
+
+-- Control positivo: se reactiva uno obsoleto y el contador SÍ se mueve.
+update public.calendar_feeds
+   set is_active = true, last_success_at = now() - interval '4 hours',
+       dead_alert_sent_at = null, last_error = null
+ where id = 'cfd00001-0000-0000-0000-000000000001';
+select public.feed_health_watchdog();
+
+-- 57  Con cero feeds activos el watchdog calla, y NO por estar roto.
+--     Un despliegue nuevo, o uno al que le desactivaron todos los calendarios a
+--     propósito, no puede recibir una alerta de job muerto cada hora.
+select is(
+  array[
+    (select alertas::text from pg_temp.sin_feeds),
+    (select count(*)::text from public.notifications where type = 'calendario_caido')],
+  array['0', '2'],
+  'sin feeds activos el watchdog no alerta, y con uno obsoleto vuelve a alertar');
+
+-- ---------------------------------------------------------------------------
+-- ESCENARIO 5 — EL COLAPSO DE FORMATO, ALERTADO POR DERECHO PROPIO.
+--
+-- ESTE ES EL TRASPASO EXPLÍCITO DEL PLAN 03-06 Y LA ASERCIÓN MÁS IMPORTANTE DEL
+-- BLOQUE. Merece leerse entera:
+--
+--   El worker tiene una guarda de colapso: si el cuerpo llega bien pero NINGÚN
+--   evento clasifica como reserva, NO llama al RPC. Es lo correcto —así ningún
+--   aseo pagado se cancela porque el proveedor cambió una cadena— y por eso
+--   mismo **la alerta de `formato_desconocido` que el RPC emite (aserción 48)
+--   NO SE EMITE NUNCA por el camino real**. La 48 prueba una ruta que el worker
+--   impide alcanzar en producción.
+--
+--   Sin esta aserción, el modo de fallo más peligroso del producto —el
+--   proveedor cambia la forma del campo libre del evento y todo deja de
+--   clasificar— sería SILENCIOSO: cero aseos creados, cero cancelados, y nadie
+--   informado.
+--
+-- LA CLAVE DEL DISEÑO DEL ESCENARIO: `last_success_at` se pone FRESCO. Así la
+-- rama de obsolescencia no puede dispararse, y la única forma de que salga una
+-- alerta es que el watchdog mire `last_error` como condición propia. Con el
+-- feed obsoleto además, esta aserción pasaría por el motivo equivocado.
+-- ---------------------------------------------------------------------------
+delete from public.notifications;
+update public.calendar_feeds
+   set is_active = false, last_error = null, dead_alert_sent_at = null;
+update public.calendar_feeds
+   set is_active = true, last_success_at = now(),
+       last_error = 'cero_reservas_clasificadas'
+ where id = 'cfd00001-0000-0000-0000-000000000001';
+update public.calendar_feeds
+   set is_active = true, last_success_at = now()
+ where id in ('cfd00002-0000-0000-0000-000000000002',
+              'cfd00003-0000-0000-0000-000000000003');
+select public.feed_health_watchdog();
+
+-- 58  El colapso alerta aunque el feed esté PERFECTAMENTE FRESCO.
+select is(
+  array[
+    (select count(*)::text from public.notifications
+      where type = 'calendario_caido' and payload ->> 'motivo' = 'formato_desconocido'),
+    (select count(*)::text from public.notifications
+      where type = 'calendario_caido' and payload ->> 'motivo' = 'sin_respuesta'),
+    (select coalesce(string_agg(distinct payload ->> 'scope', '+'), '<ninguno>')
+       from public.notifications where type = 'calendario_caido'),
+    (select coalesce(string_agg(distinct payload ->> 'feed_id', '+'), '<ninguno>')
+       from public.notifications where type = 'calendario_caido'),
+    -- El cubo es DIARIO, no horario: un formato roto no empeora hora a hora.
+    ((select coalesce(string_agg(distinct dedupe_key, '+'), '<ninguno>')
+        from public.notifications where type = 'calendario_caido')
+     = 'fmt:cfd00001-0000-0000-0000-000000000001:' || to_char(public.today_bog(), 'YYYYMMDD'))::text],
+  array['2', '0', 'feed', 'cfd00001-0000-0000-0000-000000000001', 'true'],
+  'SYNC-06 el colapso de formato alerta por CONDICIÓN PROPIA sobre last_error, con el feed fresco y sin esperar a la obsolescencia');
+
+-- ---------------------------------------------------------------------------
+-- ESCENARIO 6 — TODOS los feeds colapsados a la vez.
+-- Es el día que el proveedor cambia el formato para todo el mundo. No cambiaron
+-- 34 formatos: cambió UNO. La alerta útil es una que lo diga así.
+-- ---------------------------------------------------------------------------
+delete from public.notifications;
+update public.calendar_feeds
+   set last_error = 'cero_reservas_clasificadas', last_success_at = now()
+ where is_active;
+select public.feed_health_watchdog();
+
+-- 59  UNA alerta de job por admin, cero de feed, y el motivo dice qué pasó.
+select is(
+  array[
+    (select count(*)::text from public.notifications
+      where type = 'calendario_caido' and payload ->> 'scope' = 'job'),
+    (select count(*)::text from public.notifications
+      where type = 'calendario_caido' and payload ->> 'scope' = 'feed'),
+    (select coalesce(string_agg(distinct payload ->> 'motivo', '+'), '<ninguno>')
+       from public.notifications where type = 'calendario_caido')],
+  array['2', '0', 'todos_los_feeds_colapsados'],
+  'con TODOS los feeds colapsados se emite UNA alerta de job y no una por feed');
+
+-- ---------------------------------------------------------------------------
+-- ESCENARIO 7 — un feed colapsado Y ADEMÁS obsoleto.
+--
+-- Ocurre solo: el worker no refresca `last_success_at` cuando registra un
+-- colapso, así que a las tres horas el mismo feed cumple las dos condiciones.
+-- Sin la exclusión, el admin recibiría DOS alertas del mismo hecho diciendo
+-- cosas distintas, y una de las dos —"el calendario no responde"— lo mandaría a
+-- revisar la conexión, que está perfectamente bien.
+-- ---------------------------------------------------------------------------
+delete from public.notifications;
+update public.calendar_feeds
+   set last_error = null, last_success_at = now(), dead_alert_sent_at = null
+ where is_active;
+update public.calendar_feeds
+   set last_error = 'cero_reservas_clasificadas',
+       last_success_at = now() - interval '4 hours'
+ where id = 'cfd00001-0000-0000-0000-000000000001';
+select public.feed_health_watchdog();
+
+-- 60  Solo la alerta que explica lo que pasó, no las dos.
+select is(
+  array[
+    (select count(*)::text from public.notifications
+      where payload ->> 'motivo' = 'formato_desconocido'),
+    (select count(*)::text from public.notifications
+      where payload ->> 'motivo' = 'sin_respuesta'),
+    (select count(*)::text from public.notifications
+      where type = 'calendario_caido')],
+  array['2', '0', '2'],
+  'un feed colapsado y además obsoleto recibe la alerta de formato y NO también la de sin respuesta');
+
+-- ===========================================================================
+-- EL DISPATCHER
+-- ===========================================================================
+
+-- 61  EL SEÑUELO DEL SECRETO AUSENTE, y va ANTES de crear nada en Vault porque
+--     después ya no se puede medir.
+--
+--     El modo de fallo de un despliegue sin secretos tiene que ser RUIDOSO. La
+--     alternativa educada —volver en silencio— dejaría el sync entero muerto
+--     sin ninguna señal: ni un aseo creado, ni un error en pantalla, ni una
+--     fila distinta en ninguna tabla de negocio. Con la excepción, cada tick
+--     deja `status = 'failed'` en `cron.job_run_details` con este mensaje
+--     literal en `return_message`.
+select throws_ok(
+  'select public.dispatch_feed_syncs()',
+  'faltan secretos de sync en vault: app_base_url / cron_shared_secret',
+  'SYNC-01 el dispatcher lanza con mensaje explícito cuando falta un secreto de Vault');
+
+-- Ahora sí, los dos secretos. Valores de juguete: lo que se mide es la
+-- SELECCIÓN de feeds, no que el POST llegue a ningún sitio. `net.http_post`
+-- encola la petición en una tabla y el `rollback` del final la deshace, así que
+-- de este archivo no sale ni una petición HTTP.
+select vault.create_secret('http://ejemplo.invalido', 'app_base_url',       'fixture 05_sync');
+select vault.create_secret('secreto-de-juguete',      'cron_shared_secret', 'fixture 05_sync');
+
+-- Cuatro feeds que cubren las cuatro combinaciones que el `where` distingue.
+update public.calendar_feeds set is_active = false;
+
+update public.calendar_feeds
+   set is_active = true, next_sync_at = now() - interval '1 minute', claimed_at = null
+ where id = 'cfd00001-0000-0000-0000-000000000001';          -- vencido y libre: SÍ
+
+update public.calendar_feeds
+   set is_active = true, next_sync_at = now() - interval '1 minute',
+       claimed_at = now() - interval '2 minutes'
+ where id = 'cfd00002-0000-0000-0000-000000000002';          -- lease VIVO: no
+
+update public.calendar_feeds
+   set is_active = true, next_sync_at = now() + interval '1 hour', claimed_at = null
+ where id = 'cfd00003-0000-0000-0000-000000000003';          -- no vencido: no
+
+update public.calendar_feeds
+   set is_active = true, next_sync_at = now() - interval '1 minute',
+       claimed_at = now() - interval '20 minutes'
+ where id = 'cfd00004-0000-0000-0000-000000000004';          -- lease CADUCADO: SÍ
+
+update public.calendar_feeds
+   set is_active = false, next_sync_at = now() - interval '1 minute', claimed_at = null
+ where id = 'cfd00005-0000-0000-0000-000000000005';          -- inactivo: no
+
+-- El despacho se ejecuta en su propia sentencia y su resultado se guarda: dentro
+-- de un constructor de array el orden de evaluación no está garantizado, y leer
+-- `claimed_at` antes de haber despachado daría un verde de mentira.
+create table pg_temp.despacho as select public.dispatch_feed_syncs() as n;
+
+-- 62  Las cinco filas del `where`, en una sola cadena comparada.
+--
+--     QUÉ PROTEGE CADA MECANISMO, porque es fácil atribuirlo mal: el LEASE no
+--     protege contra ticks solapados —está medido que `pg_cron` no lanza un job
+--     consigo mismo mientras el anterior sigue vivo—, protege contra el WORKER
+--     SOBREVIVIENDO A SU PROPIO INTERVALO. El cuarto feed es el que demuestra
+--     que el lease CADUCA: sin caducidad, un worker que muriese sin soltar
+--     `claimed_at` congelaría ese feed para siempre.
+select is(
+  array[
+    (select n::text from pg_temp.despacho),
+    (select (max(claimed_at) = now())::text from public.calendar_feeds
+      where id = 'cfd00001-0000-0000-0000-000000000001'),
+    (select (max(claimed_at) = now() - interval '2 minutes')::text from public.calendar_feeds
+      where id = 'cfd00002-0000-0000-0000-000000000002'),
+    (select (max(claimed_at) is null)::text from public.calendar_feeds
+      where id = 'cfd00003-0000-0000-0000-000000000003'),
+    (select (max(claimed_at) = now())::text from public.calendar_feeds
+      where id = 'cfd00004-0000-0000-0000-000000000004'),
+    (select (max(claimed_at) is null)::text from public.calendar_feeds
+      where id = 'cfd00005-0000-0000-0000-000000000005')],
+  array['2', 'true', 'true', 'true', 'true', 'true'],
+  'SYNC-01 el dispatcher toma el feed vencido y libre y el de lease caducado, y salta el reclamado, el no vencido y el inactivo');
+
+-- ===========================================================================
+-- LOS JOBS Y LA PODA
+-- ===========================================================================
+
+-- 63  Los tres jobs, con la EXPRESIÓN del dispatcher fijada.
+--
+--     El `schedule` no es decorativo y esta aserción lo congela por una razón
+--     medida: `cron.schedule` RECHAZA el literal de intervalo en minutos con
+--     `ERROR: invalid schedule: 1 minute`. La sintaxis de intervalo de pg_cron
+--     1.6.4 solo admite segundos, así que el tick de un minuto tiene que
+--     escribirse como expresión cron de cinco estrellas. Escrito de la otra
+--     forma, la migración falla al aplicarse; escrito como `*/5`, la cadencia
+--     efectiva de un feed pasa de "30 a 31 minutos" a "30 a 35", y el criterio
+--     de la fase dice 30.
+--
+--     Las aserciones 4, 5 y 6 ya afirman que cada job existe y está activo.
+--     Esta afirma que no hay NINGÚN OTRO y que el tick es el que se decidió.
+select is(
+  array[
+    (select count(*)::text from cron.job
+      where jobname in ('dispatch-feed-syncs', 'feed-health-watchdog', 'purge-cron-history')),
+    (select coalesce(string_agg(schedule, '+' order by jobname), '<ninguno>') from cron.job
+      where jobname in ('dispatch-feed-syncs', 'feed-health-watchdog', 'purge-cron-history')),
+    (select count(*)::text from cron.job where not active)],
+  array['3', '* * * * *+0 * * * *+17 4 * * *', '0'],
+  'SYNC-01 los tres jobs del motor están agendados, activos y con el tick decidido');
+
+-- ---------------------------------------------------------------------------
+-- LA PODA, EN LAS DOS DIRECCIONES.
+--
+-- `pg_cron` NO limpia `cron.job_run_details`. Nunca. Con el tick de un minuto
+-- son 1440 filas al día solo por el dispatcher: más de medio millón al año en
+-- un free tier de 500 MB. Es una fuga de disco silenciosa en una tabla que
+-- nadie mira hasta que la base se llena.
+--
+-- Y hay que afirmar las DOS direcciones. Una poda escrita con el signo al revés
+-- —`end_time > now() - interval '7 days'`— borraría exactamente lo contrario:
+-- el historial reciente, que es el único que sirve para diagnosticar, dejando
+-- intacta la basura antigua. Contar solo "borró algo" no distingue las dos.
+--
+-- Se siembran las dos filas y se corre el MISMO texto que el job tiene
+-- agendado, leído de `cron.job`, no una copia escrita a mano aquí: una copia se
+-- desincroniza del job el día que alguien cambie la retención.
+-- ---------------------------------------------------------------------------
+insert into cron.job_run_details
+  (jobid, runid, job_pid, database, username, command, status, return_message, start_time, end_time)
+select j.jobid, 990001, 1, 'postgres', 'postgres', 'x', 'succeeded', 'x',
+       now() - interval '30 days', now() - interval '30 days'
+  from cron.job j where j.jobname = 'purge-cron-history';
+
+insert into cron.job_run_details
+  (jobid, runid, job_pid, database, username, command, status, return_message, start_time, end_time)
+select j.jobid, 990002, 1, 'postgres', 'postgres', 'x', 'succeeded', 'x',
+       now() - interval '1 hour', now() - interval '1 hour'
+  from cron.job j where j.jobname = 'purge-cron-history';
+
+create table pg_temp.antes_de_podar as
+select count(*) filter (where runid = 990001) as vieja,
+       count(*) filter (where runid = 990002) as reciente
+  from cron.job_run_details where runid in (990001, 990002);
+
+do $$
+declare v_comando text;
+begin
+  select command into v_comando from cron.job where jobname = 'purge-cron-history';
+  execute v_comando;
+end $$;
+
+-- 64  La vieja se fue, la reciente se quedó, y las dos estaban antes.
+--     El par de la izquierda es el control positivo: sin él, un `insert` que
+--     hubiera fallado en silencio dejaría "0 viejas después" en verde sin que
+--     la poda hubiera hecho nada.
+select is(
+  array[
+    (select vieja::text    from pg_temp.antes_de_podar),
+    (select reciente::text from pg_temp.antes_de_podar),
+    (select count(*)::text from cron.job_run_details where runid = 990001),
+    (select count(*)::text from cron.job_run_details where runid = 990002)],
+  array['1', '1', '0', '1'],
+  'la poda del historial borra lo que pasa de 7 días y NO toca lo reciente');
+
+-- 65  Ninguna de las tres funciones del motor es ejecutable por `authenticated`.
+--
+--     La aserción 9 cubre `anon`. Esta cubre el otro rol que llega desde el
+--     navegador, y hace falta por separado: `anon` y `authenticated` son roles
+--     distintos con ACL distinto, y un `grant execute to authenticated` escrito
+--     por costumbre dejaría la 9 en verde. Un usuario autenticado cualquiera
+--     —un aseador— podría entonces disparar el fan-out entero o inundar la
+--     bandeja de los admins de alertas.
+select is_empty($q$
+  select f.nombre
+    from unnest(array['dispatch_feed_syncs',
+                      'sync_feed_apply',
+                      'feed_health_watchdog']) as f(nombre)
+   where not exists (
+     select 1
+       from pg_proc p
+       join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname = f.nombre
+        and p.prokind = 'f'
+        and not has_function_privilege('authenticated', p.oid, 'execute'))
+$q$, 'ninguna de las tres funciones del motor de sync es ejecutable por authenticated');
+
 select * from finish();
 rollback;
