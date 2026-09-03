@@ -3,6 +3,17 @@ import { fileURLToPath } from 'node:url';
 import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  // `tsconfig.json` declara `jsx: "preserve"` porque quien compila JSX en este
+  // proyecto es Next, no tsc. El transformador de Vite respeta ese ajuste, asi
+  // que sin esta linea cualquier import de un `.tsx` desde un test revienta con
+  // `content contains invalid JS syntax`: el JSX llega crudo al analisis de
+  // imports. Medido al escribir el primer test de componente del repo.
+  //
+  // La clave es `oxc` y NO `esbuild`: Vitest 4 corre sobre Vite 8, que cambio el
+  // transformador a oxc. Con `esbuild: { jsx: 'automatic' }` el error es
+  // identico y silencioso, porque la opcion simplemente se ignora.
+  // `automatic` es el runtime de React 19, el mismo que usa Next.
+  oxc: { jsx: { runtime: 'automatic' } },
   resolve: {
     alias: {
       // La mayoria de los unitarios importan por ruta relativa, pero
