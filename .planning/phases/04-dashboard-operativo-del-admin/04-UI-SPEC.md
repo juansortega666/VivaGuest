@@ -14,7 +14,7 @@ created: 2026-09-03
 
 **REQ-IDs cubiertos:** ASEO-01 a ASEO-06, ASEO-08, ASEO-09, DASH-01 a DASH-07, REPORT-04. ASEO-07 se cubre solo en su superficie de error (§12.6).
 
-**Este documento hereda `02-UI-SPEC.md` completo.** Espaciado, tipografía, paleta, reglas de movimiento, accesibilidad y contrato de copy siguen vigentes tal cual. Aquí solo se escribe lo que **cambia** o lo que **se añade**. Las tres supersesiones explícitas están marcadas con **SUPERSEDE** y son las únicas.
+**Este documento hereda `02-UI-SPEC.md` completo.** Espaciado, tipografía, paleta, reglas de movimiento, accesibilidad y contrato de copy siguen vigentes tal cual. Aquí solo se escribe lo que **cambia** o lo que **se añade**. Las dos supersesiones explícitas están marcadas con **SUPERSEDE** y son las únicas.
 
 ---
 
@@ -135,7 +135,7 @@ Pasa AA en las dos superficies donde se usa (fila de tabla sobre `--background`,
 
 ### 4.2 Ampliación de la lista cerrada del acento
 
-**SUPERSEDE 1 de 3.** `02-UI-SPEC.md` §4.4 fija cinco usos de `--primary`. Esta fase añade uno y precisa otro:
+**SUPERSEDE 1 de 2.** `02-UI-SPEC.md` §4.4 fija cinco usos de `--primary`. Esta fase añade uno y precisa otro:
 
 6. **Barra de progreso del `Sheet` de confirmación encadenada** (§10). Es el mismo caso que el punto 4 (barra de progreso del banner de montaje): una barra de avance de una tarea larga.
 
@@ -247,7 +247,7 @@ Ruta: **`/operacion`**, una sola (D-01). Sin pestañas.
 - Contenedor: `max-w-admin` (1440px), `px-xl` (24px) → **1392px útiles**.
 - Rejilla: `grid-template-columns: minmax(0, 1fr) var(--container-rail)`, `gap-2xl` (32px).
 - **Carril ancho = 1392 − 360 − 32 = 1000px** a 1440.
-- A 1280px, el mínimo soportado: 1280 − 48 = 1232 útiles → **carril ancho = 840px**. Las columnas fijas de la tabla de día suman 532px (§7.1), así que `APARTAMENTO` queda en 308px, por encima de su mínimo de 200. **1280px es el piso exacto de este layout**, no una estimación.
+- A 1280px, el mínimo soportado: 1280 − 48 = 1232 útiles → **carril ancho = 840px**. Las columnas fijas de la tabla de día suman 532px (§7.1), así que `APARTAMENTO` queda en 308px contra su mínimo de 200: **sobran 108px de holgura**. El mínimo de 1280px no lo fija esta fase, viene de `02-UI-SPEC.md` §6.3; lo que aporta este contrato es haberlo **verificado con cuentas y no a ojo**, y la tabla de día cabe ahí sin apretar.
 
 ### 6.2 El carril lateral, y por qué tiene alturas fijas
 
@@ -276,7 +276,7 @@ Las dos cabeceras llevan `position: sticky; top: 0` dentro de su propio scrollpo
 
 ### 6.3 Navegación
 
-**SUPERSEDE 2 de 3.** `02-UI-SPEC.md` §6.1 dice: *"La Fase 4 añade Día / Sin confirmar / Alertas"*. Eso se escribió antes de D-01, que fija **una sola ruta**. Tres links a la misma pantalla serían tres links muertos.
+**SUPERSEDE 2 de 2.** `02-UI-SPEC.md` §6.1 dice: *"La Fase 4 añade Día / Sin confirmar / Alertas"*. Eso se escribió antes de D-01, que fija **una sola ruta**. Tres links a la misma pantalla serían tres links muertos.
 
 `TopNav` pasa a tener **tres** links, en este orden:
 
@@ -544,8 +544,8 @@ Alto `--spacing-fila-alerta` **64px**, `padding: --spacing-md` (12px), `gap: --s
 
 ```
 ┌────────────────────────────────────────────────┐
-│ ⚡  URGENTE                        hace 8 min  │  ← 12/600 uppercase  ·  12/400 tabular
-│    Bogotá 3 · Entra huésped el mismo día    ✓ │  ← 14/600 + 14/400 muted, truncado
+│ 🔨  DAÑO                           hace 8 min  │  ← 12/600 uppercase  ·  12/400 tabular
+│    Bogotá 3 · Rejilla del sifón rota        ✓ │  ← 14/600 + 14/400 muted, truncado
 └────────────────────────────────────────────────┘
 ```
 
@@ -557,13 +557,34 @@ Alto `--spacing-fila-alerta` **64px**, `padding: --spacing-md` (12px), `gap: --s
 
 Los cálculos: 12·1.4 (16.8) + 14·1.5 (21) + 24 de padding = 61.8 → 64px. Cabe sin apretar.
 
+**El diagrama usa DAÑO a propósito, porque es un tipo que sí lleva ese botón.** Solo las alertas
+respaldadas por una fila de `notifications` se pueden atender; las tres computadas de §11.2 (Urgente,
+Hora límite vencida, Calendario caído) no tienen `read_at` y por lo tanto no llevan botón (§11.4).
+Un diagrama con el `✓` sobre una fila `URGENTE` describiría un control que no existe.
+
+- **La ranura del botón se reserva siempre, exista el botón o no.** Son **32px** de ancho más `gap-sm`
+  (8px) al final de la línea 2, y en una alerta computada esa ranura queda **vacía**: el texto no se
+  estira para ocuparla. Sin la reserva, el título de una fila computada mediría 40px más que el de la
+  fila de al lado y el punto de truncado bailaría de fila en fila. Ese desnivel sí sería una diferencia
+  visual entre tipos, que es justo lo que el criterio 4 prohíbe.
+- **Por qué esa diferencia de affordance NO rompe la regla.** "Ninguna alerta se esconde" es sobre
+  visibilidad y prominencia: los siete tipos comparten alto, color, tipografía, sitio en el orden
+  cronológico y destino del clic, y ninguno se puede ocultar. Lo único que cambia es **si hay algo que
+  el admin pueda cerrar a mano**. Una alerta computada es un estado derivado que se apaga solo cuando el
+  hecho se resuelve: un botón de atender ahí sería un botón que miente, porque la alerta reaparecería en
+  la siguiente lectura. Ofrecer una acción imposible es peor que no ofrecerla.
+- **Y la diferencia no correlaciona con severidad**, que es la forma en que esto sí rompería el criterio 4.
+  Entre las tres computadas están Urgente y Hora límite vencida, que son las dos que más cuestan si se
+  pierden. El reparto sigue la **procedencia del dato** (evento persistido contra estado computado al
+  leer), no la importancia. Ningún tipo queda con menos affordance por ser menos grave.
+
 ### 11.4 Orden, filtro y "atendida"
 
 - **Orden por defecto: cronológico descendente** por el instante del hecho (D-06). No por tipo, no por severidad, no por apartamento. Lo más reciente arriba.
 - **Filtro por tipo:** `DropdownMenu` con icono `ListFilter` en la cabecera del panel. Arranca en `Todas` (D-07). Las opciones se listan **en el orden fijo de la tabla de §11.1, nunca por conteo**: una lista que se reordena sola es inusable. Cada opción muestra su conteo: `Daño (3)`. Con el filtro puesto, la cabecera lo dice: `Alertas · Daño` + un botón `Quitar filtro`.
 - **El panel NO usa `read_at` como "leída".** No hay negrita para no leídas ni gris para leídas: cualquier tratamiento de leído/no leído reintroduce exactamente la jerarquía visual que el criterio 4 prohíbe, y además "leída" no es "resuelta". `read_at` se usa **solo** como marca de *atendida*, que es una acción explícita del admin.
 - Una alerta atendida **sale del panel**, no se atenúa. La cabecera lleva un toggle `Ver atendidas`, que muestra las de los últimos 7 días, con el mismo tratamiento visual y el botón cambiado a `Devolver al panel`.
-- Las alertas **computadas** no tienen `read_at` y no se pueden atender: desaparecen solas cuando el hecho se resuelve (el aseo se termina, `is_urgent` se apaga porque la reserva se movió, un feed vuelve a responder). Su botón de atender no se renderiza. Es coherente: son estados, no eventos.
+- Las alertas **computadas** no tienen `read_at` y no se pueden atender: desaparecen solas cuando el hecho se resuelve (el aseo se termina, `is_urgent` se apaga porque la reserva se movió, un feed vuelve a responder). Su botón de atender no se renderiza, pero **la ranura de 32px sí se reserva** para que las filas no bailen (§11.3). Es coherente: son estados, no eventos.
 - `read_at` se escribe con un `UPDATE` directo, no con RPC: `notifications` sí tiene `grant select, update` para `authenticated` y la policy `notifications_own_update` lo acota a `recipient_id = auth.uid()`. **El Server Action escribe únicamente la columna `read_at`**; el grant es de tabla, así que la disciplina de escribir una sola columna es de la action, no de la base.
 
 ### 11.5 Comportamiento con 0, con 1 y con 30
