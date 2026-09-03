@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Fase 3 completa y verificada. Siguiente: /gsd:discuss-phase 4"
+stopped_at: "Fase 4 wave 1 mergeada. BLOQUEO: Docker caido. Cerrar 04-01 antes de la wave 2"
 last_updated: "2026-09-03T00:35:15.099Z"
 last_activity: 2026-09-03 -- Phase 03 execution started
 progress:
@@ -21,14 +21,14 @@ progress:
 Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 
 **Core value:** Que ningún aseo se pierda: todo checkout detectado en calendario termina en un aseo confirmado, asignado y ejecutado con evidencia, sin coordinación manual por WhatsApp.
-**Current focus:** Fase 3 cerrada. Siguiente: Fase 4, dashboard operativo del admin
+**Current focus:** Fase 4, wave 1 de 8 cerrada. Bloqueada hasta que Docker vuelva
 
 ## Current Position
 
 Phase: 03 (motor-de-sincronizaci-n-ical) — EXECUTING
-Plan: 10 of 10, fase verificada (passed_with_gaps)
-Status: Phase 03 COMPLETA. Siguiente: Fase 4, dashboard operativo del admin
-Last activity: 2026-09-03 -- Fase 3 cerrada, passed_with_gaps, 49 senuelos corridos y 48 atrapados
+Plan: 4 of 14 de la Fase 4 (wave 1 cerrada, 04-01 SIN VERIFICAR)
+Status: Phase 04 EJECUTANDO, BLOQUEADA por infraestructura (Docker caido)
+Last activity: 2026-09-03 -- Fase 4 wave 1 mergeada. Bloqueo: disco lleno tumbo Docker, sin el no corren db:test ni test:integration
 
 Progress: [███░░░░░░░] 33% (3 de 9 fases)
 
@@ -111,5 +111,21 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 ## Session Continuity
 
 Last session: 2026-09-03
-Stopped at: Fase 3 completa y verificada (passed_with_gaps). Siguiente: /gsd:discuss-phase 4
+Stopped at: Fase 4, wave 1 de 8 cerrada y mergeada (04-01 a 04-04).
+
+**BLOQUEO ACTIVO, requiere accion del usuario:**
+1. Docker Desktop no arranca. Tenia un dialogo modal: pulsar **Quit**, NUNCA "Reset to factory
+   defaults" (borraria los volumenes con la base local). Luego abrirlo normal. Sin Docker no corren
+   `db:reset`, `db:test` ni `test:integration`.
+2. `git clean -fd -e "ci/README.md" -e "supabase/snippets" -e ".claude/worktrees"` sobre el checkout
+   principal, todavia con ~140 duplicados de iCloud, cuatro de ellos migraciones.
+
+**Deuda que hay que cerrar ANTES de la wave 2:** el plan 04-01 quedo commiteado pero SIN VERIFICAR.
+`supabase/tests/06_aseos_admin.test.sql` son 1164 lineas con `plan(41)` que no se han ejecutado ni
+una vez; solo se comprobo balance de comillas y que hay 41 llamadas a `is()`. Va a tener errores de
+sintaxis. Secuencia de cierre: `db:reset` -> `db:test` (comprobando que `ok + not ok = 41` y que los
+rojos son los 33 listados en la cabecera) -> arreglar sintaxis -> `db:types:check` ->
+`test:integration`.
+
+Siguiente wave: la 2, con el plan 04-05 (migracion 15, las seis RPC y Realtime).
 Resume file: None
