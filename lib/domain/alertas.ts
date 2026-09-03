@@ -1,4 +1,6 @@
-import type { Enums } from '@/lib/database.types';
+import type { Enums, Tables } from '@/lib/database.types';
+
+import { UMBRAL_SYNC_CAIDA_MS, estadoDeSincronizacion } from './salud-sync';
 
 /**
  * EL MOTOR DEL PANEL DE ALERTAS (DASH-04, DASH-05).
@@ -246,4 +248,273 @@ export function presentacionDeAlerta(clave: string): PresentacionDeAlerta {
     (MAPA_DE_ALERTAS as Record<string, PresentacionDeAlerta | undefined>)[clave] ??
     PRESENTACION_GENERICA
   );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Las tres alertas computadas (UI-SPEC §11.2)
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Una fila del panel, venga de `notifications` o de un cómputo al leer.
+ *
+ * Las dos procedencias producen EXACTAMENTE la misma estructura a propósito: el
+ * componente no puede distinguirlas para pintarlas distinto ni aunque quiera.
+ * Lo único que las separa es `atendible`, y eso no es presentación (ver abajo).
+ */
+export type Alerta = {
+  /** Estable entre lecturas. Es la `key` de React y el ancla del `aria-label`. */
+  id: string;
+  clave: ClaveDeAlerta;
+  /**
+   * EL INSTANTE DEL HECHO, en milisegundos. Es el ÚNICO criterio de orden del
+   * panel (D-06). No es "cuándo se leyó" ni "cuándo se insertó la fila": es
+   * cuándo ocurrió lo que la alerta reporta, que para cada tipo sale de un
+   * sitio distinto (§11.2).
+   */
+  ocurrioEnMs: number;
+  /** Título ya redactado en español. El panel lo renderiza, no lo reescribe. */
+  titulo: string;
+  /** Texto completo para el atributo `title` del elemento (§11.3). */
+  cuerpo: string;
+  /** Nombre del apartamento, o `Todo el sistema` para la caída global. */
+  apartamento: string;
+  cleaningId: string | null;
+  propertyId: string | null;
+  /** Destino del clic (D-08). `null` solo si no hay a dónde llevar. */
+  url: string | null;
+  /**
+   * EL DISCRIMINANTE, Y NO ES UNA DIFERENCIA DE JERARQUÍA.
+   *
+   * `true` solo para las alertas respaldadas por una fila de `notifications`,
+   * que son las que tienen `read_at` y por lo tanto se pueden marcar como
+   * atendidas. Las computadas son ESTADOS DERIVADOS que se apagan solos cuando
+   * el hecho se resuelve: un botón de atender ahí sería un botón que miente,
+   * porque la alerta reaparecería en la siguiente lectura.
+   *
+   * El componente reserva la ranura del botón igual en las dos (§11.3), así que
+   * las filas no cambian de alto ni el punto de truncado baila. Y el reparto
+   * sigue la PROCEDENCIA DEL DATO, no la importancia: entre las computadas
+   * están urgente y hora límite vencida, que son las dos que más cuestan si se
+   * pierden.
+   */
+  atendible: boolean;
+};
+
+/**
+ * Lo mínimo de `cleanings` que hace falta para computar las dos alertas por
+ * aseo. Es un `Pick` ampliado, no la fila entera.
+ */
+export type AseoParaAlertas = Pick<
+  Tables<'cleanings'>,
+  | 'id'
+  | 'property_id'
+  | 'is_managed'
+  | 'state'
+  | 'scheduled_date'
+  | 'hora_limite'
+  | 'is_urgent'
+  | 'created_at'
+> & {
+  /** Nombre del apartamento, ya resuelto por el join de quien lee. */
+  apartamento: string;
+  /**
+   * La hora límite del APARTAMENTO. Llega porque la consulta del panel ya trae
+   * el join de `properties`, y está aquí declarada A PROPÓSITO aunque este
+   * módulo no la use para nada:
+   *
+   *   EL VENCIMIENTO SE CALCULA CON `hora_limite` (la del ASEO), NUNCA CON
+   *   ESTA.
+   *
+   * `cleanings.hora_limite` es un SNAPSHOT que el trigger de la migración 13
+   * puso al crear el aseo, y APTO-05 permite pactar una hora distinta para un
+   * aseo puntual. El UI-SPEC §11.2 dice `properties.hora_limite` y es un error
+   * del contrato, corregido aquí y medido: el test cruza las dos horas en dos
+   * filas y cambiar la fuente invierte exactamente ese resultado.
+   */
+  apartamentoHoraLimite: string;
+};
+
+/** Lo que `alertasComputadas` necesita. Todo entra por parámetro, nada se lee del reloj ni de la base. */
+export type EntradaComputadas = {
+  aseos: AseoParaAlertas[];
+  /** `max(last_success_at)` sobre los feeds activos. `null` si ninguno sincronizó nunca. */
+  maxUltimoExito: string | null;
+  /** El instante actual en ms. Igual que en `estadoDeSincronizacion`: entra, no se lee. */
+  ahoraMs: number;
+  /** El día de negocio de hoy en Bogotá, `'YYYY-MM-DD'`. Sale de `hoyBog()` o de `today_bog()`. */
+  hoy: string;
+};
+
+/** Estados en los que un aseo todavía puede hacerse, y por lo tanto todavía puede alertar. */
+const ESTADOS_VIVOS: ReadonlySet<string> = new Set(['pendiente', 'en_curso']);
+
+/**
+ * Una marca `timestamptz` de la base, en milisegundos.
+ *
+ * LAS DOS NORMALIZACIONES SON LAS MISMAS QUE `estadoDeSincronizacion()` y por
+ * las mismas razones, la segunda medida en rojo durante la Fase 3:
+ *
+ *   1. El separador. Postgres escribe `'2026-09-02 16:00:00+00'` con espacio;
+ *      PostgREST devuelve `'2026-09-02T16:00:00+00:00'` con `T`.
+ *   2. El desfase de dos dígitos. `+00` NO es ISO 8601 y
+ *      `Date.parse('...T16:00:00+00')` devuelve `NaN`.
+ *
+ * Está duplicado a propósito en vez de exportarse desde `salud-sync.ts`: ese
+ * módulo es deliberadamente pequeño y su superficie pública son el umbral y la
+ * función de estado. Si aparece un tercer consumidor, se saca a `dates.ts`.
+ */
+function instanteDeLaBase(marca: string): number {
+  return Date.parse(marca.replace(' ', 'T').replace(/([+-]\d{2})$/, '$1:00'));
+}
+
+/**
+ * El instante en que vence la hora límite de un aseo, en milisegundos.
+ *
+ * `scheduled_date` es un `date` y `hora_limite` un `time`: las dos SIN zona. El
+ * instante que representan es "ese día, a esa hora, en Bogotá", y la única
+ * forma sin trampa de obtenerlo desde TypeScript es construir la cadena con el
+ * DESFASE EXPLÍCITO y dejar que `Date.parse` haga el resto.
+ *
+ * POR QUÉ EL DESFASE EXPLÍCITO. Es lo que hace que el resultado no dependa de
+ * la zona del proceso, que es el mismo truco (y la misma razón medida) por el
+ * que `estadoDeSincronizacion()` normaliza el `+00` de Postgres a `+00:00`. Sin
+ * él, el mismo aseo estaría vencido en Vercel y no en el portátil de quien
+ * programa.
+ *
+ * PROHIBIDO `new Date('2026-09-04')`: un ISO de solo fecha se parsea como
+ * MEDIANOCHE UTC, que en Bogotá es el día anterior. Es la misma regla ya escrita
+ * en `lib/domain/dates.ts` y el mismo off-by-one por el que `fecha_aseo` se
+ * modela como `date` y no como `timestamptz`.
+ *
+ * `-05:00` fijo es correcto porque Colombia no tiene DST desde 1993. Es
+ * exactamente la razón por la que `TZ_BOGOTA` existe como única constante de
+ * zona del repo: fuera de aquí, convertir instantes a mano sería un bug.
+ *
+ * Los segundos del `time` se recortan: `'11:30:00'` y `'11:30:45'` son la misma
+ * hora límite operativa.
+ */
+export function venceEnMs(scheduledDate: string, horaLimite: string): number {
+  return Date.parse(`${scheduledDate}T${horaLimite.slice(0, 5)}:00-05:00`);
+}
+
+/**
+ * Las tres alertas que NO son filas de `notifications` (UI-SPEC §11.2).
+ *
+ * | Tipo                | Condición                                                              | Instante para el orden              |
+ * |---------------------|------------------------------------------------------------------------|-------------------------------------|
+ * | Urgente             | `is_urgent` y `is_managed` y estado vivo y `scheduled_date >= hoy`      | `cleanings.created_at`              |
+ * | Hora límite vencida | `is_managed` y estado vivo y `venceEnMs(...) < ahoraMs`                 | el vencimiento                      |
+ * | Calendario caído    | `estadoDeSincronizacion(maxUltimoExito, ahoraMs) === 'caida'`           | `maxUltimoExito + UMBRAL`           |
+ *
+ * SOBRE `hora_limite_vencida`: NO HAY DECISIÓN QUE TOMAR, es obligatoriamente
+ * computada. El valor del enum existe y **nada lo escribe en ninguna
+ * migración** (grep exhaustivo sobre `supabase/migrations/*.sql`, 2026-09-03).
+ * Queda dicho aquí para que nadie pierda una tarde buscando el productor.
+ *
+ * SOBRE LA CAÍDA GLOBAL: coexiste con las notificaciones por feed que escribe
+ * `feed_health_watchdog`, y no compite con ellas. Esas dicen QUÉ FEED FALLA, con
+ * su `property_id`; esta dice QUE NO CORRE NADA, y no puede decir cuál feed
+ * porque no es un feed. Son hechos distintos y el 04-CONTEXT pide literalmente
+ * que las dos entren al mismo panel.
+ *
+ * Y esta mitad es LA ÚNICA CAPA DEL SISTEMA QUE PUEDE OBSERVAR QUE EL SCHEDULER
+ * MURIÓ. Ninguna aserción dentro de la base puede observar la ausencia de
+ * ejecución de la base: un watchdog agendado en `pg_cron` no corre si `pg_cron`
+ * no corre, y un segundo watchdog que vigile al primero muere con él. Por eso
+ * este cómputo existe: no es un vigilante, es una lectura, y la hace la página
+ * que el admin abre de todas formas.
+ */
+export function alertasComputadas(entrada: EntradaComputadas): Alerta[] {
+  const { aseos, maxUltimoExito, ahoraMs, hoy } = entrada;
+  const alertas: Alerta[] = [];
+
+  for (const a of aseos) {
+    // `state` es `null` en las unidades de gestión externa, que están inertes
+    // por CHECK (`cl_unmanaged_is_inert`). `is_managed` es la comprobación que
+    // importa: sin ella el panel alertaría de unidades que VivaGuest NO OPERA,
+    // y el admin no puede hacer nada al respecto. Una alerta sobre la que no se
+    // puede actuar es ruido, y el ruido es lo que hace que se dejen de leer.
+    const vivo = a.is_managed && a.state !== null && ESTADOS_VIVOS.has(a.state);
+    if (!vivo) continue;
+
+    // 1. URGENTE. Se acota a `scheduled_date >= hoy` porque su significado es
+    //    "entra huésped el mismo día" (§18.4): pasada la fecha, ya no hay nada
+    //    que apurar y la alerta que corresponde es la de hora límite vencida.
+    if (a.is_urgent && a.scheduled_date >= hoy) {
+      alertas.push({
+        id: `urgente:${a.id}`,
+        clave: 'urgente',
+        ocurrioEnMs: instanteDeLaBase(a.created_at),
+        titulo: 'Entra huésped el mismo día.',
+        cuerpo: 'Entra huésped el mismo día. El aseo tiene que quedar listo antes de la hora límite.',
+        apartamento: a.apartamento,
+        cleaningId: a.id,
+        propertyId: a.property_id,
+        url: `/operacion#aseo-${a.id}`,
+        atendible: false,
+      });
+    }
+
+    // 2. HORA LÍMITE VENCIDA. Aquí NO se acota por fecha: un aseo de anteayer
+    //    sin terminar es justo el que no se puede perder.
+    const vence = venceEnMs(a.scheduled_date, a.hora_limite);
+    if (vence < ahoraMs) {
+      const hhmm = a.hora_limite.slice(0, 5);
+      alertas.push({
+        id: `hora_limite_vencida:${a.id}`,
+        clave: 'hora_limite_vencida',
+        ocurrioEnMs: vence,
+        titulo: `La hora límite de las ${hhmm} pasó y el aseo no ha terminado.`,
+        cuerpo: `La hora límite de las ${hhmm} pasó y el aseo no ha terminado.`,
+        apartamento: a.apartamento,
+        cleaningId: a.id,
+        propertyId: a.property_id,
+        url: `/operacion#aseo-${a.id}`,
+        atendible: false,
+      });
+    }
+  }
+
+  // 3. CALENDARIO CAÍDO, GLOBAL. El umbral NO se reimplementa: se llama a
+  //    `estadoDeSincronizacion()`, que ya está escrito, ya tiene sus tests y ya
+  //    normaliza el `+00` de Postgres (que se midió en rojo en la Fase 3).
+  if (estadoDeSincronizacion(maxUltimoExito, ahoraMs) === 'caida') {
+    // El instante del hecho es CUÁNDO PASÓ A ESTAR CAÍDO, o sea la última
+    // sincronización buena más el umbral. Usar `ahoraMs` haría que la alerta
+    // saltara al tope de la lista en cada render, empujando hacia abajo hechos
+    // más recientes que ella.
+    //
+    // Con `maxUltimoExito` nulo no hay ningún instante del que partir: es el
+    // despliegue nuevo cuyo scheduler nunca corrió. Ahí el hecho es "ahora
+    // mismo", y hay que escribirlo, porque `Date.parse(null)` sería `NaN` y una
+    // alerta con instante `NaN` cae en un sitio arbitrario del orden.
+    const marcaMs = maxUltimoExito === null ? null : instanteDeLaBase(maxUltimoExito);
+    const ocurrioEnMs =
+      marcaMs === null || Number.isNaN(marcaMs) ? ahoraMs : marcaMs + UMBRAL_SYNC_CAIDA_MS;
+
+    alertas.push({
+      // Sin `cleaning_id` ni `property_id` que lo hagan único, el id es fijo:
+      // solo puede haber una alerta global a la vez, por definición.
+      id: 'calendario_caido:sistema',
+      clave: 'calendario_caido',
+      ocurrioEnMs,
+      // Copy literal del UI-SPEC §11.2. Las tres horas del texto son las mismas
+      // de `UMBRAL_SYNC_CAIDA_MS`.
+      titulo: 'Ningún calendario ha sincronizado en las últimas 3 horas.',
+      cuerpo:
+        'Ningún calendario ha sincronizado en las últimas 3 horas. Puede que el motor de sincronización esté detenido.',
+      // El slot del apartamento dice esto porque la alerta NO ES DE NINGÚN
+      // apartamento: es del sistema entero (§11.2).
+      apartamento: 'Todo el sistema',
+      cleaningId: null,
+      propertyId: null,
+      // Lleva al catálogo, que es donde se ven y se arreglan los feeds. D-08:
+      // una alerta que no es accionable desde donde se ve es una notificación,
+      // no una alerta.
+      url: '/apartamentos',
+      atendible: false,
+    });
+  }
+
+  return alertas;
 }

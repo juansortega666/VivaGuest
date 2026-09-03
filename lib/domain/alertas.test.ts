@@ -276,9 +276,27 @@ describe('alertasComputadas · urgente', () => {
       aseos: [
         aseo({ id: 'ok-pendiente', is_urgent: true }),
         aseo({ id: 'ok-en-curso', is_urgent: true, state: 'en_curso' }),
-        // Gestión externa. LA FILA QUE ATRAPA EL SEÑUELO: quitar `is_managed`
-        // del predicado hace que aparezca acá una unidad que VivaGuest no opera.
+        // Gestión externa como la escribe la base: inerte por el CHECK
+        // `cl_unmanaged_is_inert`, o sea con `state` nulo.
         aseo({ id: 'externa', is_urgent: true, is_managed: false, state: null }),
+        // LA FILA QUE ATRAPA EL SEÑUELO, y hace falta que sea DISTINTA de la de
+        // arriba. Con `state: null`, `is_managed` es redundante: el filtro de
+        // estado ya descarta la fila, y quitar `is_managed` del predicado sigue
+        // en verde. Medido: el señuelo pasó la primera vez por eso.
+        //
+        // Esta fila tiene `is_managed = false` Y estado vivo a la vez, que es
+        // una combinación que el CHECK de la base prohíbe. Se siembra a mano a
+        // propósito: `is_managed` es la comprobación que expresa la REGLA DE
+        // NEGOCIO ("VivaGuest no opera esta unidad"), y no puede depender de que
+        // un CHECK en otra capa la mantenga verdadera por casualidad. El panel
+        // también construye filas en memoria (estado optimista, Realtime), y ahí
+        // no hay CHECK que valga.
+        aseo({
+          id: 'externa-con-estado-vivo',
+          is_urgent: true,
+          is_managed: false,
+          state: 'pendiente',
+        }),
         aseo({ id: 'terminado', is_urgent: true, state: 'completada' }),
         aseo({ id: 'cancelado', is_urgent: true, state: 'cancelada' }),
         aseo({ id: 'de-ayer', is_urgent: true, scheduled_date: '2026-09-03' }),
@@ -371,6 +389,14 @@ describe('alertasComputadas · hora límite vencida', () => {
       aseos: [
         aseo({ id: 'vivo', hora_limite: '06:00:00' }),
         aseo({ id: 'externa', hora_limite: '06:00:00', is_managed: false, state: null }),
+        // Igual que en la urgente: con `state` nulo, `is_managed` es redundante.
+        // Esta fila lo aísla.
+        aseo({
+          id: 'externa-con-estado-vivo',
+          hora_limite: '06:00:00',
+          is_managed: false,
+          state: 'pendiente',
+        }),
         aseo({ id: 'terminado', hora_limite: '06:00:00', state: 'completada' }),
         aseo({ id: 'cancelado', hora_limite: '06:00:00', state: 'cancelada' }),
       ],
