@@ -518,3 +518,157 @@ export function alertasComputadas(entrada: EntradaComputadas): Alerta[] {
 
   return alertas;
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// Mezcla, orden, deduplicación y conteos (UI-SPEC §11.4)
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Lo mínimo de `notifications` que el panel lee.
+ *
+ * SOBRE `read_at`, QUE NO ESTÁ EN ESTE `Pick` Y ES DELIBERADO. El panel NO usa
+ * `read_at` como "leída": no hay negrita para las no leídas ni gris para las
+ * leídas. Cualquier tratamiento de leído/no leído reintroduce exactamente la
+ * jerarquía visual que el criterio 4 prohíbe, y además "leída" no es
+ * "resuelta". `read_at` significa ATENDIDA, que es una acción explícita del
+ * admin, y una alerta atendida SALE de la lista en vez de atenuarse.
+ *
+ * Por eso esta función recibe las notificaciones YA FILTRADAS por quien lee
+ * (con `read_at is null`, o sin ese filtro si el admin activó "Ver atendidas").
+ * QUÉ SE MUESTRA ES DECISIÓN DEL CONSUMIDOR; CÓMO SE ORDENA ES DECISIÓN DE
+ * AQUÍ.
+ */
+export type NotificacionParaAlertas = Pick<
+  Tables<'notifications'>,
+  'id' | 'type' | 'title' | 'body' | 'url' | 'cleaning_id' | 'property_id' | 'created_at'
+> & {
+  /** Nombre del apartamento, ya resuelto por el join. `null` si la notificación no cuelga de ninguno. */
+  apartamento: string | null;
+};
+
+/** Una fila de la lista del filtro por tipo (§11.4). */
+export type ConteoDeTipo = {
+  clave: ClaveDeAlerta;
+  /** La del mapa, para que el filtro diga `Daño (3)` y no `dano_reportado (3)`. */
+  etiqueta: string;
+  conteo: number;
+};
+
+/** Convierte una fila de `notifications` en una alerta del panel. */
+function alertaDeNotificacion(n: NotificacionParaAlertas): Alerta {
+  return {
+    id: n.id,
+    // Se copia tal cual, SIN validar contra el mapa. Un tipo que este
+    // despliegue no conoce tiene que llegar entero hasta el componente, que lo
+    // resolverá con `presentacionDeAlerta()` y su fallback.
+    clave: n.type,
+    ocurrioEnMs: instanteDeLaBase(n.created_at),
+    // `title` y `body` YA VIENEN REDACTADOS EN ESPAÑOL desde las funciones de
+    // la base. El panel los renderiza, no los reescribe (UI-SPEC §0). Son
+    // strings planos y React los escapa por defecto; cero
+    // `dangerouslySetInnerHTML` en toda la fase (T-04-10).
+    titulo: n.title,
+    cuerpo: n.body,
+    // Cadena vacía y no un `Apartamento desconocido` inventado: el componente
+    // decide cómo se ve un slot vacío, este módulo no rellena datos que no
+    // tiene.
+    apartamento: n.apartamento ?? '',
+    cleaningId: n.cleaning_id,
+    propertyId: n.property_id,
+    url: n.url,
+    // Tiene fila en `notifications`, luego tiene `read_at`, luego se puede
+    // marcar como atendida.
+    atendible: true,
+  };
+}
+
+/**
+ * La lista del panel: las notificaciones persistidas y las alertas computadas,
+ * mezcladas en UNA SOLA LISTA PLANA ORDENADA CRONOLÓGICAMENTE.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * EL ORDEN ES EL CRITERIO 4 DEL ROADMAP, NO UNA PREFERENCIA (D-06).
+ *
+ * Cronológico DESCENDENTE por el instante en que ocurrió el hecho. Lo más
+ * reciente arriba. NO por tipo. NO por severidad percibida. NO por procedencia
+ * (persistida contra computada). NO por apartamento.
+ *
+ * Ordenar por severidad o por tipo reabre el criterio y el documento de diseño,
+ * y no se resuelve en ejecución: es una decisión de producto que ya se tomó y
+ * cuya razón está escrita en D-05. El anti-patrón concreto que este orden
+ * ataja es urgentes arriba y "faltantes" al final, donde nadie los lee.
+ * ────────────────────────────────────────────────────────────────────────────
+ *
+ * DEDUPLICACIÓN. Una alerta computada se suprime si YA EXISTE una notificación
+ * del mismo tipo Y con el mismo `cleaning_id`. Aplica a `hora_limite_vencida`.
+ *
+ * NO aplica a la caída global de calendario, que no tiene `cleaning_id`: si la
+ * comparación no excluyera el nulo, `null === null` suprimiría la global cada
+ * vez que el watchdog escribe su notificación por feed, que es JUSTO cuando las
+ * dos son ciertas y tienen que coexistir (04-CONTEXT).
+ *
+ * Y tampoco puede activarse hoy para nada: `hora_limite_vencida` no lo escribe
+ * ninguna migración. Se escribe porque es barata y porque la Fase 5 o la 9
+ * pueden añadir el productor.
+ *
+ * @param notificaciones Filas de `notifications` YA filtradas por el consumidor
+ *   según el toggle "Ver atendidas" (ver `NotificacionParaAlertas`).
+ * @param computadas Lo que devuelve `alertasComputadas()`.
+ */
+export function mezclarAlertas(
+  notificaciones: NotificacionParaAlertas[],
+  computadas: Alerta[],
+): Alerta[] {
+  // Clave de deduplicación: tipo + aseo. Solo entran las notificaciones que
+  // TIENEN `cleaning_id`; las de ámbito de feed o de sistema no pueden suprimir
+  // nada porque no hablan del mismo hecho.
+  const yaPersistidas = new Set(
+    notificaciones
+      .filter((n) => n.cleaning_id !== null)
+      .map((n) => `${n.type} ${n.cleaning_id}`),
+  );
+
+  const supervivientes = computadas.filter(
+    (c) => c.cleaningId === null || !yaPersistidas.has(`${c.clave} ${c.cleaningId}`),
+  );
+
+  return [...notificaciones.map(alertaDeNotificacion), ...supervivientes].sort(
+    (a, b) =>
+      // Descendente por instante. El desempate por id NO es cosmético: dos
+      // hechos del mismo segundo existen (una corrida del sync inserta en
+      // ráfaga), y sin él el orden dependería de la implementación de `sort` y
+      // la lista bailaría entre renders sin que nada haya cambiado.
+      b.ocurrioEnMs - a.ocurrioEnMs || a.id.localeCompare(b.id),
+  );
+}
+
+/**
+ * Conteo por tipo para la lista del filtro (§11.4).
+ *
+ * DOS REGLAS, LAS DOS DE USABILIDAD Y LAS DOS FÁCILES DE "optimizar" mal:
+ *
+ *  1. EL ORDEN ES EL FIJO DE `ORDEN_DE_TIPOS`, NUNCA POR CONTEO. Una lista de
+ *     filtro que se reordena sola según los conteos es inusable: la opción que
+ *     buscas cambia de sitio cada vez que entra una alerta, y en un panel que
+ *     se refresca solo por Realtime eso pasa debajo del cursor.
+ *  2. SE INCLUYEN LOS TIPOS EN CERO. Si los ceros se omitieran, el filtro
+ *     tendría dos opciones ahora y cinco dentro de un minuto, con el mismo
+ *     efecto de arriba.
+ *
+ * Un tipo desconocido cuenta en ninguna fila y NO añade una opción nueva: la
+ * lista es de longitud fija por contrato. La fila sí se ve en el panel, con su
+ * rótulo genérico; lo que no hace es inventar una entrada de filtro que nadie
+ * sabe nombrar.
+ */
+export function conteosPorTipo(alertas: Alerta[]): ConteoDeTipo[] {
+  const conteos = new Map<string, number>();
+  for (const a of alertas) {
+    conteos.set(a.clave, (conteos.get(a.clave) ?? 0) + 1);
+  }
+
+  return ORDEN_DE_TIPOS.map((clave) => ({
+    clave,
+    etiqueta: MAPA_DE_ALERTAS[clave].etiqueta,
+    conteo: conteos.get(clave) ?? 0,
+  }));
+}
