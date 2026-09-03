@@ -111,8 +111,26 @@ const CAMPOS_POR_CONSTRAINT: ReadonlyArray<readonly [string, string]> = [
   [IDX_MIC_GLOBAL_UNIQ, 'nombre'],
   [CHK_PROPERTY_SECRETS_TIPO_CERRADURA_VALIDO, 'tipo_cerradura'],
   [IDX_CALENDAR_FEEDS_PROP_PROVIDER_UNIQ, 'ical_url'],
+  // ASEO-07 (D-19). Los diálogos de crear aseo manual (§12.3) y de reprogramar
+  // (§12.2) tienen un campo de fecha, así que el 23505 del índice parcial
+  // `unique (property_id, scheduled_date) where estado <> 'cancelado'` va inline
+  // bajo ese campo, no a toast (§12.6).
+  //
+  // LA INTERPOLACIÓN NO VIVE ACÁ. `mapDbError()` solo ve el error de Postgres: no
+  // conoce el nombre del apartamento ni la fecha, y no debe conocerlos. Es una
+  // función pura de mapeo. El Server Action del plan 04-08 detecta el caso antes
+  // de delegar y devuelve el mensaje interpolado junto con `campo: 'fecha'`.
+  //
+  // CONSECUENCIA SOBRE LAS RPC, que es el otro lado del mismo contrato: ni
+  // `create_manual_cleaning` ni `reschedule_cleaning` pueden capturar el
+  // `unique_violation` y relanzarlo como `P0001`. El nombre del índice
+  // desaparecería del mensaje y este mapeo dejaría de reconocerlo, así que el
+  // error volvería a toast sin que nada se pusiera rojo. Esa aserción vive en el
+  // pgTAP del plan 04-01.
+  [IDX_ONE_ACTIVE_PER_PROPERTY_DATE, 'fecha'],
   // `profiles_deactivation_coherent` y `cl_unmanaged_is_inert` quedan FUERA a
-  // propósito: no hay campo en pantalla al que anclarlos.
+  // propósito: no hay campo en pantalla al que anclarlos. `one_live_per_reservation`
+  // también: lo dispara el pipeline iCal, no un formulario.
 ];
 
 function buscar(
