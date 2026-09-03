@@ -14,7 +14,7 @@ El equipo son dos personas, así que **las fases corren en secuencia estricta**.
 
 - [x] **Fase 1: Fundación, schema y RLS** - La base de datos impone las reglas del negocio y aísla a cada aseador antes de que exista una sola pantalla
 - [x] **Fase 2: Acceso y administración del catálogo** - Login por rol y CRUD de apartamentos y aseadores para montar la operación real
-- [~] **Fase 3: Motor de sincronización iCal** - Todo checkout publicado en Airbnb se convierte en un aseo pendiente, sin duplicados ni cancelaciones falsas
+- [x] **Fase 3: Motor de sincronización iCal** - Todo checkout publicado en Airbnb se convierte en un aseo pendiente, sin duplicados ni cancelaciones falsas
 - [ ] **Fase 4: Dashboard operativo del admin** - Toda la operación del día en una pantalla, con confirmación en un paso y alertas de una sola jerarquía
 - [ ] **Fase 5: Notificaciones push e instalación de la PWA** - El aseador instala la PWA y recibe cada asignación en el teléfono; el admin recibe cada evento de campo
 - [ ] **Fase 6: PWA del aseador, offline-first** - El aseador ejecuta el aseo completo con o sin señal y nada del trabajo de campo se pierde
@@ -88,7 +88,7 @@ Plans:
 **UI hint**: yes
 
 ### Phase 3: Motor de sincronización iCal
-**Status**: Planned 2026-09-02 — 10 planes en 9 waves, verificados sin bloqueantes. Desbloqueada por la captura del feed real de Airbnb
+**Status**: Complete 2026-09-03 (`passed_with_gaps`) — 10/10 planes en 9 waves, 105 tests de integración, 112 aserciones pgTAP, 49 señuelos corridos y 48 atrapados. Gaps declarados con dueño: la clasificación reserva-vs-bloqueo en confianza MEDIA (sin `.ics` real de bloqueos, diferido por decisión), el dead man's switch externo, y la lectura de la instrumentación atada a que exista producción
 **Goal**: Todo checkout publicado en los calendarios se convierte en un aseo pendiente, sin duplicados y sin cancelaciones falsas
 **Depends on**: Fases 1 y 2
 **Requirements**: SYNC-01, SYNC-02, SYNC-03, SYNC-04, SYNC-05, SYNC-06, SYNC-07, SYNC-08, SYNC-09, SYNC-10, SYNC-11
@@ -233,7 +233,7 @@ Fases con patrón ya documentado en el research (se puede saltar):
 |-------|----------------|--------|-----------|
 | 1. Fundación, schema y RLS | 9/9 | Complete (passed_with_gaps) | 2026-09-01 |
 | 2. Acceso y administración del catálogo | 15/15 | Executed — 2 checkpoints humanos abiertos | 2026-09-02 |
-| 3. Motor de sincronización iCal | 10/10 | Complete   | 2026-09-03 |
+| 3. Motor de sincronización iCal | 10/10 | Complete (passed_with_gaps) | 2026-09-03 |
 | 4. Dashboard operativo del admin | 0/TBD | Not started | - |
 | 5. Notificaciones push e instalación de la PWA | 0/TBD | Not started | - |
 | 6. PWA del aseador, offline-first | 0/TBD | Not started | - |

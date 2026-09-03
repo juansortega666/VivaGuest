@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Fase 3 ejecutada 10/10. Siguiente: verificacion de fase"
+stopped_at: "Fase 3 completa y verificada. Siguiente: /gsd:discuss-phase 4"
 last_updated: "2026-09-03T00:35:15.099Z"
 last_activity: 2026-09-03 -- Phase 03 execution started
 progress:
   total_phases: 9
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 34
   completed_plans: 31
-  percent: 22
+  percent: 33
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 
 **Core value:** Que ningún aseo se pierda: todo checkout detectado en calendario termina en un aseo confirmado, asignado y ejecutado con evidencia, sin coordinación manual por WhatsApp.
-**Current focus:** Phase 03 — motor-de-sincronizaci-n-ical
+**Current focus:** Fase 3 cerrada. Siguiente: Fase 4, dashboard operativo del admin
 
 ## Current Position
 
 Phase: 03 (motor-de-sincronizaci-n-ical) — EXECUTING
-Plan: 10 of 10 (las 9 waves cerradas; siguiente: verificacion de fase)
-Status: Phase 03 ejecutada, pendiente de verificacion
-Last activity: 2026-09-03 -- 03-10 cerrado: privacidad transversal y los dos checkpoints diferidos por escrito
+Plan: 10 of 10, fase verificada (passed_with_gaps)
+Status: Phase 03 COMPLETA. Siguiente: Fase 4, dashboard operativo del admin
+Last activity: 2026-09-03 -- Fase 3 cerrada, passed_with_gaps, 49 senuelos corridos y 48 atrapados
 
-Progress: [██░░░░░░░░] 22% (2 de 9 fases)
+Progress: [███░░░░░░░] 33% (3 de 9 fases)
 
 ## Performance Metrics
 
@@ -73,7 +73,7 @@ Ninguno.
 ### Blockers/Concerns
 
 - **[Fase 3] Bloqueante humano parcialmente cerrado:** el `.ics` real de Airbnb ya se capturo y anonimizo (fixture `airbnb-real-anonimizado.ics`). Queda pendiente para el plan 03-10 un `.ics` con **bloqueos del propietario hechos a mano**; sin el, la clasificacion reserva-vs-bloqueo se queda en confianza MEDIA
-- **[Fase 3] Conflicto de research sin resolver:** la estabilidad del `UID` de Airbnb está en contradicción directa entre documentos; se resuelve empíricamente contra los feeds propios, con instrumentación desde el primer sync
+- **[Fase 3, resuelto por diseño]** La contradiccion sobre la estabilidad del `UID` de Airbnb dejo de ser bloqueante: la identidad del aseo es `(property_id, scheduled_date)`, no la reserva. La instrumentacion (`feed_sync_runs.uid_rotations` y `min_ends_on`) quedo escrita y se lee al tercer dia de sync en produccion, ver `deferred-items.md` de la Fase 3
 - **[Fase 1] Abierto de producto:** la lista definitiva de tareas del checklist bloquea el seed del catálogo, no el schema. Se arranca con el catálogo provisional (máximo 3 tareas por tipo de cuarto), editable sin migración
 - **[Fase 5] Riesgo aceptado:** push como único canal, sin semáforo de entregabilidad. Si en el piloto de Bogotá un aseo confirmado nunca llega al aseador, entra el semáforo (NOTIF-V2-01)
 
@@ -111,5 +111,5 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 ## Session Continuity
 
 Last session: 2026-09-03
-Stopped at: Fase 3 ejecutada 10/10. Siguiente: verificacion de fase
+Stopped at: Fase 3 completa y verificada (passed_with_gaps). Siguiente: /gsd:discuss-phase 4
 Resume file: None
