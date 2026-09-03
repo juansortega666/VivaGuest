@@ -38,17 +38,17 @@
 
 ### Sincronización de calendario
 
-- [ ] **SYNC-01**: El sistema lee cada feed configurado cada 30 minutos, de forma aislada, sin que un feed caído afecte a los demás
-- [ ] **SYNC-02**: El sistema genera un aseo tipo `normal` en la fecha en que el calendario libera el apartamento, sin crear duplicados en corridas sucesivas
-- [ ] **SYNC-03**: El sistema distingue reservas reales de bloqueos del propietario y no genera aseos para los bloqueos
+- [x] **SYNC-01**: El sistema lee cada feed configurado cada 30 minutos, de forma aislada, sin que un feed caído afecte a los demás
+- [x] **SYNC-02**: El sistema genera un aseo tipo `normal` en la fecha en que el calendario libera el apartamento, sin crear duplicados en corridas sucesivas
+- [x] **SYNC-03**: El sistema distingue reservas reales de bloqueos del propietario y no genera aseos para los bloqueos
 - [ ] **SYNC-04**: El sistema cancela automáticamente el aseo cuando la reserva desaparece o cambia de fecha, salvo que el aseo ya tenga `started_at`
 - [ ] **SYNC-05**: Cuando la reserva se mueve y genera un checkout distinto, el sistema crea el aseo nuevo sin confirmar
-- [ ] **SYNC-06**: El sistema no cancela aseos cuando el feed responde vacío o con contenido inválido, y registra el intento fallido
+- [x] **SYNC-06**: El sistema no cancela aseos cuando el feed responde vacío o con contenido inválido, y registra el intento fallido
 - [ ] **SYNC-07**: El sistema marca urgente el aseo cuando el checkout y el checkin siguiente caen el mismo día
 - [ ] **SYNC-08**: El sistema detecta reservas que parecen una extensión creada como reserva nueva y alerta al admin para doble chequeo antes de crear el aseo
 - [ ] **SYNC-09**: El sistema alerta al admin cuando un link de calendario deja de responder
 - [ ] **SYNC-10**: El sistema alerta al admin cuando el propio job de sincronización deja de correr
-- [ ] **SYNC-11**: El sistema genera un aseo informativo, sin estado ni asignación, para apartamentos con `gestion_vivaguest = false`
+- [x] **SYNC-11**: El sistema genera un aseo informativo, sin estado ni asignación, para apartamentos con `gestion_vivaguest = false`
 
 ### Ciclo de vida del aseo
 
@@ -195,17 +195,17 @@
 | ASEADOR-01 | Fase 2 | Pending |
 | ASEADOR-02 | Fase 2 | Pending |
 | ASEADOR-03 | Fase 2 | Pending |
-| SYNC-01 | Fase 3 | Pending |
-| SYNC-02 | Fase 3 | Pending |
-| SYNC-03 | Fase 3 | Pending |
+| SYNC-01 | Fase 3 | Complete |
+| SYNC-02 | Fase 3 | Complete |
+| SYNC-03 | Fase 3 | Complete |
 | SYNC-04 | Fase 3 | Pending |
 | SYNC-05 | Fase 3 | Pending |
-| SYNC-06 | Fase 3 | Pending |
+| SYNC-06 | Fase 3 | Complete |
 | SYNC-07 | Fase 3 | Pending |
 | SYNC-08 | Fase 3 | Pending |
 | SYNC-09 | Fase 3 | Pending |
 | SYNC-10 | Fase 3 | Pending |
-| SYNC-11 | Fase 3 | Pending |
+| SYNC-11 | Fase 3 | Complete |
 | ASEO-01 | Fase 4 | Pending |
 | ASEO-02 | Fase 4 | Pending |
 | ASEO-03 | Fase 4 | Pending |
