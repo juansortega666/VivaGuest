@@ -976,22 +976,28 @@ export function venceEnMs(scheduledDate: string, horaLimite: string): number {
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Falta una sexta RPC que D-17 no lista: apagar `needs_review`.**
+> **Las cuatro quedaron resueltas el 2026-09-03, antes de planear.** Se dejan escritas con su
+> resolución en vez de borrarlas: el razonamiento de por qué se decidió así vale más que la
+> pregunta, y las dos primeras cambiaron el plan.
+
+1. **[RESUELTA: va la sexta RPC]** Falta una sexta RPC que D-17 no lista: apagar `needs_review`.
    - Lo que se sabe: la migración 13 dice literalmente que `needs_review` es pegajoso y que **"solo el admin lo apaga, en la Fase 4"** (línea 106). El UI-SPEC renderiza la señal `Flag` con el copy del slug (§5.2, §18.3) pero **no describe ninguna acción para apagarla**, y §17.2 no lista ningún diálogo para eso.
    - Lo que no está claro: si el admin apaga `needs_review` explícitamente (una sexta RPC `clear_review_flag`), si se apaga como efecto lateral de reprogramar/cancelar/confirmar, o si se queda encendido para siempre.
    - **Recomendación:** una sexta RPC mínima, `clear_review_flag(p_cleaning uuid)`, que ponga `needs_review = false, review_reason = null`, invocada desde el ítem `Marcar como revisado` del `MenuAseo`. Es cinco líneas de SQL y cierra un lazo que la Fase 3 dejó abierto por escrito. **Si el planner decide no hacerla, tiene que decirlo explícitamente en el plan**, porque el comentario de la migración 13 promete lo contrario y quien lo lea dentro de tres meses lo va a buscar.
+   - **RESOLUCIÓN:** se hace. `clear_review_flag` es la RPC 6 de la migración 15 (plan 04-05), con la action `limpiarMarcaDeRevision` (04-08) y el ítem `Marcar como revisado` del `MenuAseo` (04-11). Cerrada de punta a punta.
 
-2. **`aseo_cancelado` y `aseo_completado` no tienen superficie en el UI-SPEC §11.1.**
+2. **[RESUELTA: el mapa cubre los once]** `aseo_cancelado` y `aseo_completado` no tienen superficie en el UI-SPEC §11.1.
    - Lo que se sabe: son los tipos que más filas producen hoy en `notifications`, los dos van a todos los admins activos, y el mapa de siete tipos del contrato no los incluye.
    - **Recomendación:** el planner extiende el mapa a los once valores del enum con fallback genérico (§Panel de alertas). Es una adición al contrato de diseño, no una desviación: no cambia jerarquía, no cambia color, no cambia tamaño. Conviene que el `gsd-ui-checker` lo vea antes de ejecutar.
+   - **RESOLUCIÓN:** el mapa cubre los once valores del enum con fallback genérico (`Bell` / `AVISO`), en el plan 04-04. Lleva una aserción que recorre el mapa entero y afirma un único valor por atributo visual, más el señuelo de filtrar los desconocidos.
 
-3. **El proyecto Supabase hospedado sigue sin existir (checkpoint A1 de la Fase 1).**
+3. **[RESUELTA: no bloquea]** El proyecto Supabase hospedado sigue sin existir (checkpoint A1 de la Fase 1).
    - Consecuencia directa: Realtime solo se puede verificar contra el stack local (`supabase start` levanta el servicio de Realtime, `config.toml` lo tiene `enabled = true`). Las cuotas del free tier son documentación, no medición.
    - No bloquea la fase: el fallback de D-15 hace que la pantalla funcione con Realtime caído, que es exactamente el escenario de "todavía no hay proyecto".
 
-4. **`hora_limite_vencida` como tipo de notificación no tiene productor y quizá nunca lo tenga.**
+4. **[RESUELTA: no bloquea, se computa]** `hora_limite_vencida` como tipo de notificación no tiene productor y quizá nunca lo tenga.
    - Si la Fase 5 va a producirlo (para mandar push al admin cuando venza una hora límite), la deduplicación de §11.2 empieza a servir. Si no, el valor del enum es letra muerta.
    - No bloquea nada. Se anota para que la Fase 5 lo decida con el dato en la mano.
 

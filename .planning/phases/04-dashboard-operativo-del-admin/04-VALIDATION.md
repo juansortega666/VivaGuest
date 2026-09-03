@@ -1,8 +1,8 @@
 ---
 phase: 4
 slug: dashboard-operativo-del-admin
-status: draft
-nyquist_compliant: false
+status: approved
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-09-03
 ---
@@ -105,12 +105,19 @@ prueba existe desde las fases anteriores.
 
 ## Validation Sign-Off
 
-- [ ] Todas las tareas tienen `<automated>` o su dependencia de Wave 0 declarada
-- [ ] Continuidad del muestreo: nunca 3 tareas seguidas sin verificación automática
-- [ ] Wave 0 cubre las seis referencias faltantes, empezando por el `git clean`
-- [ ] Sin banderas de watch mode
-- [ ] Latencia de retroalimentación < 45 s
-- [ ] Las seis RPC tienen aserción pgTAP **y** señuelo corrido
-- [ ] `nyquist_compliant: true` en el frontmatter
+- [x] Todas las tareas tienen `<automated>` o su dependencia de Wave 0 declarada
+- [x] Continuidad del muestreo: nunca 3 tareas seguidas sin verificación automática
+- [x] Wave 0 cubre las seis referencias faltantes, empezando por el `git clean` (el plan 04-01 la verifica y aborta)
+- [x] Sin banderas de watch mode
+- [x] Latencia de retroalimentación < 45 s
+- [x] Las seis RPC tienen aserción pgTAP **y** señuelo corrido (04-01 las deja en rojo, 04-05 las implementa, 04-07 corre los diez señuelos)
+- [x] `nyquist_compliant: true` en el frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-09-03, por `gsd-plan-checker` sobre los 14 planes.
+
+Las cuatro comprobaciones de Nyquist se verificaron contra los planes, no contra la intención: toda
+tarea `auto` tiene `<verify><automated>`, no hay banderas de watch mode, no hay tres tareas seguidas
+sin verificación, y ninguna referencia `MISSING` se quedó sin su entrada de Wave 0.
+
+`wave_0_complete` sigue en `false` a propósito: el `git clean` es una acción del usuario en su
+máquina y se marca cuando el plan 04-01 lo verifique en verde.
