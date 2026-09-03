@@ -118,7 +118,7 @@ Plans:
 - [x] 03-06-PLAN.md — El worker: secreto compartido en tiempo constante, guardas de transporte y la guarda de colapso sobre reservas clasificadas
 - [x] 03-07-PLAN.md — Migración 14: dispatcher con fan-out, watchdog anti-tormenta, poda del historial y el lazo local
 - [x] 03-08-PLAN.md — Integración de los criterios 1, 2 y 3 contra el feed real
-- [ ] 03-09-PLAN.md — Integración de los criterios 4 y 5: el diff entre corridas y las cinco alertas
+- [x] 03-09-PLAN.md — Integración de los criterios 4 y 5: el diff entre corridas y las cinco alertas
 - [ ] 03-10-PLAN.md — Privacidad transversal, los dos checkpoints humanos y el cierre de la fase
 
 ### Phase 4: Dashboard operativo del admin
@@ -233,7 +233,7 @@ Fases con patrón ya documentado en el research (se puede saltar):
 |-------|----------------|--------|-----------|
 | 1. Fundación, schema y RLS | 9/9 | Complete (passed_with_gaps) | 2026-09-01 |
 | 2. Acceso y administración del catálogo | 15/15 | Executed — 2 checkpoints humanos abiertos | 2026-09-02 |
-| 3. Motor de sincronización iCal | 8/10 | In Progress|  |
+| 3. Motor de sincronización iCal | 9/10 | In Progress|  |
 | 4. Dashboard operativo del admin | 0/TBD | Not started | - |
 | 5. Notificaciones push e instalación de la PWA | 0/TBD | Not started | - |
 | 6. PWA del aseador, offline-first | 0/TBD | Not started | - |
