@@ -291,3 +291,18 @@ de Airbnb sobrevive a un cambio de fechas. Lo contesta `uid_rotations` en produc
 
 Ninguna. Este plan no añade superficie: `lib/test/` no entra al bundle de producción y los
 guardarraíles 5, 7 y 8 lo exceptúan por una razón escrita y acotada.
+
+## Commits
+
+| Hash | Mensaje |
+|---|---|
+| `592ed87` | `test(03-08): lib/test/sync.ts, el arnes de siembra, corrida y limpieza del pipeline` |
+| `58ee4fc` | `test(03-08): criterios 2 y 3 de punta a punta contra el feed real` |
+| `3c369c2` | `test(03-08): criterio 1, aislamiento de feeds, lease y cadencia` |
+| `f7976d5` | `docs(03-08): resumen de los criterios 1, 2 y 3 medidos de punta a punta` |
+| `101b1ac` | `docs(03-08): marcar SYNC-01, 02, 03, 06 y 11 como cumplidos` |
+
+## Self-Check: PASSED
+
+Los cinco archivos existen en disco y los cinco commits están en el historial de la rama del
+worktree. Árbol de trabajo limpio, sin archivos sin seguir y sin borrados en ningún commit.
