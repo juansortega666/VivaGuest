@@ -307,3 +307,77 @@ describe('campoDeConstraint', () => {
     ).toBeUndefined();
   });
 });
+
+/**
+ * ASEO-07 (D-19): el 23505 del indice parcial de un aseo activo por apartamento y fecha
+ * tiene que llegar INLINE bajo el campo de fecha de los dialogos de crear y de
+ * reprogramar (UI-SPEC §12.6 y §15.3). Hasta ahora el indice estaba en `MENSAJES_UNIQUE`
+ * pero no en `CAMPOS_POR_CONSTRAINT`, asi que el error se iba a toast.
+ */
+describe('campoDeConstraint del indice de aseo activo (ASEO-07)', () => {
+  it('enruta cleanings_one_active_per_property_date a fecha', () => {
+    expect(campoDeConstraint(dup(IDX_ONE_ACTIVE_PER_PROPERTY_DATE))).toBe('fecha');
+  });
+
+  it('no cambia el mensaje de mapDbError: la interpolacion la hace el Server Action', () => {
+    // `mapDbError` solo ve el error de Postgres. No conoce el nombre del apartamento ni
+    // la fecha, y no debe conocerlos: el mensaje interpolado lo construye el Server
+    // Action del plan 04-08, que si tiene esos dos datos.
+    expect(
+      mapDbError({ code: '23505', message: dup(IDX_ONE_ACTIVE_PER_PROPERTY_DATE) }),
+    ).toBe('Ya existe un aseo activo para ese apartamento en esa fecha.');
+  });
+
+  it('el mensaje que sale a pantalla no lleva el nombre del indice ni el SQLSTATE', () => {
+    const mensaje = mapDbError({
+      code: '23505',
+      message: dup(IDX_ONE_ACTIVE_PER_PROPERTY_DATE),
+    });
+    expect(mensaje).not.toContain(IDX_ONE_ACTIVE_PER_PROPERTY_DATE);
+    expect(mensaje).not.toContain('duplicate key');
+    expect(mensaje).not.toContain('23505');
+  });
+
+  it('un mensaje sin constraint conocido sigue sin campo, y sigue yendo a toast', () => {
+    expect(campoDeConstraint(dup('indice_que_no_existe'))).toBeUndefined();
+    expect(campoDeConstraint('no autorizado')).toBeUndefined();
+  });
+
+  /**
+   * Las once entradas que `CAMPOS_POR_CONSTRAINT` ya tenia, en un solo caso. Anadir la
+   * doceava no puede mover ninguna: `buscar()` recorre la tabla en orden y devuelve la
+   * primera que aparezca dentro del mensaje.
+   */
+  it('las once entradas heredadas siguen devolviendo lo mismo', () => {
+    const esperado: ReadonlyArray<readonly [string, string]> = [
+      [dup(IDX_PROPERTIES_NOMBRE_UNIQ), 'nombre'],
+      [chk('properties', CHK_PROPS_ACTIVE_REQUIRES_RATES), 'tarifa_huesped'],
+      [chk('properties', CHK_PROPS_RATES_NONNEG), 'tarifa_huesped'],
+      [chk('properties', CHK_PROPS_ACTIVE_REQUIRES_OWNER), 'responsable_id'],
+      [chk('properties', CHK_PROPS_ASSIGNEES_ONLY_WHEN_MANAGED), 'responsable_id'],
+      [chk('properties', CHK_PROPS_SUPLENTE_DISTINCT), 'suplente_id'],
+      [dup(IDX_PROPERTY_ROOMS_ETIQUETA_UNIQ), 'etiqueta'],
+      [dup(IDX_MIC_PROP_UNIQ), 'nombre'],
+      [dup(IDX_MIC_GLOBAL_UNIQ), 'nombre'],
+      [
+        chk('property_secrets', CHK_PROPERTY_SECRETS_TIPO_CERRADURA_VALIDO),
+        'tipo_cerradura',
+      ],
+      [dup(IDX_CALENDAR_FEEDS_PROP_PROVIDER_UNIQ), 'ical_url'],
+    ];
+
+    expect(esperado).toHaveLength(11);
+    for (const [mensaje, campo] of esperado) {
+      expect(campoDeConstraint(mensaje)).toBe(campo);
+    }
+  });
+
+  it('cl_unmanaged_is_inert sigue sin campo: no hay input al que anclarlo', () => {
+    expect(campoDeConstraint(chk('cleanings', CHK_UNMANAGED_IS_INERT))).toBeUndefined();
+  });
+
+  it('el indice de aseo vigente por reserva sigue sin campo: no lo dispara un formulario', () => {
+    // `one_live_per_reservation` lo viola el pipeline iCal, no el admin escribiendo.
+    expect(campoDeConstraint(dup(IDX_ONE_LIVE_PER_RESERVATION))).toBeUndefined();
+  });
+});
