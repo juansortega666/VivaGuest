@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Fase 2 planeada. Siguiente: /gsd:execute-phase 2"
-last_updated: "2026-09-01T14:39:52.441Z"
-last_activity: 2026-09-01 -- Phase 02 execution started
+stopped_at: "Fase 3, wave 6 cerrada (03-07). Siguiente: 03-08"
+last_updated: "2026-09-03T00:35:15.099Z"
+last_activity: 2026-09-03 -- Phase 03 execution started
 progress:
   total_phases: 9
-  completed_phases: 1
-  total_plans: 24
-  completed_plans: 9
-  percent: 11
+  completed_phases: 2
+  total_plans: 34
+  completed_plans: 31
+  percent: 22
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 
 **Core value:** Que ningún aseo se pierda: todo checkout detectado en calendario termina en un aseo confirmado, asignado y ejecutado con evidencia, sin coordinación manual por WhatsApp.
-**Current focus:** Fase 3 — Motor de sincronización iCal, planeada y lista para ejecutar
+**Current focus:** Phase 03 — motor-de-sincronizaci-n-ical
 
 ## Current Position
 
-Phase: 02 (acceso-y-administraci-n-del-cat-logo) — EXECUTING
-Plan: 1 of 15
-Status: Executing Phase 02
-Last activity: 2026-09-02 — Fase 3 planeada: feed real capturado y anonimizado, research midió que node-ical produce el off-by-one que la fase existe para evitar
+Phase: 03 (motor-de-sincronizaci-n-ical) — EXECUTING
+Plan: 7 of 10 (waves 1-6 cerradas; siguiente: 03-08, wave 7)
+Status: Executing Phase 03 -- wave 7 de 9
+Last activity: 2026-09-03 -- 03-07 cerrado: scheduler pg_cron, watchdog y 05_sync en verde (plan(65), 65/65)
 
 Progress: [██░░░░░░░░] 22% (2 de 9 fases)
 
@@ -72,7 +72,7 @@ Ninguno.
 
 ### Blockers/Concerns
 
-- **[Fase 3] Bloqueante humano:** falta capturar un `.ics` real de Airbnb de la cuenta de VivaGuest. Es prerequisito para planear la fase, no una tarea dentro de ella. Sin esos archivos no hay fixtures ni forma de resolver la estabilidad del `UID`
+- **[Fase 3] Bloqueante humano parcialmente cerrado:** el `.ics` real de Airbnb ya se capturo y anonimizo (fixture `airbnb-real-anonimizado.ics`). Queda pendiente para el plan 03-10 un `.ics` con **bloqueos del propietario hechos a mano**; sin el, la clasificacion reserva-vs-bloqueo se queda en confianza MEDIA
 - **[Fase 3] Conflicto de research sin resolver:** la estabilidad del `UID` de Airbnb está en contradicción directa entre documentos; se resuelve empíricamente contra los feeds propios, con instrumentación desde el primer sync
 - **[Fase 1] Abierto de producto:** la lista definitiva de tareas del checklist bloquea el seed del catálogo, no el schema. Se arranca con el catálogo provisional (máximo 3 tareas por tipo de cuarto), editable sin migración
 - **[Fase 5] Riesgo aceptado:** push como único canal, sin semáforo de entregabilidad. Si en el piloto de Bogotá un aseo confirmado nunca llega al aseador, entra el semáforo (NOTIF-V2-01)
@@ -110,6 +110,6 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-08-31
-Stopped at: Fase 2 ejecutada. Bloqueantes: `.ics` real de Airbnb (Fase 3), proyectos Supabase (producción)
+Last session: 2026-09-03
+Stopped at: Fase 3, wave 6 cerrada (03-07). Siguiente: 03-08 (wave 7)
 Resume file: None
