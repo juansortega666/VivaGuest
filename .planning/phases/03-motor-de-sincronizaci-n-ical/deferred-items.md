@@ -286,3 +286,27 @@ destructivo**, y eso está construido a propósito en tres capas independientes:
    `bloqueo`, producen **cero** aseos, y **si de verdad no traen la URL de detalle de reserva**. Si
    la trajeran, es un hallazgo **bloqueante** y hay que registrarlo aquí antes de seguir.
 6. Correr el señuelo del orden de las ramas y registrar si ahora sí se atrapa.
+
+## De la verificacion de fase (2026-09-03)
+
+### 9. El patron de reloj JS contra reloj Postgres sigue vivo en dos o tres sitios mas
+
+**Encontrado en:** verificacion de la Fase 3, como hallazgo menor no bloqueante.
+
+**Que pasa.** El plan 03-09 arreglo un test intermitente que restaba una marca generada en
+JavaScript (`last_attempt_at`) de una generada por Postgres (`next_sync_at`) con margen cero. La
+deriva entre el contenedor y el host esta medida en unos 150 ms, y con el signo equivocado el peor
+caso cruzaba el umbral y ponia el test en rojo sin que nada estuviera mal.
+
+El mismo patron sigue presente en `sync-dispatcher.integration.test.ts` y en el test 8 de
+`sync-pipeline.integration.test.ts`, pero con **margen de 30 segundos** en vez de margen cero. Con
+la deriva actual no flakea, y por eso no bloquea. Pero la causa raiz es la misma y el margen es lo
+unico que lo separa del fallo: una maquina mas lenta, un contenedor mas desincronizado o un CI
+cargado lo acercan.
+
+**Forma de cierre.** La misma que aplico el plan 03-09: medir contra una marca de la propia
+transaccion de Postgres (`feed_sync_runs.finished_at`) en vez de contra `Date.now()` del proceso de
+test. **Dueno:** quien toque esos tests la proxima vez. No justifica un plan propio.
+
+**Por que no se arregla ahora.** Es una fase ya verificada y los tests estan en verde. Tocarlos sin
+un fallo que lo motive cambia codigo probado por una mejora teorica.
