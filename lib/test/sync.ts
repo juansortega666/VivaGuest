@@ -349,10 +349,29 @@ export async function cancelados(propertyId: string): Promise<number> {
  * Se va por `docker exec` y no por un cliente de Postgres en npm a propósito:
  * es el mismo camino que ya usa `scripts/dev/sync-local.sh` y no añade una
  * dependencia al proyecto para tres consultas.
+ *
+ * ── EL GUION VA POR LA ENTRADA ESTÁNDAR, Y ESO ES LO QUE HABILITA EL PATRÓN
+ *    QUE HACE DETERMINISTAS LAS PRUEBAS DEL DISPATCHER ────────────────────
+ *
+ * Con `-f -` el guion entero corre en UNA sesión, así que un `begin … rollback`
+ * significa lo que dice. Eso permite medir el fan-out SIN EFECTOS:
+ *
+ *   · los dos secretos de Vault se crean DENTRO de la transacción, así que el
+ *     job de producción —que corre en otra sesión y sigue fallando por falta de
+ *     secretos— no los ve y no puede reclamar los feeds del test a mitad de la
+ *     medición;
+ *   · las filas que `pg_net` encola quedan visibles para nosotros y NO para su
+ *     trabajador de fondo, que no puede leer lo no confirmado, así que ninguna
+ *     petición HTTP sale de verdad;
+ *   · el `rollback` deshace el `claimed_at`, el `next_sync_at` y la cola.
+ *
+ * La alternativa —desactivar el job compartido y volver a activarlo— toca
+ * estado global de una base que comparten todos los worktrees y se queda a
+ * medias si el proceso muere. Esta no toca nada.
  */
 const CONTENEDOR = 'supabase_db_vivaguest';
 
-export function sqlDePruebas(consulta: string): string[] {
+export function sqlDePruebas(guion: string): string[] {
   const salida = execFileSync(
     'docker',
     [
@@ -367,10 +386,10 @@ export function sqlDePruebas(consulta: string): string[] {
       '-qAtX',
       '-v',
       'ON_ERROR_STOP=1',
-      '-c',
-      consulta,
+      '-f',
+      '-',
     ],
-    { encoding: 'utf8' },
+    { encoding: 'utf8', input: guion },
   );
   return salida.split('\n').filter((l) => l.length > 0);
 }
