@@ -2,8 +2,30 @@
 -- 02 — Enums del dominio
 --
 -- Van en su propio archivo porque añadir un valor después exige
--- `alter type … add value`, que NO corre dentro de una transacción. Aislarlos
--- hace obvio el diff el día que eso pase.
+-- `alter type … add value`, que tiene una restricción propia. Aislarlos hace
+-- obvio el diff el día que eso pase.
+--
+-- CORRECCIÓN (plan 03-03, medida sobre este stack: PG 17.6, CLI 2.116.0).
+-- Este comentario decía que `alter type … add value` "NO corre dentro de una
+-- transacción". Eso describe un Postgres anterior al 12 y en PG 17.6 es falso.
+-- Lo medido, por los dos caminos:
+--
+--   begin;
+--   alter type public.notification_type add value 'zz_prueba';   -- ALTER TYPE, sin error
+--   rollback;                                                     -- y se revierte
+--
+--   begin;
+--   alter type public.notification_type add value 'zz_prueba';
+--   select 'zz_prueba'::public.notification_type;
+--   -- ERROR: unsafe use of new value "zz_prueba" of enum type notification_type
+--   -- HINT:  New enum values must be committed before they can be used.
+--   rollback;
+--
+-- O sea: el `alter type` SÍ corre en transacción; lo que no se puede es USAR el
+-- valor nuevo en esa misma transacción. La restricción real, más suave que la
+-- que decía el texto anterior, es que **añadir un valor exige su propia
+-- migración, separada de cualquier migración que lo use**. Sigue justificando
+-- que este archivo esté aislado, pero por una razón distinta y más barata.
 --
 -- Los valores están fijados por el dominio y por el contrato de
 -- `lib/database.types.ts`. `notification_type` lleva sus 11 valores completos

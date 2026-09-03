@@ -1,0 +1,157 @@
+'use client';
+
+import { ChevronDown, LogOut } from 'lucide-react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+
+import { cerrarSesion } from '@/app/_actions/sesion';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
+
+/**
+ * Barra superior del admin (UI-SPEC §6.1).
+ *
+ * Es Client Component por UNA sola razon: `usePathname()`, que es lo que decide
+ * cual de los dos links esta activo. El resto del shell se queda en servidor. La
+ * alternativa (convertir `layout.tsx` entero en cliente) arrastraria al bundle el
+ * guard y la fabrica de Supabase de servidor, que ni siquiera pueden viajar al
+ * navegador porque declaran `server-only`.
+ */
+
+/**
+ * Los dos links de esta fase.
+ *
+ * NO se anaden aqui los de fases futuras. Dia, Sin confirmar y Alertas llegan en
+ * la Fase 4; dejarlos hoy como links muertos o deshabilitados es peor que no
+ * tenerlos, porque promete navegacion que no existe.
+ */
+const ENLACES = [
+  { href: '/apartamentos', etiqueta: 'Apartamentos' },
+  { href: '/aseadores', etiqueta: 'Aseadores' },
+] as const;
+
+/**
+ * Iniciales para el circulo del menu de usuario.
+ *
+ * Dos letras como maximo: con tres, el circulo de 28px se queda sin aire y el
+ * texto de 12px empieza a recortarse.
+ */
+export function iniciales(nombre: string): string {
+  const palabras = nombre.trim().split(/\s+/).filter(Boolean);
+  if (palabras.length === 0) return '?';
+  return palabras
+    .slice(0, 2)
+    .map((p) => p[0] ?? '')
+    .join('')
+    .toUpperCase();
+}
+
+export function TopNav({ nombre }: { nombre: string }) {
+  const ruta = usePathname();
+
+  return (
+    <header className="sticky top-0 z-40 h-barra border-b border-border bg-background">
+      <nav
+        aria-label="Navegación principal"
+        className="mx-auto flex h-full w-full max-w-admin items-center gap-xl px-xl"
+      >
+        {/*
+          El wordmark va en `--foreground`, nunca en el color de marca: §4.4 deja
+          el wordmark explicitamente FUERA de la lista cerrada del acento. Poppins
+          (`font-brand`) si es correcta aqui, porque el logotipo es uno de los tres
+          momentos de marca del contrato.
+
+          Sin logo, a proposito: pintar un placeholder de identidad es exactamente
+          lo que haria doloroso el rebrand.
+        */}
+        <Link
+          href="/apartamentos"
+          className="transicion font-brand text-heading text-foreground hover:opacity-80"
+        >
+          VivaGuest
+        </Link>
+
+        {/* gap-xs = 4px entre links (§6.1). */}
+        <ul className="flex h-full items-stretch gap-xs">
+          {ENLACES.map(({ href, etiqueta }) => {
+            // Activo tambien en las subrutas: `/apartamentos/nuevo` sigue siendo
+            // la seccion Apartamentos. Sin esto, el usuario pierde de vista en que
+            // parte del panel esta en cuanto abre una ficha.
+            const activo = ruta === href || ruta.startsWith(`${href}/`);
+
+            return (
+              <li key={href} className="flex items-stretch">
+                {/*
+                  El link ocupa toda la altura de la barra para que su
+                  `border-bottom` de 2px quede pegado al borde inferior, como pide
+                  §6.1. El alto de 40px del contrato es el area de interaccion
+                  visual, que se consigue con el padding vertical implicito de
+                  `items-center` dentro de los 56px.
+                */}
+                <Link
+                  href={href}
+                  aria-current={activo ? 'page' : undefined}
+                  className={cn(
+                    'transicion flex h-full items-center border-b-2 px-md text-body',
+                    activo
+                      ? 'border-primary font-semibold text-foreground'
+                      : 'border-transparent text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {etiqueta}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="ml-auto">
+          <DropdownMenu>
+            <DropdownMenuTrigger className="transicion flex items-center gap-sm rounded-md px-sm py-xs text-body text-foreground hover:bg-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              <span
+                aria-hidden="true"
+                className="flex size-avatar shrink-0 items-center justify-center rounded-full bg-muted text-micro font-semibold text-foreground"
+              >
+                {iniciales(nombre)}
+              </span>
+              <span>{nombre}</span>
+              <ChevronDown className="size-3.5" strokeWidth={2} aria-hidden="true" />
+            </DropdownMenuTrigger>
+
+            <DropdownMenuContent align="end" className="w-auto min-w-40">
+              {/*
+                La accion va en un <form> de verdad y no en un `onClick`: cerrar
+                sesion no necesita ni un gramo de JavaScript de cliente, y asi
+                funciona igual si el bundle todavia no hidrato.
+
+                `closeOnClick={false}` no es cosmetico: con el default, Base UI
+                desmonta el popup en el mismo click, y desmontar el <form> antes de
+                que el navegador procese el submit es una carrera que a veces se
+                pierde y deja al usuario dentro sin ninguna senal de error. El
+                `redirect` de la action se lleva la pantalla igual, asi que no hay
+                menu abierto que cerrar.
+              */}
+              <form action={cerrarSesion}>
+                <DropdownMenuItem
+                  variant="destructive"
+                  closeOnClick={false}
+                  nativeButton
+                  render={<button type="submit" />}
+                  className="w-full"
+                >
+                  <LogOut className="size-4" strokeWidth={2} aria-hidden="true" />
+                  Cerrar sesión
+                </DropdownMenuItem>
+              </form>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </nav>
+    </header>
+  );
+}
