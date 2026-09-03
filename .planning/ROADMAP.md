@@ -131,7 +131,22 @@ Plans:
   3. El admin reasigna un aseo puntual sin tocar responsable ni suplente permanentes, crea aseos `repaso` y `emergencia`, reprograma fechas, cierra manualmente un aseo que la realidad ya resolvió y cancela
   4. Un solo panel de alertas muestra con la misma jerarquía visual: urgentes, extensión mal creada, "no puedo", daños, faltantes, calendario caído y hora límite vencida sin terminar
   5. El admin abre cualquier apartamento y ve su historial cronológico con los daños reportados; los aseos de unidades con `gestion_vivaguest = false` se muestran con fecha y a cargo de quién, sin estado ni acciones
-**Plans**: TBD
+**Plans**: 14 plans en 6 waves
+Plans:
+- [ ] 04-01-PLAN.md — Wave 0: guarda de duplicados, pgTAP de las seis RPC en rojo, helper de siembra
+- [ ] 04-02-PLAN.md — Fundamentos de UI: `sheet`, tokens de `@theme` y `EstadoVacio compacto`
+- [ ] 04-03-PLAN.md — `estadoDeAseo()`, fecha corta, tiempo relativo y el campo del error de ASEO-07
+- [ ] 04-04-PLAN.md — `lib/domain/alertas.ts`: mapa de once tipos, computadas, mezcla y orden
+- [ ] 04-05-PLAN.md — Migración 15: seis RPC `SECURITY DEFINER` + publicación de Realtime
+- [ ] 04-06-PLAN.md — `lib/data/operacion.ts`: la consulta única y sus tres proyecciones
+- [ ] 04-07-PLAN.md — Reprogramar contra el reconcile, y los diez señuelos de la capa de base
+- [ ] 04-08-PLAN.md — Las ocho Server Actions de la pantalla de operación
+- [ ] 04-09-PLAN.md — La pantalla `/operacion`: dos carriles, días, fila y franja de carga
+- [ ] 04-10-PLAN.md — Bandeja `Sin confirmar`, `Sheet` encadenado y creación manual
+- [ ] 04-11-PLAN.md — `MenuAseo` y los cuatro diálogos de mutación
+- [ ] 04-12-PLAN.md — Historial del apartamento con los daños (DASH-06, REPORT-04)
+- [ ] 04-13-PLAN.md — Panel de alertas, marca de frescura y Realtime con degradación
+- [ ] 04-14-PLAN.md — E2E, prueba de escala de grises y puerta de fase
 **UI hint**: yes
 
 **Costura conocida:** al confirmar, el aseo queda asignado pero **no se notifica a nadie** hasta que exista la Fase 5. El evento se escribe en la cola de notificaciones y se drena cuando el worker exista. Es intencional, no un olvido.
