@@ -192,6 +192,15 @@
   --status-warn: oklch(0.5553 0.1455 49.00);
   --status-idle: oklch(0.4455 0.0374 257.28);
   --status-info: oklch(0.5510 0.0234 264.36);
+  /* Quinto estado, anadido en la Fase 4 (04-UI-SPEC.md §4.1). Los cuatro de
+     arriba se reparten cuatro estados del aseo y "En curso" se quedaba sin uno;
+     los dos grises (`idle` #475569 e `info` #6B7280) estan demasiado cerca para
+     separar dos estados distintos. Contrastes medidos con la formula WCAG 2.1 el
+     2026-09-03: 6.70:1 sobre --background y 6.25:1 sobre --canvas, AA de texto en
+     las dos superficies donde se usa (fila normal y fila en hover). Es azul, asi
+     que no colisiona con --primary (hue 29) ni con --destructive (hue 13.7), que
+     es el choque declarado en 02-UI-SPEC.md §4.6. */
+  --status-progress: oklch(0.4882 0.2172 264.38);
   --surface-ok:   oklch(0.9788 0.0221 160.24);
   --surface-warn: oklch(0.9810 0.0187 83.06);
   --surface-destructive: oklch(0.9708 0.0130 11.54);
@@ -205,6 +214,7 @@
   --color-status-warn: var(--status-warn);
   --color-status-idle: var(--status-idle);
   --color-status-info: var(--status-info);
+  --color-status-progress: var(--status-progress);
   --color-surface-ok:   var(--surface-ok);
   --color-surface-warn: var(--surface-warn);
   --color-surface-destructive: var(--surface-destructive);
@@ -384,6 +394,44 @@
      pagina de 1440px a proposito: una linea de input de 1400px obliga al ojo a
      recorrer la pantalla entera entre la etiqueta y el final del campo. */
   --container-formulario: 720px;
+
+  /* Carriles de la pantalla de operacion (04-UI-SPEC.md §2 y §6). La rejilla es
+     `minmax(0, 1fr) var(--container-rail)`, asi que el carril lateral es el unico
+     de los dos con ancho declarado. */
+  --container-rail:  360px;  /* carril lateral sticky: bandeja + alertas */
+
+  /* Ancho del Sheet de confirmacion encadenada (§10). Misma situacion que
+     --container-dialogo: el `SheetContent` generado trae `sm:max-w-sm` (384px) y
+     D-09 pide 480px. El override en el sitio de uso tiene que repetir la cadena
+     de variantes exacta, `data-[side=right]:sm:max-w-sheet`; ver la cabecera de
+     components/ui/sheet.tsx. */
+  --container-sheet: 480px;
+}
+
+/* ── Tabla de dia y panel de alertas — 04-UI-SPEC.md §2, §7.1, §8.2 y §11 ─────
+   Las cuatro columnas llevan sufijo propio en vez de reutilizar las de la tabla
+   de apartamentos, por la misma razon que la Fase 2 separo
+   --spacing-col-estado-apto de --spacing-col-estado: compartir el token haria
+   que tocar la tabla de aseos moviera la de apartamentos.
+
+   --spacing-fila (40px), --spacing-fila-encabezado (32px), --spacing-barra
+   (56px), --spacing-col-menu (48px) y --spacing-col-nombre (200px) YA existen y
+   esta fase los reutiliza tal cual.
+
+   No se declara ningun token de toque de 44px: esta fase es solo (admin),
+   escritorio con mouse, y --spacing-toque sigue siendo exclusivo de
+   app/(cleaner)/.                                                             */
+@theme {
+  --spacing-col-estado-aseo: 132px;  /* ESTADO: icono 14px + `Gestion externa`, la etiqueta mas larga */
+  --spacing-col-hora:         88px;  /* HORA LIMITE, alineada a la derecha */
+  --spacing-col-acargo:      176px;  /* A CARGO: aseador, o contacto externo */
+  --spacing-col-huespedes:    88px;  /* HUESPEDES, alineada a la derecha */
+
+  /* Altos declarados, todos multiplo de 4. Existen como token por lo mismo que
+     los anchos: para que ninguna fila escriba el valor entre corchetes. */
+  --spacing-fila-alerta:  64px;  /* fila del panel de alertas: 12·1.4 + 14·1.5 + 24 de padding = 61.8 */
+  --spacing-dia-cabecera: 48px;  /* cabecera colapsable de cada dia */
+  --spacing-chip:         32px;  /* chip de carga por aseador */
 }
 
 /* ── Movimiento — 02-UI-SPEC.md §6.4 ──────────────────────────────────────────
