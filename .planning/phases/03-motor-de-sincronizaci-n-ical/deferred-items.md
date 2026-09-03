@@ -158,7 +158,23 @@ normalización pensando que es defensiva.
 **Dueño:** la primera corrida real. **Forma de cierre:** una sola corrida contra el feed en vivo lo
 confirma o lo desmiente.
 
-### 7. `npx tsc --noEmit` y `npm run build` en rojo por directorios duplicados en `node_modules` del checkout principal
+### 7. ~~`npx tsc --noEmit` y `npm run build` en rojo por directorios duplicados en `node_modules`~~ CERRADO 2026-09-03
+
+> **CERRADO el 2026-09-03 por el orquestador, tras la ejecución del plan 03-10.** Se borraron los
+> nueve directorios duplicados de `node_modules/@types/` del checkout principal, uno por uno y solo
+> los que tenían un gemelo sin sufijo (`chai 2` junto a `chai`, etcétera). `json5` se conservó: su
+> nombre acaba en dígito de forma legítima y no es un duplicado. **Medido después:**
+> `npx tsc --noEmit` sale con exit 0 y cero líneas, y `npm run build` con exit 0, compilando
+> `/api/cron/sync-feed` como ruta dinámica. Las tres puertas quedan verdes.
+>
+> **Corrección al diagnóstico de abajo:** el punto 3, "la prueba decisiva", es **falso**.
+> `npx tsc --noEmit --typeRoots ./node_modules/@types` sigue devolviendo los mismos nueve errores;
+> el flag no corta el recorrido hacia arriba. Lo demás de la entrada (la causa, el conteo de nueve
+> a nueve, y que no lo causa el plan) sí quedó confirmado.
+>
+> **Lo que sigue abierto:** la causa raíz. El proyecto vive en una carpeta sincronizada y el
+> renombrado por conflicto va a volver a duplicar. La salida duradera sigue siendo sacar el proyecto
+> de la carpeta sincronizada, o excluir `node_modules` de la sincronización. **Dueño:** el usuario.
 
 **Encontrado en:** plan 03-10, al correr la puerta de fase.
 
@@ -201,16 +217,9 @@ start`: el build muere y Playwright reporta `Process from config.webServer was n
 Exit code: 1`. Medido con `PLAYWRIGHT_PORT=3117`. No es un fallo de ningún spec: la suite ni
 arranca.
 
-**Forma de cierre.** Borrar los directorios duplicados del checkout principal y reinstalar:
-
-```sh
-rm -rf /Users/juanortega/Documents/VivaGuest/node_modules && npm ci
-```
-
-**No se ejecuta desde aquí:** es `node_modules` de la máquina del usuario, está fuera del repositorio
-y borrar directorios ajenos al worktree es exactamente lo que la frontera de alcance del ejecutor
-prohíbe. **Dueño:** el usuario. Y la salida duradera es sacar el proyecto de la carpeta sincronizada,
-o excluir `node_modules` de la sincronización.
+**Forma de cierre.** Ya aplicada, ver el bloque del encabezado. Se borraron solo los nueve
+duplicados en vez de reinstalar entero: es quirúrgico, tarda un segundo, y evita que la
+sincronización vuelva a duplicar mientras se escriben miles de archivos.
 
 ### 8. El `.ics` real con bloqueos del propietario: DIFERIDO. La clasificación se queda en MEDIA
 
