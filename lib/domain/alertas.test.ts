@@ -1,12 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Alerta, AseoParaAlertas, ClaveDeAlerta } from './alertas';
+import type {
+  Alerta,
+  AseoParaAlertas,
+  ClaveDeAlerta,
+  NotificacionParaAlertas,
+} from './alertas';
 import {
   MAPA_DE_ALERTAS,
   ORDEN_DE_TIPOS,
   PRESENTACION_GENERICA,
   TIPOS_DE_NOTIFICACION,
   alertasComputadas,
+  conteosPorTipo,
+  mezclarAlertas,
   presentacionDeAlerta,
   venceEnMs,
 } from './alertas';
@@ -499,5 +506,366 @@ describe('alertasComputadas · calendario caído (global)', () => {
 
     expect(alertasComputadas({ ...base, maxUltimoExito: justoDentro })).toEqual([]);
     expect(alertasComputadas({ ...base, maxUltimoExito: justoFuera })).toHaveLength(1);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Mezcla, orden, deduplicación y conteos (UI-SPEC §11.4)
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Molde de notificación. Cada caso sobrescribe solo lo que le importa. */
+function notif(
+  over: Partial<NotificacionParaAlertas> & { id: string },
+): NotificacionParaAlertas {
+  return {
+    type: 'dano_reportado',
+    title: `Título de ${over.id}`,
+    body: `Cuerpo de ${over.id}`,
+    url: null,
+    cleaning_id: null,
+    property_id: null,
+    created_at: '2026-09-04T12:00:00+00:00',
+    apartamento: 'Bogotá 1',
+    ...over,
+  };
+}
+
+/** Las dos computadas del caso de orden: una urgente a las 09:00Z y una hora límite a las 15:00Z. */
+function computadasDelCasoDeOrden(): Alerta[] {
+  return alertasComputadas({
+    aseos: [
+      aseo({
+        id: 'c1',
+        is_urgent: true,
+        hora_limite: '14:00:00', // 19:00Z, no ha vencido
+        created_at: '2026-09-04T09:00:00+00:00',
+      }),
+      aseo({
+        id: 'c2',
+        is_urgent: false,
+        hora_limite: '10:00:00', // 15:00Z, ya venció
+      }),
+    ],
+    maxUltimoExito: '2026-09-04T17:30:00+00:00', // sana: no hay alerta global
+    ahoraMs: AHORA,
+    hoy: HOY,
+  });
+}
+
+describe('mezclarAlertas · orden', () => {
+  it('SALE CRONOLÓGICO DESCENDENTE, y se compara contra la secuencia EXACTA de ids', () => {
+    // ESTE ES EL CRITERIO 4 DEL ROADMAP, NO UNA PREFERENCIA (D-06).
+    //
+    // La aserción compara la secuencia completa de ids y no un booleano tipo
+    // "está ordenado", porque un booleano pasaría igual con CUALQUIER orden
+    // total. Los instantes están entrelazados a propósito entre persistidas y
+    // computadas: ordenar por tipo, por procedencia o por severidad produce una
+    // secuencia distinta y esto se pone rojo.
+    //
+    // Instantes: n1 17:00Z · c2 15:00Z · n2 12:00Z · c1 09:00Z · n3 06:00Z
+    const orden = mezclarAlertas(
+      [
+        notif({ id: 'n1', created_at: '2026-09-04T17:00:00+00:00' }),
+        notif({
+          id: 'n2',
+          type: 'aseo_cancelado',
+          created_at: '2026-09-04T12:00:00+00:00',
+        }),
+        notif({
+          id: 'n3',
+          type: 'extension_sospechosa',
+          created_at: '2026-09-04T06:00:00+00:00',
+        }),
+      ],
+      computadasDelCasoDeOrden(),
+    );
+
+    expect(orden.map((a) => a.id)).toEqual([
+      'n1',
+      'hora_limite_vencida:c2',
+      'n2',
+      'urgente:c1',
+      'n3',
+    ]);
+  });
+
+  it('a igual instante el orden es estable y determinista, no el del argumento', () => {
+    // Dos hechos del mismo segundo existen (una corrida del sync inserta en
+    // ráfaga). Sin desempate, el orden dependería del algoritmo de `sort` y la
+    // lista bailaría entre renders sin que nada cambie.
+    const mismoInstante = '2026-09-04T12:00:00+00:00';
+    const directo = mezclarAlertas(
+      [
+        notif({ id: 'b', created_at: mismoInstante }),
+        notif({ id: 'a', created_at: mismoInstante }),
+        notif({ id: 'c', created_at: mismoInstante }),
+      ],
+      [],
+    );
+    const alReves = mezclarAlertas(
+      [
+        notif({ id: 'c', created_at: mismoInstante }),
+        notif({ id: 'a', created_at: mismoInstante }),
+        notif({ id: 'b', created_at: mismoInstante }),
+      ],
+      [],
+    );
+
+    expect(directo.map((a) => a.id)).toEqual(alReves.map((a) => a.id));
+  });
+
+  it('no muta los arrays que recibe', () => {
+    const notificaciones = [
+      notif({ id: 'n1', created_at: '2026-09-04T06:00:00+00:00' }),
+      notif({ id: 'n2', created_at: '2026-09-04T17:00:00+00:00' }),
+    ];
+    const computadas = computadasDelCasoDeOrden();
+
+    mezclarAlertas(notificaciones, computadas);
+
+    expect(notificaciones.map((n) => n.id)).toEqual(['n1', 'n2']);
+    expect(computadas.map((c) => c.id)).toEqual([
+      'urgente:c1',
+      'hora_limite_vencida:c2',
+    ]);
+  });
+});
+
+describe('mezclarAlertas · conversión de la fila de notificación', () => {
+  it('una notificación sale atendible, con su título, su cuerpo y su url', () => {
+    const [a] = mezclarAlertas(
+      [
+        notif({
+          id: 'n1',
+          type: 'dano_reportado',
+          title: 'Rejilla del sifón rota',
+          body: 'La rejilla del sifón del baño principal está rota.',
+          url: '/operacion#aseo-xyz',
+          cleaning_id: 'xyz',
+          property_id: 'prop-1',
+          apartamento: 'Bogotá 3',
+        }),
+      ],
+      [],
+    );
+
+    expect(a).toMatchObject({
+      id: 'n1',
+      clave: 'dano_reportado',
+      titulo: 'Rejilla del sifón rota',
+      cuerpo: 'La rejilla del sifón del baño principal está rota.',
+      apartamento: 'Bogotá 3',
+      cleaningId: 'xyz',
+      propertyId: 'prop-1',
+      url: '/operacion#aseo-xyz',
+      // SOLO las respaldadas por una fila de `notifications` se pueden atender:
+      // son las únicas que tienen `read_at`.
+      atendible: true,
+    });
+  });
+
+  it('UNA FILA CON TIPO DESCONOCIDO SOBREVIVE LA MEZCLA, no se filtra', () => {
+    // La regla del fallback, comprobada donde de verdad importa. Filtrar los
+    // desconocidos en la mezcla es el bug: la fila desaparece del panel sin
+    // dejar rastro y nadie se entera de que existió.
+    const orden = mezclarAlertas(
+      [
+        notif({ id: 'conocida', created_at: '2026-09-04T17:00:00+00:00' }),
+        notif({
+          id: 'del-futuro',
+          // Cast a propósito: simula un valor de enum que la base ya tiene y
+          // este despliegue de la app todavía no conoce.
+          type: 'tipo_que_no_existe_todavia' as NotificacionParaAlertas['type'],
+          created_at: '2026-09-04T18:00:00+00:00',
+        }),
+      ],
+      [],
+    );
+
+    expect(orden.map((a) => a.id)).toEqual(['del-futuro', 'conocida']);
+    expect(presentacionDeAlerta(orden[0].clave).etiqueta).toBe('AVISO');
+  });
+
+  it('sin apartamento resuelto no inventa nombre: deja la cadena vacía', () => {
+    const [a] = mezclarAlertas([notif({ id: 'n1', apartamento: null })], []);
+    expect(a.apartamento).toBe('');
+  });
+});
+
+describe('mezclarAlertas · deduplicación', () => {
+  it('SUPRIME la computada si hay una notificación SEMBRADA A MANO del mismo tipo y mismo cleaning_id', () => {
+    // EL NOMBRE DICE "SEMBRADA A MANO" A PROPÓSITO. Hoy NADIE produce
+    // `hora_limite_vencida` en ninguna migración (grep exhaustivo,
+    // 2026-09-03), así que esta deduplicación NO PUEDE ACTIVARSE en el sistema
+    // real. Sin la siembra, el test pasaría sin probar absolutamente nada, que
+    // es la trampa concreta que el research documenta como Pitfall 6.
+    //
+    // Se escribe igual porque es barata y porque la Fase 5 o la 9 pueden añadir
+    // el productor.
+    const computadas = alertasComputadas({
+      aseos: [aseo({ id: 'c2', hora_limite: '10:00:00' })],
+      maxUltimoExito: '2026-09-04T17:30:00+00:00',
+      ahoraMs: AHORA,
+      hoy: HOY,
+    });
+    expect(computadas.map((c) => c.id)).toEqual(['hora_limite_vencida:c2']);
+
+    const orden = mezclarAlertas(
+      [notif({ id: 'n1', type: 'hora_limite_vencida', cleaning_id: 'c2' })],
+      computadas,
+    );
+
+    expect(orden.map((a) => a.id)).toEqual(['n1']);
+  });
+
+  it('no deduplica entre tipos distintos ni entre aseos distintos', () => {
+    const computadas = alertasComputadas({
+      aseos: [aseo({ id: 'c2', hora_limite: '10:00:00' })],
+      maxUltimoExito: '2026-09-04T17:30:00+00:00',
+      ahoraMs: AHORA,
+      hoy: HOY,
+    });
+
+    // Mismo aseo pero otro tipo, y mismo tipo pero otro aseo. Ninguna suprime.
+    const orden = mezclarAlertas(
+      [
+        notif({ id: 'otro-tipo', type: 'dano_reportado', cleaning_id: 'c2' }),
+        notif({
+          id: 'otro-aseo',
+          type: 'hora_limite_vencida',
+          cleaning_id: 'c9',
+        }),
+      ],
+      computadas,
+    );
+
+    expect(orden.some((a) => a.id === 'hora_limite_vencida:c2')).toBe(true);
+    expect(orden).toHaveLength(3);
+  });
+
+  it('NO deduplica la caída global, que no tiene cleaning_id', () => {
+    // Las dos mitades de "calendario caído" COEXISTEN y el 04-CONTEXT lo pide
+    // literalmente: la del watchdog dice QUÉ FEED falla, la global dice que NO
+    // CORRE NADA. Son hechos distintos.
+    //
+    // Y la trampa concreta: si la deduplicación comparara `cleaning_id` sin
+    // excluir el nulo, `null === null` suprimiría la global cada vez que el
+    // watchdog escribe su notificación por feed, que es justo cuando ambas
+    // pueden ser ciertas.
+    const computadas = alertasComputadas({
+      aseos: [],
+      maxUltimoExito: '2026-09-04T13:00:00+00:00', // caída
+      ahoraMs: AHORA,
+      hoy: HOY,
+    });
+    expect(computadas.map((c) => c.id)).toEqual(['calendario_caido:sistema']);
+
+    const orden = mezclarAlertas(
+      [
+        notif({
+          id: 'del-watchdog',
+          type: 'calendario_caido',
+          cleaning_id: null,
+          property_id: 'prop-7',
+          created_at: '2026-09-04T17:00:00+00:00',
+        }),
+      ],
+      computadas,
+    );
+
+    expect(orden).toHaveLength(2);
+    expect(orden.map((a) => a.id)).toEqual([
+      'del-watchdog',
+      'calendario_caido:sistema',
+    ]);
+  });
+});
+
+describe('conteosPorTipo', () => {
+  it('respeta el ORDEN FIJO de la tabla del UI-SPEC §11.1, NUNCA el conteo', () => {
+    // Una lista de filtro que se reordena sola según los conteos es inusable:
+    // la opción que buscas cambia de sitio cada vez que entra una alerta.
+    //
+    // La fixture está sembrada para que ordenar por conteo dé una secuencia
+    // DISTINTA: `aseo_cancelado` tiene 3, que es el máximo, y va en el puesto
+    // 8 del orden fijo. Si alguien mete un `sort` por conteo, se va al primero
+    // y esto se pone rojo.
+    const alertas = mezclarAlertas(
+      [
+        notif({ id: 'x1', type: 'aseo_cancelado' }),
+        notif({ id: 'x2', type: 'aseo_cancelado' }),
+        notif({ id: 'x3', type: 'aseo_cancelado' }),
+        notif({ id: 'y1', type: 'dano_reportado' }),
+      ],
+      [],
+    );
+
+    const conteos = conteosPorTipo(alertas);
+
+    expect(conteos.map((c) => c.clave)).toEqual([...ORDEN_DE_TIPOS]);
+    expect(conteos[0].clave).toBe('urgente');
+  });
+
+  it('incluye los tipos con conteo CERO: la lista no cambia de longitud entre lecturas', () => {
+    // Si los ceros se omitieran, el filtro tendría 2 opciones ahora y 5 dentro
+    // de un minuto, y la que estabas a punto de tocar se movería debajo del
+    // cursor.
+    const conteos = conteosPorTipo(
+      mezclarAlertas([notif({ id: 'y1', type: 'dano_reportado' })], []),
+    );
+
+    expect(conteos).toHaveLength(12);
+    expect(conteos.filter((c) => c.conteo === 0)).toHaveLength(11);
+    expect(conteosPorTipo([])).toHaveLength(12);
+    expect(conteosPorTipo([]).every((c) => c.conteo === 0)).toBe(true);
+  });
+
+  it('cuenta bien, y cuenta juntas las persistidas y las computadas del mismo tipo', () => {
+    const alertas = mezclarAlertas(
+      [
+        notif({ id: 'x1', type: 'aseo_cancelado' }),
+        notif({ id: 'x2', type: 'aseo_cancelado' }),
+        notif({ id: 'y1', type: 'dano_reportado' }),
+      ],
+      computadasDelCasoDeOrden(),
+    );
+
+    const porClave = Object.fromEntries(
+      conteosPorTipo(alertas).map((c) => [c.clave, c.conteo]),
+    );
+
+    expect(porClave.aseo_cancelado).toBe(2);
+    expect(porClave.dano_reportado).toBe(1);
+    expect(porClave.urgente).toBe(1);
+    expect(porClave.hora_limite_vencida).toBe(1);
+    expect(porClave.no_puedo).toBe(0);
+  });
+
+  it('trae la etiqueta del mapa, para que el filtro diga `Daño (3)` y no `dano_reportado (3)`', () => {
+    const conteos = conteosPorTipo([]);
+    const porClave = Object.fromEntries(conteos.map((c) => [c.clave, c.etiqueta]));
+
+    expect(porClave.dano_reportado).toBe(MAPA_DE_ALERTAS.dano_reportado.etiqueta);
+    expect(porClave.urgente).toBe('URGENTE');
+  });
+
+  it('un tipo desconocido no rompe el conteo ni se cuela en la lista fija', () => {
+    // La lista del filtro es de longitud fija por contrato. Una fila de tipo
+    // desconocido tiene que seguir viéndose en el panel (eso ya está probado
+    // arriba) sin añadir una opción de filtro que nadie sabe rotular.
+    const alertas = mezclarAlertas(
+      [
+        notif({
+          id: 'del-futuro',
+          type: 'tipo_que_no_existe_todavia' as NotificacionParaAlertas['type'],
+        }),
+      ],
+      [],
+    );
+
+    const conteos = conteosPorTipo(alertas);
+
+    expect(conteos).toHaveLength(12);
+    expect(conteos.every((c) => c.conteo === 0)).toBe(true);
   });
 });

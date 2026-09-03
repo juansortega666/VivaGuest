@@ -110,3 +110,31 @@ describe('estadoDeSincronizacion', () => {
     expect(estadoDeSincronizacion(haceMinutos(-5), AHORA)).toBe('sana');
   });
 });
+
+describe('UMBRAL_SYNC_CAIDA_MS contra el watchdog de la migracion 14', () => {
+  it('son tres horas, EL MISMO NUMERO que el interval del feed_health_watchdog', () => {
+    // TEST ESPEJO. Este umbral tiene un gemelo en SQL:
+    //
+    //   supabase/migrations/20260902235500_14_sync_jobs.sql:247
+    //   supabase/migrations/20260902235500_14_sync_jobs.sql:321
+    //     f.last_success_at < now() - interval '3 hours'
+    //
+    // La misma pregunta, contestada dos veces a proposito, porque una de las
+    // dos tiene que funcionar cuando la base no ejecuta nada. Si los dos
+    // numeros se separan, el resultado es el PEOR estado posible: el panel en
+    // verde mientras la bandeja tiene una alerta roja, o al reves.
+    //
+    // Esta asercion cierra el lado TypeScript. El lado SQL lo cierra la
+    // asercion estructural sobre `pg_get_functiondef` del plan 04-01. HACEN
+    // FALTA LAS DOS: esta NO atrapa un cambio en la migracion, y aquella NO
+    // atrapa un cambio aqui. Cada lado grita si su propio valor se mueve, y
+    // cada una cita a la otra.
+    //
+    // Lo que NO se hace es mover el umbral a `app_settings` para leerlo desde
+    // los dos lados: convertiria una constante en una consulta dentro del
+    // watchdog y en otra consulta en cada render del panel, y el valor pasaria
+    // a ser dato mutable en produccion sin revision de codigo.
+    expect(UMBRAL_SYNC_CAIDA_MS).toBe(3 * 60 * 60 * 1000);
+    expect(UMBRAL_SYNC_CAIDA_MS).toBe(10_800_000);
+  });
+});
