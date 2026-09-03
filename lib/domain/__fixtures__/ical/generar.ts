@@ -60,6 +60,29 @@ function sumarDias(fechaIso: string, dias: number): string {
   return `${y}${m}${dd}`;
 }
 
+/**
+ * El día `hoyIso + dias` en las DOS formas que un test necesita: la cruda de
+ * ocho dígitos, que es la que lleva el `DTEND` de un VEVENT, y la de negocio con
+ * guiones, que es la que guarda `cleanings.scheduled_date`.
+ *
+ * Se exporta desde AQUÍ y no se reimplementa en el arnés de pruebas a
+ * propósito: la aritmética de días con el tipo temporal de JavaScript es la
+ * excepción consentida de este módulo (ver la cabecera), y tenerla en un solo
+ * sitio es lo que impide que reaparezca por la puerta de atrás en un archivo
+ * que sí está en el camino de la fecha del aseo.
+ *
+ * La forma con guiones sale de un CORTE DE CADENA sobre los ocho dígitos, nunca
+ * de formatear un objeto temporal: formatearlo al día de Bogotá devolvería el
+ * día anterior.
+ */
+export function diaRelativo(hoyIso: string, dias: number): { crudo: string; iso: string } {
+  if (!esFechaIso(hoyIso)) {
+    throw new Error(`hoyIso debe ser 'YYYY-MM-DD', llegó: ${hoyIso}`);
+  }
+  const crudo = sumarDias(hoyIso, dias);
+  return { crudo, iso: `${crudo.slice(0, 4)}-${crudo.slice(4, 6)}-${crudo.slice(6, 8)}` };
+}
+
 /** Sufijo hexadecimal de 32 caracteres, determinista a partir del índice. */
 function sufijoUid(indice: number): string {
   let h = 0x811c9dc5;
