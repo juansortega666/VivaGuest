@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Fase 3, wave 6 cerrada (03-07). Siguiente: 03-08"
+stopped_at: "Fase 3, wave 7 cerrada (03-08). Siguiente: 03-09"
 last_updated: "2026-09-03T00:35:15.099Z"
 last_activity: 2026-09-03 -- Phase 03 execution started
 progress:
@@ -26,9 +26,9 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 ## Current Position
 
 Phase: 03 (motor-de-sincronizaci-n-ical) — EXECUTING
-Plan: 7 of 10 (waves 1-6 cerradas; siguiente: 03-08, wave 7)
-Status: Executing Phase 03 -- wave 7 de 9
-Last activity: 2026-09-03 -- 03-07 cerrado: scheduler pg_cron, watchdog y 05_sync en verde (plan(65), 65/65)
+Plan: 8 of 10 (waves 1-7 cerradas; siguiente: 03-09, wave 8)
+Status: Executing Phase 03 -- wave 8 de 9
+Last activity: 2026-09-03 -- 03-08 cerrado: criterios 1, 2 y 3 medidos de punta a punta, 77 tests de integracion
 
 Progress: [██░░░░░░░░] 22% (2 de 9 fases)
 
@@ -111,5 +111,5 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 ## Session Continuity
 
 Last session: 2026-09-03
-Stopped at: Fase 3, wave 6 cerrada (03-07). Siguiente: 03-08 (wave 7)
+Stopped at: Fase 3, wave 7 cerrada (03-08). Siguiente: 03-09 (wave 8)
 Resume file: None
