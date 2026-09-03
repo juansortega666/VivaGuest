@@ -1,27 +1,73 @@
 # Diferidos de la Fase 4
 
-Hallazgos fuera del alcance del plan que los encontró. No se arreglan ahí: se anotan acá.
+Hallazgos fuera del alcance del plan que los encontró. No se arreglan ahí: la regla del proyecto es
+que solo se auto-corrige lo que causó el cambio en curso, y estos son anteriores.
 
-## `npm run lint` sale con 3 errores preexistentes
+## 1. `npm run lint` sale en rojo con 3 errores preexistentes
 
-**Encontrado en:** plan 04-04, al verificar.
-**Origen:** commit `814e0cd` (`feat(02-06)`), Fase 2. No lo introdujo la Fase 4.
+**Encontrado por los planes 04-01 y 04-04 por separado, el 2026-09-03.** El 04-01 lo midió sobre el
+árbol limpio **antes de escribir una línea**, así que la preexistencia está probada, no supuesta.
+**Origen:** commit `814e0cd` (`feat(02-06)`), Fase 2.
 
 ```
-e2e/fixtures.ts
-  104:11  error  React Hook "use" is called in function "paginaAdmin"     react-hooks/rules-of-hooks
-  110:11  error  React Hook "use" is called in function "paginaAseador"   react-hooks/rules-of-hooks
-  116:11  error  React Hook "use" is called in function "paginaAseador2"  react-hooks/rules-of-hooks
+e2e/fixtures.ts:104:11  error  React Hook "use" is called in function "paginaAdmin"
+e2e/fixtures.ts:110:11  error  React Hook "use" is called in function "paginaAseador"
+e2e/fixtures.ts:116:11  error  React Hook "use" is called in function "paginaAseador2"
+                               react-hooks/rules-of-hooks
 
-lib/domain/aseador.schema.test.ts
-  40:20  warning  '_phone' is assigned a value but never used  @typescript-eslint/no-unused-vars
+lib/domain/aseador.schema.test.ts:40:20  warning  '_phone' asignado y nunca usado
 ```
 
-Los tres errores son falsos positivos de `react-hooks/rules-of-hooks` sobre las fixtures de
-Playwright: `use` ahí es el `use` de `@playwright/test`, no el hook de React. El plugin lo
-confunde por el nombre. El arreglo es una excepción de ESLint acotada a `e2e/**`, no tocar el
-código.
+Los tres son un **falso positivo**: `use` es el nombre del argumento de una fixture de Playwright
+(`async ({ page }, use) => …`), no el hook `use` de React. `react-hooks/rules-of-hooks` lo reconoce
+por el nombre.
 
-`npm run lint` NO está en la verificación de ningún plan de la Fase 4 ni en `ci/db.yml`, así que
-hoy no bloquea nada. Conviene cerrarlo antes de que alguien lo meta a CI y descubra que el
-repo entero está rojo por tres líneas de fixtures.
+**Arreglo:** excluir `e2e/` de esa regla en `eslint.config.mjs`, o renombrar el parámetro. No tocar
+el código de las fixtures.
+
+**Por qué no se arregla desde donde se encontró:** `lint` no está en la verificación de ningún plan
+de la Fase 4 ni en `ci/db.yml`, así que hoy no bloquea nada. Y cambiar la configuración de ESLint
+desde un plan de base de datos es exactamente el cambio que nadie espera encontrar en un diff de
+Wave 0.
+
+**A quién le toca:** al primer plan de la Fase 4 que toque `e2e/`, que por el grafo es el 04-14.
+Conviene cerrarlo antes de que alguien meta `lint` a CI y descubra que el repo entero está rojo por
+tres líneas de fixtures.
+
+## 2. El checkout principal sigue con ~140 archivos duplicados de iCloud
+
+No es un diferido del código, es una tarea del usuario.
+
+El worktree de cada ejecutor **nace limpio**, porque los duplicados están untracked y un worktree
+hace checkout solo de lo trackeado. La guarda del plan 04-01 pasó ahí por esa razón. Pero
+`/Users/juanortega/Documents/VivaGuest` sigue sucio, y `npm run db:reset` sobre el checkout
+principal seguirá fallando por migraciones duplicadas hasta que se corra:
+
+```
+git clean -fd -e "ci/README.md" -e "supabase/snippets" -e ".claude/worktrees"
+```
+
+Importa antes de la verificación de fase, que sí corre en el checkout principal. Causa raíz en
+`.planning/phases/03-motor-de-sincronizaci-n-ical/deferred-items.md` entrada 7: el proyecto vive en
+una carpeta sincronizada y el renombrado por conflicto va a volver a duplicar.
+
+## 3. El disco de la máquina se llena y tumba Docker
+
+**Encontrado en el plan 04-01, que quedó bloqueado por esto.** `/System/Volumes/Data` llegó al 98%
+y Docker Desktop dejó de arrancar con:
+
+```
+engine linux/virtualization-framework run error:
+  write .../Data/log/vm/init.log: no space left on device
+```
+
+Con Docker caído no corren `db:reset`, `db:test` ni `test:integration`, que es la mitad de la
+verificación de esta fase.
+
+**Contribuye el propio flujo:** cada worktree de ejecutor instala su `node_modules` (~744 MB), y la
+Wave 1 tuvo cuatro a la vez, casi 3 GB. Mitigación ya aplicada por el orquestador: mergear y borrar
+cada worktree en cuanto su plan cierra, en vez de esperar a la wave completa.
+
+**Referencias de tamaño medidas:** `~/Library/Containers/com.docker.docker/Data` son 11 GB.
+
+**A quién le toca:** al usuario, y es recurrente mientras el margen siga estrecho.
