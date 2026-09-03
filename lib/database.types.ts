@@ -1295,6 +1295,8 @@ export type Database = {
         Args: { p_cleaning: string; p_motivo: string }
         Returns: undefined
       }
+      dispatch_feed_syncs: { Args: never; Returns: number }
+      feed_health_watchdog: { Args: never; Returns: undefined }
       finish_cleaning: { Args: { p_cleaning: string }; Returns: undefined }
       reveal_access_code: {
         Args: { p_cleaning: string }
