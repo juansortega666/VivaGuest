@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
+import type { Alerta, AseoParaAlertas, ClaveDeAlerta } from './alertas';
 import {
   MAPA_DE_ALERTAS,
   ORDEN_DE_TIPOS,
   PRESENTACION_GENERICA,
   TIPOS_DE_NOTIFICACION,
+  alertasComputadas,
   presentacionDeAlerta,
+  venceEnMs,
 } from './alertas';
+import { UMBRAL_SYNC_CAIDA_MS } from './salud-sync';
 
 /**
  * EL CRITERIO 4 DEL ROADMAP SE GANA O SE PIERDE EN ESTE ARCHIVO.
@@ -188,5 +192,286 @@ describe('ORDEN_DE_TIPOS', () => {
 
   it('cada clave del orden tiene entrada en el mapa, y al revés', () => {
     expect([...ORDEN_DE_TIPOS].sort()).toEqual(Object.keys(MAPA_DE_ALERTAS).sort());
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Las tres alertas computadas (UI-SPEC §11.2)
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Instante de referencia de todo lo que sigue: las 18:00 UTC del 4 de
+ * septiembre, que son las 13:00 de Bogotá del mismo día. Es un valor fijo y no
+ * `Date.now()`, por la misma razón que en `salud-sync.test.ts`: un test que lee
+ * el reloj mide algo distinto cada vez que corre y falla a las 3 de la mañana
+ * en CI sin forma de reproducirlo.
+ */
+const AHORA = Date.parse('2026-09-04T18:00:00.000Z');
+const HOY = '2026-09-04';
+
+/** Molde de aseo. Cada caso sobrescribe solo lo que le importa. */
+function aseo(over: Partial<AseoParaAlertas> & { id: string }): AseoParaAlertas {
+  return {
+    property_id: `prop-${over.id}`,
+    apartamento: `Bogotá ${over.id}`,
+    is_managed: true,
+    state: 'pendiente',
+    scheduled_date: HOY,
+    hora_limite: '14:00:00',
+    apartamentoHoraLimite: '14:00:00',
+    is_urgent: false,
+    created_at: '2026-09-04T09:00:00+00:00',
+    ...over,
+  };
+}
+
+function clavesDe(alertas: Alerta[], clave: ClaveDeAlerta): string[] {
+  return alertas.filter((a) => a.clave === clave).map((a) => a.cleaningId ?? a.id);
+}
+
+describe('venceEnMs', () => {
+  it('devuelve el instante de esa hora EN BOGOTÁ, no en UTC', () => {
+    // 11:30 de Bogotá del 4 de septiembre son las 16:30 UTC del mismo día.
+    // Colombia no tiene DST desde 1993, así que el desfase -05:00 fijo es
+    // correcto y no hay ninguna fecha del año en que esto cambie.
+    expect(venceEnMs('2026-09-04', '11:30:00')).toBe(
+      Date.parse('2026-09-04T16:30:00.000Z'),
+    );
+    expect(venceEnMs('2026-09-04', '15:00:00')).toBe(
+      Date.parse('2026-09-04T20:00:00.000Z'),
+    );
+  });
+
+  it('bajo TZ=UTC y bajo TZ=America/Bogota devuelve EL MISMO número', () => {
+    // `vitest.config.ts` fija TZ=UTC a propósito, así que un error de zona
+    // sería SILENCIOSO en toda la suite. Cambiar la zona a mano es la única
+    // forma de que aparezca.
+    const original = process.env.TZ;
+
+    try {
+      process.env.TZ = 'UTC';
+      const utc = venceEnMs('2026-09-04', '11:30:00');
+
+      process.env.TZ = 'America/Bogota';
+      const bog = venceEnMs('2026-09-04', '11:30:00');
+
+      expect(utc).toBe(bog);
+      expect(utc).toBe(Date.parse('2026-09-04T16:30:00.000Z'));
+    } finally {
+      process.env.TZ = original;
+    }
+  });
+
+  it('ignora los segundos de la columna `time` de Postgres', () => {
+    // PostgREST devuelve `'11:30:00'` para un `time`. La hora límite es
+    // operativa: los segundos no significan nada y recortarlos evita depender
+    // de que Postgres siempre emita los tres componentes.
+    expect(venceEnMs('2026-09-04', '11:30:00')).toBe(venceEnMs('2026-09-04', '11:30:45'));
+  });
+});
+
+describe('alertasComputadas · urgente', () => {
+  it('produce la alerta solo con is_urgent, is_managed, estado vivo y fecha no pasada', () => {
+    const alertas = alertasComputadas({
+      aseos: [
+        aseo({ id: 'ok-pendiente', is_urgent: true }),
+        aseo({ id: 'ok-en-curso', is_urgent: true, state: 'en_curso' }),
+        // Gestión externa. LA FILA QUE ATRAPA EL SEÑUELO: quitar `is_managed`
+        // del predicado hace que aparezca acá una unidad que VivaGuest no opera.
+        aseo({ id: 'externa', is_urgent: true, is_managed: false, state: null }),
+        aseo({ id: 'terminado', is_urgent: true, state: 'completada' }),
+        aseo({ id: 'cancelado', is_urgent: true, state: 'cancelada' }),
+        aseo({ id: 'de-ayer', is_urgent: true, scheduled_date: '2026-09-03' }),
+        aseo({ id: 'sin-urgencia', is_urgent: false }),
+      ],
+      maxUltimoExito: '2026-09-04T17:00:00+00:00',
+      ahoraMs: AHORA,
+      hoy: HOY,
+    });
+
+    expect(clavesDe(alertas, 'urgente')).toEqual(['ok-pendiente', 'ok-en-curso']);
+  });
+
+  it('su instante para el orden es cleanings.created_at', () => {
+    const [alerta] = alertasComputadas({
+      aseos: [
+        aseo({ id: 'a', is_urgent: true, created_at: '2026-09-04T09:15:00+00:00' }),
+      ],
+      maxUltimoExito: '2026-09-04T17:00:00+00:00',
+      ahoraMs: AHORA,
+      hoy: HOY,
+    }).filter((a) => a.clave === 'urgente');
+
+    expect(alerta.ocurrioEnMs).toBe(Date.parse('2026-09-04T09:15:00.000Z'));
+  });
+
+  it('no es atendible: no tiene read_at y se apaga sola', () => {
+    const [alerta] = alertasComputadas({
+      aseos: [aseo({ id: 'a', is_urgent: true })],
+      maxUltimoExito: '2026-09-04T17:00:00+00:00',
+      ahoraMs: AHORA,
+      hoy: HOY,
+    }).filter((a) => a.clave === 'urgente');
+
+    expect(alerta.atendible).toBe(false);
+    expect(alerta.cleaningId).toBe('a');
+    expect(alerta.url).toBe('/operacion#aseo-a');
+  });
+});
+
+describe('alertasComputadas · hora límite vencida', () => {
+  it('la hora sale de cleanings.hora_limite, NO de properties.hora_limite', () => {
+    // El UI-SPEC §11.2 dice `properties.hora_limite` y es un error del
+    // contrato: APTO-05 permite pactar hora distinta para un aseo puntual, y el
+    // `coalesce` del trigger de la migración 13 guarda esa hora pactada como
+    // SNAPSHOT en `cleanings.hora_limite`.
+    //
+    // Las dos direcciones a la vez, que es lo que hace irrompible la aserción:
+    // `pactada-temprano` vence por la del ASEO y no por la del apartamento;
+    // `pactada-tarde` NO vence por la del aseo aunque la del apartamento sí.
+    // Cambiar la fuente invierte exactamente estas dos filas.
+    const alertas = alertasComputadas({
+      aseos: [
+        aseo({
+          id: 'pactada-temprano',
+          hora_limite: '10:00:00', // 15:00Z, ya pasó
+          apartamentoHoraLimite: '23:00:00', // 04:00Z del día 5, no ha pasado
+        }),
+        aseo({
+          id: 'pactada-tarde',
+          hora_limite: '23:00:00', // no ha pasado
+          apartamentoHoraLimite: '10:00:00', // ya pasó
+        }),
+      ],
+      maxUltimoExito: '2026-09-04T17:00:00+00:00',
+      ahoraMs: AHORA,
+      hoy: HOY,
+    });
+
+    expect(clavesDe(alertas, 'hora_limite_vencida')).toEqual(['pactada-temprano']);
+  });
+
+  it('el desfase -05:00 importa: un vencimiento dentro de la franja de cinco horas NO está vencido', () => {
+    // LA FILA QUE ATRAPA EL SEÑUELO DE LA ZONA. Las 15:00 de Bogotá del 4 son
+    // las 20:00 UTC, dos horas DESPUÉS de `AHORA`. Sustituir el `-05:00` por
+    // una `Z` las convierte en las 15:00 UTC, tres horas ANTES, y el panel
+    // inventa una hora límite vencida que no ocurrió.
+    const alertas = alertasComputadas({
+      aseos: [aseo({ id: 'dentro-de-la-franja', hora_limite: '15:00:00' })],
+      maxUltimoExito: '2026-09-04T17:00:00+00:00',
+      ahoraMs: AHORA,
+      hoy: HOY,
+    });
+
+    expect(clavesDe(alertas, 'hora_limite_vencida')).toEqual([]);
+  });
+
+  it('exige is_managed y estado vivo, igual que la urgente', () => {
+    const alertas = alertasComputadas({
+      aseos: [
+        aseo({ id: 'vivo', hora_limite: '06:00:00' }),
+        aseo({ id: 'externa', hora_limite: '06:00:00', is_managed: false, state: null }),
+        aseo({ id: 'terminado', hora_limite: '06:00:00', state: 'completada' }),
+        aseo({ id: 'cancelado', hora_limite: '06:00:00', state: 'cancelada' }),
+      ],
+      maxUltimoExito: '2026-09-04T17:00:00+00:00',
+      ahoraMs: AHORA,
+      hoy: HOY,
+    });
+
+    expect(clavesDe(alertas, 'hora_limite_vencida')).toEqual(['vivo']);
+  });
+
+  it('vence también en días pasados, y su instante para el orden es el vencimiento', () => {
+    // A diferencia de la urgente, esta NO se acota a `scheduled_date >= hoy`:
+    // un aseo de anteayer sin terminar es precisamente el que no se puede
+    // perder. Su instante es cuándo venció, no cuándo se creó el aseo.
+    const [alerta] = alertasComputadas({
+      aseos: [aseo({ id: 'de-anteayer', scheduled_date: '2026-09-02' })],
+      maxUltimoExito: '2026-09-04T17:00:00+00:00',
+      ahoraMs: AHORA,
+      hoy: HOY,
+    }).filter((a) => a.clave === 'hora_limite_vencida');
+
+    expect(alerta.ocurrioEnMs).toBe(venceEnMs('2026-09-02', '14:00:00'));
+    expect(alerta.ocurrioEnMs).toBe(Date.parse('2026-09-02T19:00:00.000Z'));
+    expect(alerta.atendible).toBe(false);
+  });
+});
+
+describe('alertasComputadas · calendario caído (global)', () => {
+  it('con la sincronización sana no produce nada', () => {
+    const alertas = alertasComputadas({
+      aseos: [],
+      maxUltimoExito: '2026-09-04T16:00:00+00:00', // hace 2 h
+      ahoraMs: AHORA,
+      hoy: HOY,
+    });
+
+    expect(alertas).toEqual([]);
+  });
+
+  it('con la sincronización caída produce UNA alerta global, sin apartamento', () => {
+    const alertas = alertasComputadas({
+      aseos: [],
+      maxUltimoExito: '2026-09-04T13:00:00+00:00', // hace 5 h
+      ahoraMs: AHORA,
+      hoy: HOY,
+    });
+
+    expect(alertas).toHaveLength(1);
+    expect(alertas[0]).toMatchObject({
+      clave: 'calendario_caido',
+      apartamento: 'Todo el sistema',
+      titulo: 'Ningún calendario ha sincronizado en las últimas 3 horas.',
+      cleaningId: null,
+      propertyId: null,
+      atendible: false,
+    });
+  });
+
+  it('su instante para el orden es max(last_success_at) + UMBRAL_SYNC_CAIDA_MS', () => {
+    // Es el momento en que el sistema PASÓ a estar caído, no el momento en que
+    // el admin abrió el panel. Usar `ahoraMs` haría que la alerta saltara al
+    // tope de la lista en cada render, empujando hacia abajo hechos más
+    // recientes que ella.
+    const marca = '2026-09-04T13:00:00+00:00';
+
+    const [alerta] = alertasComputadas({
+      aseos: [],
+      maxUltimoExito: marca,
+      ahoraMs: AHORA,
+      hoy: HOY,
+    });
+
+    expect(alerta.ocurrioEnMs).toBe(Date.parse(marca) + UMBRAL_SYNC_CAIDA_MS);
+  });
+
+  it('sin ninguna sincronización previa también alerta, y su instante es ahora', () => {
+    // `max(last_success_at)` sobre cero filas devuelve NULL: es el despliegue
+    // nuevo cuyo scheduler nunca corrió. No hay ningún instante del que partir,
+    // así que el hecho es "ahora mismo". Sin este caso el instante sería `NaN`
+    // y la alerta caería a un sitio arbitrario del orden.
+    const [alerta] = alertasComputadas({
+      aseos: [],
+      maxUltimoExito: null,
+      ahoraMs: AHORA,
+      hoy: HOY,
+    });
+
+    expect(alerta.clave).toBe('calendario_caido');
+    expect(alerta.ocurrioEnMs).toBe(AHORA);
+    expect(Number.isNaN(alerta.ocurrioEnMs)).toBe(false);
+  });
+
+  it('usa estadoDeSincronizacion y su umbral, no un umbral propio', () => {
+    // El borde exacto, en las dos direcciones. Si alguien reimplementa el
+    // umbral aquí con otro número, esto se pone rojo.
+    const justoDentro = new Date(AHORA - UMBRAL_SYNC_CAIDA_MS).toISOString();
+    const justoFuera = new Date(AHORA - UMBRAL_SYNC_CAIDA_MS - 60_000).toISOString();
+    const base = { aseos: [], ahoraMs: AHORA, hoy: HOY };
+
+    expect(alertasComputadas({ ...base, maxUltimoExito: justoDentro })).toEqual([]);
+    expect(alertasComputadas({ ...base, maxUltimoExito: justoFuera })).toHaveLength(1);
   });
 });
