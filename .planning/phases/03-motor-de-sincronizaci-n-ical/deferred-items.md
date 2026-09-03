@@ -158,7 +158,7 @@ normalización pensando que es defensiva.
 **Dueño:** la primera corrida real. **Forma de cierre:** una sola corrida contra el feed en vivo lo
 confirma o lo desmiente.
 
-### 7. `npx tsc --noEmit` en rojo por directorios duplicados en `node_modules` del checkout principal
+### 7. `npx tsc --noEmit` y `npm run build` en rojo por directorios duplicados en `node_modules` del checkout principal
 
 **Encontrado en:** plan 03-10, al correr la puerta de fase.
 
@@ -176,14 +176,30 @@ de renombrado que dejan los servicios de sincronización de archivos (iCloud Dri
 cuando resuelven un conflicto. `tsc` recorre los `typeRoots` **hacia arriba** en el árbol de
 directorios, así que un worktree con su `node_modules` recién instalado y limpio los hereda igual.
 
-**Por qué no lo causa este plan, medido.** Los nueve errores son idénticos y en el mismo número
-corriendo `npx tsc --noEmit` en el checkout principal, sin ningún cambio de este plan. **Cero
-errores en código del proyecto:** los nueve son `TS2688` sobre bibliotecas de tipos implícitas, no
-sobre archivos fuente.
+**Por qué no lo causa este plan, medido tres veces.**
 
-**Impacto.** La puerta `tsc --noEmit` queda en rojo en esta máquina. No afecta a `test:unit`,
-`test:integration`, `db:test`, `ci:arch` ni `build`. En CI no aparece, porque ahí `node_modules` sale
-de un `npm ci` limpio sobre una ruta que no está sincronizada.
+1. Los nueve errores son idénticos y en el mismo número corriendo `npx tsc --noEmit` en el checkout
+   principal, sin ningún cambio de este plan.
+2. La cuenta cuadra exactamente: `node_modules/@types` de este worktree tiene **9** directorios y
+   todos limpios; el del checkout principal tiene **9** duplicados con sufijo numérico. Nueve
+   duplicados, nueve errores.
+3. **La prueba decisiva:** `npx tsc --noEmit --typeRoots ./node_modules/@types` sale con **cero
+   errores y cero salida**. Fijar la raíz de tipos al worktree corta el recorrido hacia arriba y el
+   proyecto compila limpio. Los nueve son `TS2688` sobre bibliotecas de tipos implícitas, ninguno
+   sobre un archivo fuente.
+
+**Impacto.** Las puertas `tsc --noEmit` **y `npm run build`** quedan en rojo en esta máquina. El
+build compila bien (`✓ Compiled successfully in 13.9s`, 0 errores de webpack) y muere después, en el
+paso "Linting and checking validity of types", que es `tsc` otra vez y falla con el **mismo** primer
+error, `Cannot find type definition file for 'chai 2'`. No afecta a `test:unit`, `test:integration`,
+`db:test`, `db:advisors` ni `ci:arch`, que son los que miden el código de esta fase. En CI no
+aparece, porque ahí `node_modules` sale de un `npm ci` limpio sobre una ruta que no está
+sincronizada.
+
+**Y arrastra a `npm run test:e2e`**, cuyo `webServer` de Playwright corre `npm run build && npm run
+start`: el build muere y Playwright reporta `Process from config.webServer was not able to start.
+Exit code: 1`. Medido con `PLAYWRIGHT_PORT=3117`. No es un fallo de ningún spec: la suite ni
+arranca.
 
 **Forma de cierre.** Borrar los directorios duplicados del checkout principal y reinstalar:
 
