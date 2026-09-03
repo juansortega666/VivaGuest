@@ -324,7 +324,24 @@ describe('la cadencia efectiva de un feed sano', () => {
     const b = await sembrarFeed();
     const corrida = await correrSync(b.feedId, FEED_REAL);
 
-    const desde = new Date(corrida.feed.last_attempt_at ?? 0).getTime();
+    // ══════════════════════════════════════════════════════════════════════
+    // EL ORIGEN ES `finished_at`, NO `last_attempt_at`, Y LA DIFERENCIA ES LO
+    // QUE HACE QUE ESTA ASERCIÓN NO SEA INTERMITENTE.
+    //
+    // El RPC escribe `next_sync_at = now() + interval '30 minutes'` y
+    // `last_attempt_at = p_fetched_at`, que es una marca tomada por el WORKER
+    // en JavaScript ANTES del fetch. Restar la segunda de la primera no mide 30
+    // minutos: mide 30 minutos MÁS la latencia del fetch MÁS la deriva entre el
+    // reloj del proceso y el de la base. Medido en este equipo: el contenedor
+    // va ~150 ms por delante del host, y con ese signo `peorCaso` sale 31.003 y
+    // la aserción de abajo se pone roja sin que nada del código haya cambiado.
+    //
+    // `feed_sync_runs.finished_at` es `now()` de LA MISMA TRANSACCIÓN, así que
+    // la resta es exactamente el intervalo que el RPC programó, sin reloj de
+    // por medio. Es además lo que la aserción decía medir: "aritmética sobre
+    // next_sync_at, no reloj real".
+    // ══════════════════════════════════════════════════════════════════════
+    const desde = new Date(corrida.corrida?.finished_at ?? 0).getTime();
     const espera = (new Date(corrida.feed.next_sync_at).getTime() - desde) / 60_000;
 
     // EL TICK NO ES LA CADENCIA: es la resolución con la que se mira la cola.

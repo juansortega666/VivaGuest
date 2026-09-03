@@ -79,10 +79,21 @@ type ServidorDeFeed = {
   respuesta: RespuestaDeFeed;
   /** Puerto muerto: se reservó y se cerró, así que nadie escucha ahí. */
   muerto: boolean;
+  /**
+   * Cabeceras de la ÚLTIMA petición que recibió este servidor, en minúsculas.
+   *
+   * Existe por una razón concreta: la prueba del `304` sirve el status desde
+   * aquí, así que sin esto un worker que NUNCA mandara `If-None-Match` pasaría
+   * la aserción igual, porque el 304 se lo estaría regalando el arnés. Con esto
+   * se puede afirmar que el condicional salió de verdad y con el etag guardado.
+   */
+  cabeceras: Record<string, string>;
 };
 
 const registro = new Map<string, ServidorDeFeed>();
 const propiedadesSembradas: string[] = [];
+/** Corridas encadenadas por feed. Ver `correrDiff`. */
+const corridasPorFeed = new Map<string, number>();
 
 const CUERPO_POR_DEFECTO = 'BEGIN:VCALENDAR\nEND:VCALENDAR\n';
 
@@ -191,9 +202,14 @@ export async function sembrarFeed(opciones: OpcionesDeSiembra = {}): Promise<Fee
       hits: 0,
       respuesta: { cuerpo: CUERPO_POR_DEFECTO },
       muerto: false,
+      cabeceras: {},
     };
-    servidor.on('request', (_req, res) => {
+    servidor.on('request', (req, res) => {
       estado.hits += 1;
+      estado.cabeceras = {};
+      for (const [nombre, valor] of Object.entries(req.headers)) {
+        if (typeof valor === 'string') estado.cabeceras[nombre.toLowerCase()] = valor;
+      }
       const r = estado.respuesta;
       const status = r.status ?? 200;
       const cabeceras: Record<string, string> = {
@@ -212,6 +228,7 @@ export async function sembrarFeed(opciones: OpcionesDeSiembra = {}): Promise<Fee
       hits: 0,
       respuesta: { cuerpo: '' },
       muerto: true,
+      cabeceras: {},
     });
   }
 
@@ -310,6 +327,87 @@ export async function correrSync(
   };
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// ENCADENAR CORRIDAS — lo que hace medible el comportamiento TEMPORAL
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Cambia el `DTSTAMP` de todo el feed sin tocar nada más.
+ *
+ * ES LO QUE PERMITE ENCADENAR CORRIDAS SOBRE EL MISMO CUERPO. El worker corta
+ * con `sin_cambios` cuando el sha256 del cuerpo coincide con el de la corrida
+ * anterior, así que servir el mismo texto dos veces NO llega al RPC y la
+ * segunda ausencia nunca se produciría. `DTSTAMP` es exactamente el campo que
+ * cambia el hash del cuerpo y NO entra en el `payloadHash` del evento
+ * —`hashDe([uid, startsOn, endsOn, summary, reservationCode])`— ni lo lee el
+ * normalizador.
+ */
+export function conDtstamp(cuerpo: string, valor: string): string {
+  return cuerpo.replace(/DTSTAMP:[0-9TZ]+/g, `DTSTAMP:${valor}`);
+}
+
+/**
+ * Quita el `VEVENT` cuyo `DTEND` es `dtend` (forma cruda, `YYYYMMDD`).
+ *
+ * Se construye QUITANDO TEXTO del feed y no regenerando uno con menos eventos,
+ * y la diferencia importa: los códigos de reserva son la identidad de nivel 1
+ * del diff, así que un feed regenerado con otros códigos no es "el mismo feed
+ * con una reserva menos", es un feed entero de reservas nuevas.
+ */
+export function sinCheckout(cuerpo: string, dtend: string): string {
+  const partes = cuerpo.split('BEGIN:VEVENT');
+  const cabecera = partes[0];
+  const bloques = partes.slice(1);
+  const quedan = bloques.filter((b) => !b.includes(`DTEND;VALUE=DATE:${dtend}`));
+  if (quedan.length !== bloques.length - 1) {
+    throw new Error(`El feed no tiene exactamente un evento que termine el ${dtend}.`);
+  }
+  return cabecera + quedan.map((b) => `BEGIN:VEVENT${b}`).join('');
+}
+
+/**
+ * Corre el sync ENCADENANDO: cada llamada sobre el mismo feed lleva un
+ * `DTSTAMP` distinto, así que el atajo por hash del worker nunca la corta y el
+ * RPC se ejecuta de verdad todas las veces.
+ *
+ * Es la función que usan las pruebas del diff destructivo, y la razón es que
+ * TODO lo que miden solo existe entre corridas: la regla de las dos ausencias,
+ * el 304 que no cuenta y la urgencia que se apaga sola son invisibles para
+ * cualquier prueba de una sola pasada.
+ *
+ * El contador es POR FEED y arranca en cero al sembrar, así que dos specs del
+ * mismo archivo no se pisan la secuencia.
+ */
+export async function correrDiff(
+  feedId: string,
+  cuerpo: string,
+  opciones: OpcionesDeCorrida = {},
+): Promise<ResultadoDeCorrida> {
+  const n = (corridasPorFeed.get(feedId) ?? 0) + 1;
+  corridasPorFeed.set(feedId, n);
+
+  // Marca válida y distinta por corrida. Con `n` hasta 86399 la hora sigue
+  // siendo legal, y ninguna prueba encadena tantas.
+  const hh = String(Math.floor(n / 3600) % 24).padStart(2, '0');
+  const mm = String(Math.floor(n / 60) % 60).padStart(2, '0');
+  const ss = String(n % 60).padStart(2, '0');
+
+  return correrSync(feedId, conDtstamp(cuerpo, `20260903T${hh}${mm}${ss}Z`), opciones);
+}
+
+/**
+ * Las cabeceras de la última petición que recibió el servidor local del feed.
+ *
+ * Sirve para una sola cosa y es importante: afirmar que el `If-None-Match` que
+ * justifica un `304` salió de verdad, con el etag que guardó la corrida
+ * anterior. Sin esto, la prueba del 304 se estaría comprobando a sí misma.
+ */
+export function cabecerasDe(feedId: string): Record<string, string> {
+  const estado = registro.get(feedId);
+  if (!estado) throw new Error(`El feed ${feedId} no lo sembró este arnés.`);
+  return { ...estado.cabeceras };
+}
+
 /** Los aseos del apartamento, en orden de fecha. Es la aserción de casi todo. */
 export async function aseosDe(
   propertyId: string,
@@ -333,6 +431,85 @@ export async function aseosVivosDe(
 
 export async function cancelados(propertyId: string): Promise<number> {
   return (await aseosDe(propertyId)).filter((a) => a.state === 'cancelada').length;
+}
+
+/**
+ * Las reservas observadas del apartamento, en orden de fin.
+ *
+ * `disappeared_at` es la columna que hace visible la regla de las dos
+ * ausencias: en la primera corrida sin la reserva se escribe, y hasta la
+ * segunda no se cancela nada.
+ *
+ * NO se selecciona `raw_description`, y no es por brevedad: esa columna no
+ * existe justamente porque el `DESCRIPTION` del feed real trae los últimos
+ * cuatro dígitos del teléfono del huésped. Nombrarla aquí invitaría a que un
+ * spec la interpolara en un mensaje de aserción.
+ */
+export async function reservasDe(
+  propertyId: string,
+): Promise<Database['public']['Tables']['calendar_reservations']['Row'][]> {
+  const { data, error } = await clienteAdminDePruebas()
+    .from('calendar_reservations')
+    .select('*')
+    .eq('property_id', propertyId)
+    .order('ends_on', { ascending: true });
+
+  if (error) throw new Error(`No se pudieron leer las reservas: ${error.message}`);
+  return data ?? [];
+}
+
+/**
+ * Las notificaciones del apartamento.
+ *
+ * LA UNIDAD QUE SE CUENTA ES `dedupe_key`, NO LA FILA: el fan-out del RPC y del
+ * watchdog es una fila POR ADMIN ACTIVO, porque `notifications.recipient_id` es
+ * NOT NULL y no existe "una notificación para el rol". Contar filas ataría cada
+ * aserción al número de admins de la semilla.
+ */
+export async function notificacionesDe(
+  propertyId: string,
+): Promise<Database['public']['Tables']['notifications']['Row'][]> {
+  const { data, error } = await clienteAdminDePruebas()
+    .from('notifications')
+    .select('*')
+    .eq('property_id', propertyId)
+    .order('created_at', { ascending: true });
+
+  if (error) throw new Error(`No se pudieron leer las notificaciones: ${error.message}`);
+  return data ?? [];
+}
+
+/** Las `dedupe_key` distintas de un tipo de notificación. Ver `notificacionesDe`. */
+export async function alertasLogicas(
+  propertyId: string,
+  tipo?: Database['public']['Enums']['notification_type'],
+): Promise<string[]> {
+  const filas = await notificacionesDe(propertyId);
+  const claves = filas
+    .filter((n) => tipo === undefined || n.type === tipo)
+    .map((n) => n.dedupe_key)
+    .filter((k): k is string => k !== null);
+  return [...new Set(claves)].sort();
+}
+
+/**
+ * La bitácora de estados de un aseo.
+ *
+ * `actor_id` nulo NO es una carencia: es el dato que distingue "lo canceló el
+ * sync" de "lo canceló el admin". El trigger la escribe con `auth.uid()`, que
+ * es nulo cuando quien escribe es la clave de servicio o un job de cron.
+ */
+export async function transicionesDe(
+  cleaningId: string,
+): Promise<Database['public']['Tables']['cleaning_state_transitions']['Row'][]> {
+  const { data, error } = await clienteAdminDePruebas()
+    .from('cleaning_state_transitions')
+    .select('*')
+    .eq('cleaning_id', cleaningId)
+    .order('id', { ascending: true });
+
+  if (error) throw new Error(`No se pudo leer la bitácora: ${error.message}`);
+  return data ?? [];
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -409,6 +586,7 @@ export async function limpiarSync(): Promise<void> {
     if (!estado.muerto) await cerrar(estado.servidor);
   }
   registro.clear();
+  corridasPorFeed.clear();
 
   if (propiedadesSembradas.length === 0) return;
 
