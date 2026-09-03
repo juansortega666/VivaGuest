@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { formatFechaBog, formatHoraLimite, horasDesdeDtstamp, hoyBog } from './dates';
+import {
+  formatFechaBog,
+  formatFechaCortaBog,
+  formatHoraLimite,
+  horasDesdeDtstamp,
+  hoyBog,
+  tiempoRelativo,
+} from './dates';
 
 /**
  * Estos tests corren con `TZ=UTC` (fijado en `vitest.config.ts`). Es la zona en la que
@@ -113,5 +120,140 @@ describe('horasDesdeDtstamp', () => {
     // `Date.UTC` toma el mes en base 0. Sin el `-1` esto daria 744 h (un mes).
     expect(horasDesdeDtstamp('20260901T143000Z', AHORA)).toBe(0);
     expect(horasDesdeDtstamp('20260831T143000Z', AHORA)).toBe(24);
+  });
+});
+
+describe('formatFechaCortaBog', () => {
+  it('formatea la fecha corta de la bandeja: dia y mes abreviado, sin punto y sin ano', () => {
+    // UI-SPEC §9: `3 sep`, no `jue, 3 de septiembre`, que no cabe en 176px de carril.
+    expect(formatFechaCortaBog('2026-09-03')).toBe('3 sep');
+  });
+
+  it('no pone cero a la izquierda ni en el dia ni en el mes', () => {
+    expect(formatFechaCortaBog('2026-01-01')).toBe('1 ene');
+    expect(formatFechaCortaBog('2026-01-09')).toBe('9 ene');
+  });
+
+  it('cubre los doce meses con la abreviatura de tres letras', () => {
+    const meses = [
+      'ene',
+      'feb',
+      'mar',
+      'abr',
+      'may',
+      'jun',
+      'jul',
+      'ago',
+      'sep',
+      'oct',
+      'nov',
+      'dic',
+    ];
+    for (const [i, mes] of meses.entries()) {
+      const mm = String(i + 1).padStart(2, '0');
+      expect(formatFechaCortaBog(`2026-${mm}-15`)).toBe(`15 ${mes}`);
+    }
+  });
+
+  it('septiembre es `sep`, no `sept`', () => {
+    // `Intl` en es-CO devuelve `3 de sept` para este mismo dia: por eso la tabla de
+    // meses es explicita y no sale de `Intl`. Ver el comentario en `dates.ts`.
+    expect(formatFechaCortaBog('2026-09-03')).not.toContain('sept');
+  });
+
+  it('da el mismo dia corriendo en Bogota que corriendo en UTC', () => {
+    const enUtc = formatFechaCortaBog('2026-01-01');
+    process.env.TZ = 'America/Bogota';
+    expect(formatFechaCortaBog('2026-01-01')).toBe(enUtc);
+    expect(formatFechaCortaBog('2026-01-01')).toBe('1 ene');
+  });
+
+  it('no se corre tampoco al final del mes ni al final del ano', () => {
+    expect(formatFechaCortaBog('2026-08-31')).toBe('31 ago');
+    expect(formatFechaCortaBog('2026-12-31')).toBe('31 dic');
+    process.env.TZ = 'America/Bogota';
+    expect(formatFechaCortaBog('2026-08-31')).toBe('31 ago');
+    expect(formatFechaCortaBog('2026-12-31')).toBe('31 dic');
+  });
+});
+
+describe('tiempoRelativo', () => {
+  // 2026-09-03T14:20:00-05:00 = jueves 3 de septiembre, 14:20 en Bogota.
+  const AHORA = Date.parse('2026-09-03T14:20:00-05:00');
+
+  it('bajo un minuto cuenta segundos (UI-SPEC §13.2: `Actualizado hace 40 s`)', () => {
+    expect(tiempoRelativo(AHORA - 40_000, AHORA)).toBe('hace 40 s');
+    expect(tiempoRelativo(AHORA - 59_000, AHORA)).toBe('hace 59 s');
+  });
+
+  it('bajo una hora cuenta minutos enteros', () => {
+    expect(tiempoRelativo(AHORA - 8 * 60_000, AHORA)).toBe('hace 8 min');
+    expect(tiempoRelativo(AHORA - 60_000, AHORA)).toBe('hace 1 min');
+    expect(tiempoRelativo(AHORA - 59 * 60_000 - 59_000, AHORA)).toBe('hace 59 min');
+  });
+
+  it('a partir de una hora y dentro del mismo dia de Bogota cuenta horas', () => {
+    expect(tiempoRelativo(AHORA - 3_600_000, AHORA)).toBe('hace 1 h');
+    expect(tiempoRelativo(AHORA - 3 * 3_600_000, AHORA)).toBe('hace 3 h');
+  });
+
+  it('el dia calendario ANTERIOR de Bogota dice `ayer` con la hora de Bogota', () => {
+    expect(tiempoRelativo(Date.parse('2026-09-02T14:20:00-05:00'), AHORA)).toBe(
+      'ayer 14:20',
+    );
+  });
+
+  /**
+   * SEÑUELO DEL DESFASE.
+   *
+   * El corte de "ayer" se decide por DIA CALENDARIO DE BOGOTA, no restando 24 horas.
+   * Estos dos instantes distan menos de 24 h del ahora y, aun asi, uno es de ayer y el
+   * otro es de hoy: la frontera esta en las 00:00 de Bogota, que en UTC son las 05:00.
+   *
+   * Escribir estas marcas con `Z` en vez de con el desfase `-05:00` mueve las dos al
+   * otro lado de la frontera y pone el caso en rojo. Se corrio.
+   */
+  it('senuelo: la frontera de `ayer` es la medianoche de Bogota, no la de UTC', () => {
+    // Miercoles 2, 23:30 de Bogota. En UTC ya es el jueves 3 a las 04:30.
+    expect(tiempoRelativo(Date.parse('2026-09-02T23:30:00-05:00'), AHORA)).toBe(
+      'ayer 23:30',
+    );
+    // Jueves 3, 00:30 de Bogota. En UTC sigue siendo el jueves 3 a las 05:30.
+    expect(tiempoRelativo(Date.parse('2026-09-03T00:30:00-05:00'), AHORA)).toBe(
+      'hace 13 h',
+    );
+  });
+
+  it('mas atras de ayer da la fecha corta con la hora de Bogota', () => {
+    expect(tiempoRelativo(Date.parse('2026-09-01T14:20:00-05:00'), AHORA)).toBe(
+      '1 sep 14:20',
+    );
+    expect(tiempoRelativo(Date.parse('2026-08-30T09:05:00-05:00'), AHORA)).toBe(
+      '30 ago 09:05',
+    );
+  });
+
+  it('acepta la cadena ISO que devuelve PostgREST para un timestamptz', () => {
+    expect(tiempoRelativo('2026-09-03T19:12:00+00:00', AHORA)).toBe('hace 8 min');
+  });
+
+  it('una marca nula o ilegible devuelve null, no un valor inventado', () => {
+    expect(tiempoRelativo(null, AHORA)).toBeNull();
+    expect(tiempoRelativo(undefined, AHORA)).toBeNull();
+    expect(tiempoRelativo('basura', AHORA)).toBeNull();
+    expect(tiempoRelativo('', AHORA)).toBeNull();
+    expect(tiempoRelativo(Number.NaN, AHORA)).toBeNull();
+  });
+
+  it('un reloj adelantado no dice `hace -3 h`', () => {
+    // Misma regla que `horasDesdeDtstamp`: se trunca a 0.
+    expect(tiempoRelativo(AHORA + 3 * 3_600_000, AHORA)).toBe('hace 0 s');
+  });
+
+  it('no depende de la zona del proceso', () => {
+    const enUtc = tiempoRelativo(Date.parse('2026-09-02T23:30:00-05:00'), AHORA);
+    process.env.TZ = 'America/Bogota';
+    expect(tiempoRelativo(Date.parse('2026-09-02T23:30:00-05:00'), AHORA)).toBe(enUtc);
+    expect(enUtc).toBe('ayer 23:30');
   });
 });
