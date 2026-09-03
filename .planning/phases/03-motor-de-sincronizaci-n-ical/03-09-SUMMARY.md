@@ -27,7 +27,7 @@ provides:
   - "sync-diff.integration.test.ts: criterio 4 de punta a punta, 13 specs con 14 aserciones"
   - "sync-alertas.integration.test.ts: criterio 5 de punta a punta, 11 specs con 14 aserciones"
   - "El patron de medicion del watchdog: begin/rollback con la poblacion de feeds activos fijada dentro de la transaccion"
-  - "Siete senuelos medidos, con sus numeros y sus dos codigos de error"
+  - "Los siete senuelos obligatorios medidos en ocho pasadas, con sus numeros y sus dos codigos de error"
 affects: [03-10, 04]
 
 tech-stack:
@@ -48,6 +48,7 @@ key-files:
   modified:
     - lib/test/sync.ts
     - lib/domain/__fixtures__/ical/generar.ts
+    - lib/domain/sync-dispatcher.integration.test.ts
     - .planning/REQUIREMENTS.md
 
 key-decisions:
@@ -59,7 +60,7 @@ key-decisions:
 metrics:
   tasks_completed: 2
   files_created: 2
-  files_modified: 2
+  files_modified: 3
   tests_added: 24
   duration: "~50 min"
   completed: 2026-09-02
@@ -68,8 +69,8 @@ metrics:
 # Fase 3 Plan 09: Los criterios 4 y 5 medidos entre corridas
 
 El diff destructivo con sus cuatro candados y las cinco alertas, verificados contra el stack local
-encadenando dos, tres y cuatro corridas, con siete señuelos que demuestran que cada aserción puede
-ponerse roja.
+encadenando dos, tres y cuatro corridas, con los siete señuelos obligatorios del plan que demuestran
+que cada aserción puede ponerse roja.
 
 ## Qué se construyó
 
@@ -224,9 +225,11 @@ Dos corridas idénticas sobre una reserva movida con el aseo `en_curso`: **una**
 (`rev:<id>`) y **una fila por admin activo**, no una por corrida. El fan-out es del destinatario; la
 deduplicación es del hecho.
 
-## Los siete señuelos, con sus números y sus dos códigos de error
+## Los siete señuelos obligatorios, medidos en ocho pasadas
 
-Cada uno se aplicó a la base o al código, se midió y se revirtió. Después de todos:
+El del `reservation_id` se midió en **dos niveles**, porque el primero no produce el código de error
+que el plan predecía y el segundo sí. Cada uno se aplicó a la base o al código, se midió y se
+revirtió. Después de todos:
 `vault.secrets` sin tocar, los tres `cron.job` activos, cero feeds y cero notificaciones huérfanas.
 
 ### 1. Quitar la ventana protegida (migración 13, pasos e.1 y e.2)
@@ -425,6 +428,34 @@ pantalla es de la Fase 4** y no existe todavía.
   transporte, no una cancelación adelantada. El señuelo que reproduce el fallo descrito por el plan
   es el bug plausible: reconstruir la lectura a partir de las reservas vivas.
 
+### 7. [Regla 1 — Bug] Un test intermitente del plan 03-08 bloqueaba el criterio de verificación
+
+- **Encontrado en:** la corrida final de `npm run test:integration`, con el criterio de aceptación
+  que exige la suite completa en verde.
+- **Síntoma:** `sync-dispatcher.integration.test.ts`, aserción 6 de la cadencia. Falló en una
+  corrida y pasó en la siguiente, sin ningún cambio de por medio.
+- **Causa medida:** la aserción calculaba la espera como
+  `next_sync_at − last_attempt_at`. `next_sync_at` lo escribe el RPC con `now() + 30 minutes` (reloj
+  de la base) y `last_attempt_at` con `p_fetched_at`, que es una marca tomada por el **worker en
+  JavaScript antes del fetch**. La resta no mide 30 minutos: mide 30 más la latencia del fetch más
+  la deriva entre los dos relojes. Y el margen de la aserción es **exactamente cero**, porque
+  `peorCaso = espera + 1 <= 31` exige `espera <= 30`. Deriva medida en este equipo:
+
+  ```
+  js  = 2026-09-03T01:34:45.580Z
+  db  = 2026-09-03T01:34:45.736Z      ← el contenedor va 156 ms por delante
+  ```
+
+  Con ese signo, `espera = 30.0026` y `peorCaso = 31.0026 > 31`. Con el signo contrario, verde. Es
+  un flake de reloj de Docker Desktop, no del código de sincronización.
+- **Arreglo:** el origen pasa a ser `feed_sync_runs.finished_at`, que es `now()` de **la misma
+  transacción** que escribe `next_sync_at`. La resta es entonces el intervalo programado y nada más,
+  sin reloj de por medio, que es además lo que la aserción decía medir ("aritmética sobre
+  `next_sync_at`, no reloj real"). El rango que la aserción admite sigue siendo `(29.5, 30]`, así
+  que no se relajó nada: se quitó el ruido.
+- **Verificado:** tres corridas seguidas del archivo en verde, y la suite completa en verde.
+- Es un archivo de otro plan, y se toca porque bloquea el criterio de verificación de este.
+
 ## Verificación
 
 | Comprobación | Resultado |
@@ -469,3 +500,12 @@ dirección del feed, que sigue sin salir del arnés por ningún valor de retorno
 |---|---|
 | `4bd99ba` | `test(03-09): criterio 4, el diff destructivo con sus cuatro candados` |
 | `5ae9edb` | `test(03-09): criterio 5, las cinco alertas y la separacion urgente/sospechoso` |
+| `54eb43a` | `docs(03-09): resumen de los criterios 4 y 5 medidos entre corridas` |
+| `5629ff1` | `fix(03-09): la cadencia se mide contra finished_at, no contra last_attempt_at` |
+
+## Self-Check: PASSED
+
+Los seis archivos que este resumen nombra existen en disco y los cuatro commits están en el
+historial de la rama del worktree. Árbol de trabajo limpio, sin archivos sin seguir y sin borrados
+en ningún commit (`git diff --diff-filter=D 84bd806 HEAD` vacío). Suite de integración completa en
+verde tras el último commit: **101 pasados, 10 archivos**.
