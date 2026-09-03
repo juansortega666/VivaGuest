@@ -124,3 +124,159 @@ export function formatHoraLimite(t: string): string {
   const [hh, mm] = t.split(':');
   return `${hh}:${mm}`;
 }
+
+/**
+ * Abreviaturas de mes de la fecha corta, en tabla EXPLICITA y no salidas de `Intl`.
+ *
+ * MEDIDO el 2026-09-03 con el Node de este repo:
+ * `new Intl.DateTimeFormat('es-CO', { day:'numeric', month:'short', timeZone:'UTC' })`
+ * devuelve `"3 de sept"`, con el literal ` de ` en medio y con `sept` de cuatro letras.
+ * El contrato de UI-SPEC §9 pide `3 sep` y ese ancho (176px de carril) no admite ni el
+ * `de` ni la cuarta letra.
+ *
+ * Y hay una segunda razon, mas de fondo: la abreviatura de `Intl` la fija la version de
+ * ICU del runtime. Vercel, el CI y el portatil no tienen por que traer la misma, y una
+ * fecha que cambia de forma segun donde corra el proceso es exactamente la clase de
+ * dependencia oculta que el resto de este archivo existe para evitar.
+ */
+const MESES_CORTOS = [
+  'ene',
+  'feb',
+  'mar',
+  'abr',
+  'may',
+  'jun',
+  'jul',
+  'ago',
+  'sep',
+  'oct',
+  'nov',
+  'dic',
+] as const;
+
+/**
+ * Fecha corta de negocio: `'2026-09-03'` produce `"3 sep"`.
+ *
+ * Es la de las filas de la bandeja "Sin confirmar" (UI-SPEC §9), donde `formatFechaBog()`
+ * (`"jue, 3 de septiembre"`) no cabe.
+ *
+ * PROHIBIDO `new Date('2026-09-03')`, misma regla que el resto del archivo: un string ISO
+ * de solo fecha se parsea como medianoche UTC y en Bogota renderiza el dia anterior.
+ * Aqui ni siquiera se construye un `Date`: se parte el string y se indexa la tabla de
+ * meses, asi que la salida no puede depender de la zona del proceso ni por accidente.
+ */
+export function formatFechaCortaBog(iso: string): string {
+  const [, mes, dia] = iso.split('-').map(Number);
+  return `${dia} ${MESES_CORTOS[mes - 1]}`;
+}
+
+/**
+ * Hora del reloj de Bogota a partir de un instante: `"14:20"`.
+ *
+ * `hour12: false` en es-CO da el ciclo h23 (medianoche es `00:00`, no `24:00`), medido.
+ * Y sin `Intl` no se puede: hace falta la zona, porque aqui SI se convierte un instante.
+ */
+const HORA_BOGOTA = new Intl.DateTimeFormat('es-CO', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: TZ_BOGOTA,
+});
+
+/** Milisegundos de los tres cortes de `tiempoRelativo`. */
+const UN_MINUTO = 60_000;
+const UNA_HORA = 3_600_000;
+
+/**
+ * Tiempo transcurrido desde un instante, en la forma corta de la cabecera de `/operacion`
+ * (UI-SPEC §13.1 y §13.2).
+ *
+ * Escalones, en orden:
+ *   - bajo un minuto  -> `hace 40 s`   (§13.2 lo muestra literalmente asi)
+ *   - bajo una hora   -> `hace 8 min`
+ *   - mismo dia de Bogota -> `hace 3 h`
+ *   - dia anterior de Bogota -> `ayer 14:20`
+ *   - mas atras -> `1 sep 14:20`
+ *
+ * EL CORTE DE "AYER" SE DECIDE POR DIA CALENDARIO, NO RESTANDO 24 HORAS. A las 00:30 de
+ * Bogota, algo de las 23:30 dista una hora pero es de ayer, y decir "hace 1 h" cuando el
+ * admin acaba de cambiar de dia laboral es justo el tipo de mentira silenciosa que D-14
+ * existe para evitar. La comparacion se hace con `HOY_BOGOTA`, el mismo formateador con
+ * `timeZone: TZ_BOGOTA` que usa `hoyBog()`: se compara la zona, no un offset escrito a
+ * mano. Colombia no tiene DST desde 1993, asi que restar cinco horas tambien funcionaria
+ * hoy, pero codificar el offset en vez de la zona es exactamente lo que este archivo ya
+ * decidio no hacer.
+ *
+ * AQUI SI SE CONSTRUYE UN `Date`, y es correcto: la entrada es un INSTANTE
+ * (`updated_at`, `created_at`), no un dia de negocio. Misma distincion que en
+ * `horasDesdeDtstamp`.
+ *
+ * Devuelve `null` si la marca es nula o ilegible: el consumidor decide si omite la linea
+ * o pinta otra cosa. Inventar un valor seria peor que no decir nada.
+ */
+export function tiempoRelativo(
+  instante: number | string | null | undefined,
+  ahoraMs: number,
+): string | null {
+  const ms = aMilisegundos(instante);
+  if (ms === null) return null;
+
+  // Un reloj adelantado (o un servidor con la hora corrida) daria negativo. Se trunca a
+  // 0, misma regla que `horasDesdeDtstamp`: "hace 0 s" es cierto y "hace -3 h" no
+  // significa nada para quien mira la pantalla.
+  const transcurrido = Math.max(0, ahoraMs - ms);
+
+  if (transcurrido < UN_MINUTO) {
+    return `hace ${Math.floor(transcurrido / 1000)} s`;
+  }
+
+  if (transcurrido < UNA_HORA) {
+    return `hace ${Math.floor(transcurrido / UN_MINUTO)} min`;
+  }
+
+  const diaDelInstante = HOY_BOGOTA.format(new Date(ms));
+  const diaDeAhora = HOY_BOGOTA.format(new Date(ahoraMs));
+
+  if (diaDelInstante === diaDeAhora) {
+    return `hace ${Math.floor(transcurrido / UNA_HORA)} h`;
+  }
+
+  const hora = HORA_BOGOTA.format(new Date(ms));
+
+  if (diaDelInstante === diaAnterior(diaDeAhora)) {
+    return `ayer ${hora}`;
+  }
+
+  return `${formatFechaCortaBog(diaDelInstante)} ${hora}`;
+}
+
+/**
+ * Normaliza la marca a milisegundos. Acepta numero (lo natural en tests y en un
+ * `Date.now()`) y cadena ISO, que es como PostgREST devuelve un `timestamptz`.
+ * Una cadena que `Date` no sabe leer da `NaN`, y eso es `null`, no un 1970.
+ */
+function aMilisegundos(instante: number | string | null | undefined): number | null {
+  if (instante === null || instante === undefined || instante === '') return null;
+  const ms = typeof instante === 'number' ? instante : Date.parse(instante);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * Dia calendario anterior a un `'YYYY-MM-DD'`, en la misma forma.
+ *
+ * Se hace con `Date.UTC`, que normaliza el desbordamiento (`dia - 1 = 0` retrocede al
+ * ultimo dia del mes anterior, y en enero al 31 de diciembre del ano anterior). No hay
+ * conversion de zona: entra y sale un dia calendario, y el `'UTC'` del formateador es el
+ * mismo ancla que usa `formatFechaBog`.
+ */
+const DIA_ISO = new Intl.DateTimeFormat('en-CA', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  timeZone: 'UTC',
+});
+
+function diaAnterior(iso: string): string {
+  const [ano, mes, dia] = iso.split('-').map(Number);
+  return DIA_ISO.format(new Date(Date.UTC(ano, mes - 1, dia - 1)));
+}
