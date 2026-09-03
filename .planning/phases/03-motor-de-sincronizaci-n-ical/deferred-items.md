@@ -195,3 +195,69 @@ rm -rf /Users/juanortega/Documents/VivaGuest/node_modules && npm ci
 y borrar directorios ajenos al worktree es exactamente lo que la frontera de alcance del ejecutor
 prohíbe. **Dueño:** el usuario. Y la salida duradera es sacar el proyecto de la carpeta sincronizada,
 o excluir `node_modules` de la sincronización.
+
+### 8. El `.ics` real con bloqueos del propietario: DIFERIDO. La clasificación se queda en MEDIA
+
+**Estado del checkpoint 1 del plan 03-10: diferido por decisión del usuario.** La prioridad es
+sacar el MVP y la captura cuesta diez minutos que hoy no se gastan. **El archivo
+`lib/domain/__fixtures__/ical/airbnb-real-bloqueos.ics` NO existe**, y no se creó ninguno con ese
+nombre: etiquetar una fixture sintética como captura real de Airbnb dejaría el repositorio
+afirmando algo falso sobre su propia evidencia, que es exactamente la circularidad que esta entrada
+existe para denunciar.
+
+**La frase que el plan exige, literal:**
+
+> la distinción entre reserva y bloqueo del propietario está en confianza MEDIA y no la cierra ningún test de este repo
+
+**La consecuencia declarada, sin suavizar.**
+
+- **No hay ni un solo bloqueo real del propietario en todo el repositorio.** Los quince eventos del
+  feed real capturado el 2026-09-02 son `Reserved`, los quince.
+- `solo-bloqueos.ics` y `airbnb-bloqueos-1dia.ics` son **sintéticas**, y las escribió la Fase 2 a
+  partir de los mismos documentos que pretenderían validar. Usarlas como evidencia de cómo se ve un
+  bloqueo es circular. El verificador de la fase no debe contarlas como cobertura de esta pregunta.
+- **La suposición A1 del research sigue sin verificar contra datos reales:** que un bloqueo del
+  propietario **no** trae la URL de detalle de reserva dentro de su campo libre. Si la trajera, la
+  whitelist positiva del clasificador clasificaría un bloqueo como reserva, y un apartamento cerrado
+  tres meses generaría ~90 aseos fantasma con sus 90 notificaciones y sus 90 pagos presupuestados.
+
+**El señuelo del plan 03-02 sigue sin poder atraparse, y es la misma laguna vista desde el otro
+lado.** Invertir el orden de las dos ramas de `clasificar()` (mirar el `SUMMARY` antes que el campo
+libre) **no pone en rojo ni una sola aserción sobre una fixture**: ni las 15 reservas del feed real,
+ni los 90 bloqueos, ni los 3 desconocidos, ni los 15 del descriptor mutilado se mueven. Lo único que
+cae es un test sintético escrito a mano. La razón es que en la única muestra real que existe los dos
+discriminadores están correlacionados al **100%**, porque no hay ni un evento que traiga a la vez la
+URL de detalle y un resumen de no disponibilidad. Con el `.ics` real de bloqueos en el repositorio,
+ese señuelo pasaría a ser medible y la confianza subiría de MEDIA a ALTA.
+
+**La mitigación vigente, que es lo que hace aceptable diferir.** Equivocarse aquí **no es
+destructivo**, y eso está construido a propósito en tres capas independientes:
+
+1. **El clasificador falla CERRADO.** Un `SUMMARY` jamás visto no clasifica reserva: clasifica
+   `desconocido`. Y `desconocido` **no genera aseo**. El error posible es "falta un aseo que un
+   humano crea a mano", no "aparecen noventa aseos fantasma".
+2. **Se emite alerta.** Un evento desconocido produce una notificación al admin, así que un cambio
+   de formato de Airbnb no apaga la sincronización en silencio.
+3. **La guarda de colapso atrapa el caso masivo.** Si el formato cambiara y los eventos cayeran en
+   bloque a `desconocido`, la guarda sobre **reservas clasificadas** (no sobre eventos) corta antes
+   de llamar al RPC, y el reconcile no cancela los aseos del apartamento. Medida en los planes 03-06
+   y 03-08.
+
+**Dueño:** el usuario.
+
+**Forma de cerrarse**, y son diez minutos:
+
+1. Entrar al panel de anfitrión de Airbnb con la cuenta de VivaGuest.
+2. Elegir un anuncio propio y **bloquear tres fechas a mano** en su calendario. Fechas cerradas por
+   el anfitrión, no una reserva.
+3. Esperar unos minutos y **exportar el calendario** de ese anuncio, con la misma URL de exportación
+   iCal que ya usa el sistema.
+4. Anonimizar el `.ics` con el criterio exacto de `airbnb-real-anonimizado.ics`: se anonimizan
+   códigos de reserva, últimos 4 dígitos de teléfono, `UID` e id del anuncio; se **conservan**
+   fechas, plegado a 75 octetos, orden de propiedades y estructura del `UID`. El crudo no entra al
+   repositorio.
+5. Guardarlo como `lib/domain/__fixtures__/ical/airbnb-real-bloqueos.ics`, documentarlo en el README
+   de fixtures, y añadir a `ical-clasificar.test.ts` las tres aserciones: los bloqueos clasifican
+   `bloqueo`, producen **cero** aseos, y **si de verdad no traen la URL de detalle de reserva**. Si
+   la trajeran, es un hallazgo **bloqueante** y hay que registrarlo aquí antes de seguir.
+6. Correr el señuelo del orden de las ramas y registrar si ahora sí se atrapa.

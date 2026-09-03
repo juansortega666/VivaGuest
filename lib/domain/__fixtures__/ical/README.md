@@ -264,3 +264,25 @@ anuncio con fechas bloqueadas a mano, que es un checkpoint humano y no una tarea
 
 El verificador de la fase no debe contar ninguna de estas cinco como cobertura de la pregunta
 empírica correspondiente.
+
+---
+
+## Resultado del checkpoint 1 del plan 03-10: la captura queda DIFERIDA
+
+**No existe `airbnb-real-bloqueos.ics`, y no se creó ninguno con ese nombre.** El checkpoint humano
+que iba a capturar un anuncio con tres fechas bloqueadas a mano se difirió por decisión del usuario:
+la prioridad es sacar el MVP.
+
+Consecuencia, escrita aquí porque este es el archivo que un lector consulta antes de elegir una
+fixture: **la distinción entre reserva y bloqueo del propietario está en confianza MEDIA y no la
+cierra ningún test de este repo.** La suposición A1 del research (que un bloqueo del propietario no
+trae la URL de detalle de reserva) sigue **sin verificar contra datos reales**, y el señuelo del
+plan 03-02 (invertir el orden de las dos ramas del clasificador) sigue **sin poder atraparse**,
+porque los dos discriminadores están correlacionados al 100% en la única muestra real que existe.
+
+Lo que hace aceptable el diferimiento es que equivocarse no es destructivo: el clasificador falla
+cerrado, `desconocido` no genera aseo, se emite alerta, y la guarda de colapso sobre reservas
+clasificadas atrapa el caso masivo.
+
+El detalle completo, con dueño y con los seis pasos para cerrarlo, está en la entrada 8 de
+`.planning/phases/03-motor-de-sincronizaci-n-ical/deferred-items.md`.
