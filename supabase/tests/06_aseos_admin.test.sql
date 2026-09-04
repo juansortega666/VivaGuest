@@ -20,7 +20,7 @@
 --
 -- ── CUÁNTOS ROJOS SE ESPERAN, Y POR QUÉ NO SON LOS 41 ──────────────────────
 --
--- De las 41 aserciones, OCHO están verdes desde el primer momento y NO es
+-- De las 41 aserciones, NUEVE están verdes desde el primer momento y NO es
 -- vacuidad: son propiedades que ya existen y que la migración 15 podría romper.
 -- Si aparecieran en rojo, el rojo estaría en el sitio correcto.
 --
@@ -34,13 +34,19 @@
 --     exactamente dos veces. Mide la migración 14, que ya existe.
 --   · La aserción 41: un admin no puede marcar como leída la notificación de
 --     otro. Mide la policy `notifications_own_update`, que ya existe.
+--   · La aserción 28, el control positivo del señuelo del coalesce. Mide el
+--     aseo en curso ANTES de que `close_cleaning` lo toque: la llamada viene
+--     tres líneas DESPUÉS. Sin la migración 15 nada lo movió; con ella, cerrar
+--     el aseo `…08` tampoco lo mueve. Nace verde y tiene que seguir verde
+--     siempre. CORREGIDO 2026-09-04 al ejecutar el archivo por primera vez:
+--     la cabecera original la contaba entre los rojos esperados. No lo es.
 --
--- Quedan 33 rojos esperados. El PLAN de este archivo estimó "al menos 35"
+-- Quedan 32 rojos esperados. El PLAN de este archivo estimó "al menos 35"
 -- ANTES de escribirlo, contando como rojas las seis mitades del bloque A. No lo
 -- son, y forzarlas a serlo exigiría fusionarlas con su mitad de excepción, que
 -- es justamente lo que el plan prohíbe ("las dos mitades no son opcionales").
--- El número real es 33 y está escrito aquí para que nadie lo lea como una
--- verificación que se quedó corta.
+-- El número real es 32, MEDIDO al ejecutar el archivo el 2026-09-04, y está
+-- escrito aquí para que nadie lo lea como una verificación que se quedó corta.
 --
 -- ── CÓMO SE LEE EL ROJO ────────────────────────────────────────────────────
 --
@@ -58,8 +64,8 @@
 -- Identificadores en rojo esperados, por plan:
 --
 --   tras 04-01 (archivo nuevo)   1 3 5 7 9 11 13 14 15 16 17 18 19 20 21 22
---                                23 24 25 26 27 28 29 30 31 32 33 34 35 36 37
---                                39 40                            (treinta y tres)
+--                                23 24 25 26 27 29 30 31 32 33 34 35 36 37
+--                                39 40                            (treinta y dos)
 --   tras 04-05 (migración 15)    39 40   (las dos de Realtime, si su plan aún
 --                                        no las publicó)
 --
@@ -369,12 +375,14 @@ insert into public.properties
 
 -- Feed y reserva de P1. Existen por UNA razón: sin `reservation_id` poblado, la
 -- aserción 22 ("reschedule lo deja en null") pasaría por vacuidad.
+-- El prefijo es `ef` y no `re`: `r` no es un dígito hexadecimal y Postgres
+-- rechaza el literal uuid. `ef` es el reverso de `fe`, el feed que la contiene.
 insert into public.calendar_feeds (id, property_id, provider) values
   ('fe000000-0000-0000-0000-000000000001', 'b1000000-0000-0000-0000-000000000001', 'airbnb');
 
 insert into public.calendar_reservations
   (id, feed_id, property_id, uid, reservation_code, starts_on, ends_on, summary, payload_hash) values
-  ('re000000-0000-0000-0000-000000000001',
+  ('ef000000-0000-0000-0000-000000000001',
    'fe000000-0000-0000-0000-000000000001',
    'b1000000-0000-0000-0000-000000000001',
    'fixture-06@airbnb.com', 'HMFIXTURE06',
@@ -402,7 +410,7 @@ insert into public.cleanings
    now() - interval '90 minutes', null, null, false, null),
 
   ('c1000000-0000-0000-0000-000000000001', 'b1000000-0000-0000-0000-000000000001',
-   're000000-0000-0000-0000-000000000001', true, 'ical', 'normal', 'pendiente',
+   'ef000000-0000-0000-0000-000000000001', true, 'ical', 'normal', 'pendiente',
    public.today_bog() + 3,
    'a5000000-0000-0000-0000-00000000000a', now(), 'ad000000-0000-0000-0000-000000000001',
    null, null, null, false, null),
