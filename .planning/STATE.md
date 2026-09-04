@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Fase 4 wave 1 mergeada. BLOQUEO: Docker caido. Cerrar 04-01 antes de la wave 2"
-last_updated: "2026-09-03T00:35:15.099Z"
-last_activity: 2026-09-03 -- Phase 03 execution started
+stopped_at: "Fase 4 wave 1 cerrada y VERIFICADA. Desbloqueada. Siguiente: wave 2 (04-05)"
+last_updated: "2026-09-04T11:20:00.000Z"
+last_activity: 2026-09-04 -- Verificacion de 04-01 cerrada: contrato pgTAP medido en rojo esperado
 progress:
   total_phases: 9
   completed_phases: 3
@@ -21,14 +21,17 @@ progress:
 Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 
 **Core value:** Que ningún aseo se pierda: todo checkout detectado en calendario termina en un aseo confirmado, asignado y ejecutado con evidencia, sin coordinación manual por WhatsApp.
-**Current focus:** Fase 4, wave 1 de 8 cerrada. Bloqueada hasta que Docker vuelva
+**Current focus:** Fase 4, wave 1 de 8 cerrada y verificada. Lista para la wave 2 (plan 04-05)
 
 ## Current Position
 
-Phase: 03 (motor-de-sincronizaci-n-ical) — EXECUTING
-Plan: 4 of 14 de la Fase 4 (wave 1 cerrada, 04-01 SIN VERIFICAR)
-Status: Phase 04 EJECUTANDO, BLOQUEADA por infraestructura (Docker caido)
-Last activity: 2026-09-03 -- Fase 4 wave 1 mergeada. Bloqueo: disco lleno tumbo Docker, sin el no corren db:test ni test:integration
+Phase: 04 (dashboard-operativo-del-admin) — EXECUTING
+Plan: 4 of 14 de la Fase 4 (wave 1 cerrada y VERIFICADA)
+Status: Phase 04 EJECUTANDO, sin bloqueos. Siguiente: wave 2, plan 04-05 (migracion 15)
+Last activity: 2026-09-04 -- Verificacion de 04-01 cerrada. db:reset, db:test, db:types:check y
+test:integration medidos con el stack local arriba. El contrato pgTAP de las seis RPC del admin
+corre por primera vez: 41 aserciones, 32 en rojo esperado (no 33: la 28 es un control positivo).
+481 unitarios y 115 de integracion en verde. Commit 3a4de07.
 
 Progress: [███░░░░░░░] 33% (3 de 9 fases)
 

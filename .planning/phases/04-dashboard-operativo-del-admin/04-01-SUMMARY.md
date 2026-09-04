@@ -173,10 +173,39 @@ git clean -fd -e "ci/README.md" -e "supabase/snippets" -e ".claude/worktrees"
 | `npm run test:unit` | 392 | **392 pasan, 24 archivos** | ✅ no bajó |
 | `npm run ci:arch` | 10 guardarraíles | **`check-service-role: OK`** | ✅ no bajó |
 | `npx tsc --noEmit` | limpio | **limpio** | ✅ |
-| `npm run db:reset` | termina en cero | **14 migraciones + 7 seeds sin error**, colgado en `Restarting containers` | ⚠️ parcial |
-| `npm run db:test` | 112 aserciones, 6 archivos | **NO MEDIDO** | ⛔ Docker caído |
-| `npm run db:types:check` | sin deriva | **NO MEDIDO** | ⛔ Docker caído |
-| `npm run test:integration` | 105 | **NO MEDIDO** | ⛔ Docker caído |
+| `npm run db:reset` | termina en cero | **14 migraciones + 7 seeds sin error** | ✅ |
+| `npm run db:test` | 112 aserciones, 6 archivos | **153 aserciones, 7 archivos. 41 nuevas, 32 en rojo esperado** | ✅ |
+| `npm run db:types:check` | sin deriva | **sin deriva** | ✅ |
+| `npm run test:integration` | 105 | **115 pasan, 12 archivos** | ✅ no bajó |
+
+### Cierre de la verificación — 2026-09-04
+
+Las cuatro filas de arriba estuvieron en `NO MEDIDO` un día entero. Se cerraron
+el 2026-09-04, cuando el disco volvió a tener margen (68% de uso, 65 GiB libres)
+y Docker arrancó. Dos hallazgos al ejecutar el contrato por primera vez, ambos
+corregidos en el commit `3a4de07`:
+
+1. **El archivo abortaba entero antes de la primera aserción.** El uuid de la
+   reserva de fixture era `'re000000-…'`, y `r` no es un dígito hexadecimal:
+   Postgres rechazaba el literal con `22P02` y `pg_prove` reportaba
+   `You planned 41 tests but ran 0`. Es exactamente el fallo que este SUMMARY
+   dijo que había que esperar. Corregido a `'ef000000-…'`.
+2. **Los rojos esperados son 32, no 33.** La aserción 28 nace verde por
+   construcción: mide el aseo en curso ANTES de que `close_cleaning` lo toque,
+   y la llamada viene tres líneas después. Es un control positivo, igual que las
+   seis mitades "byte a byte" del bloque A. La cabecera del archivo ya está
+   corregida y lo documenta.
+
+Las tres comprobaciones que el propio archivo exige, verificadas:
+
+| Comprobación | Resultado |
+|---|---|
+| `ok + not ok` = el `plan(41)` declarado | 41. No abortó |
+| Identificadores en rojo contra la lista esperada | los 32, exactos |
+| La última aserción (41) aparece en la salida | sí, y en verde |
+
+`Result: FAIL` de `db:test` es el rojo intencional de Wave 0, no una regresión.
+**El día que se aplique la migración 15 esa lectura cambia de signo.**
 
 ## Files Created/Modified
 
@@ -347,22 +376,21 @@ guardarraíles 5, 7 y 8, y no lo importa nada bajo `app/`. Verificado:
 
 ## Next Phase Readiness
 
-**El plan 04-05 NO puede empezar todavía.** No porque falten los artefactos,
-sino porque el contrato que tiene que poner en verde no se ha visto en rojo, y
-un contrato que nunca falló no es una verificación.
+**El plan 04-05 YA PUEDE EMPEZAR.** Actualizado el 2026-09-04: los cuatro pasos
+que quedaban pendientes se ejecutaron y están en la tabla de verificación de
+arriba. El contrato se vio en rojo, con los 32 identificadores esperados, así
+que la verificación del 04-05 es real y no una comprobación inventada.
 
-Lo que hay que hacer en cuanto Docker vuelva, en este orden:
+Los planes 04-07, 04-08, 04-09 y 04-11 tienen su arnés de siembra listo y
+medido: `lib/test/aseos.integration.test.ts` pasa sus 10 tests.
 
-1. `npm run db:reset`
-2. `npm run db:test`. Comprobar las tres cosas: que `ok + not ok = 41`, que los
-   identificadores en rojo son los 33 de la cabecera del archivo, y que la
-   aserción 41 aparece en la salida. Arreglar los errores de sintaxis que salgan.
-3. `npm run db:types:check`
-4. `npm run test:integration -- lib/test/aseos.integration.test.ts`, y después
-   la suite completa para confirmar que los 105 heredados siguen verdes.
-
-Con eso, el 04-05 arranca con el contrato medido y los planes 04-07, 04-08,
-04-09 y 04-11 tienen su arnés de siembra listo.
+Queda un detalle de infraestructura que muerde a quien retome esto: `npm run
+db:start` levanta SOLO Postgres. GoTrue, Storage, Realtime y Edge Runtime no
+arrancan con ese script, y sin GoTrue el arnés de siembra falla con
+`name resolution failed` al crear usuarios por la Auth admin API. Peor: si el
+CLI cree que el stack ya está arriba, `npx supabase start` no recrea los
+contenedores que falten y devuelve OK. La salida es `npx supabase stop &&
+npx supabase start`, que sí los reconstruye.
 
 ---
 *Phase: 04-dashboard-operativo-del-admin*
