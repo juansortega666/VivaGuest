@@ -417,6 +417,30 @@
      activar`, 17 caracteres) sumandole el caracter que tiene de mas. */
   --container-boton-confirmar: 176px;
   --container-boton-crear-aseo: 124px;
+
+  /* Los cuatro botones primarios de los dialogos de mutacion por fila (§12.1,
+     §12.2, §12.4 y §12.5), por la misma razon de §15.2: el boton NO puede
+     saltar de ancho al pasar a su gerundio, y `min-w-[148px]` seria el valor
+     arbitrario que §2 prohibe. Son cuatro tokens y no uno porque los labels
+     miden distinto, y compartirlos dejaria al mas corto con aire muerto.
+
+     Se dimensionan sobre el estado MAS ANCHO de cada boton, que no siempre es
+     el de reposo: los dos primeros ensanchan en vuelo (el gerundio es mas largo
+     que el label) y los dos ultimos ensanchan en reposo (llevan icono y su
+     gerundio es mas corto).
+
+       `Reasignar`                -> `Reasignando…`        (ensancha en vuelo)
+       `Reprogramar`              -> `Reprogramando…`      (ensancha en vuelo)
+       CircleCheck + `Cerrar aseo`   -> `Cerrando…`        (ensancha en reposo)
+       CircleSlash + `Cancelar aseo` -> `Cancelando…`      (ensancha en reposo)
+
+     Derivados de --container-boton-guardar (116px para `Guardando…`, 10
+     caracteres con `px-2.5` a cada lado) a ~8.7px por caracter, mas 22px cuando
+     hay icono de 16px con su `gap-1.5`. */
+  --container-boton-reasignar:     148px;
+  --container-boton-reprogramar:   164px;
+  --container-boton-cerrar-aseo:   140px;
+  --container-boton-cancelar-aseo: 156px;
 }
 
 /* ── Tabla de dia y panel de alertas — 04-UI-SPEC.md §2, §7.1, §8.2 y §11 ─────
