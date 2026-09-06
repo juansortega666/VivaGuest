@@ -1,15 +1,28 @@
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 
+import { NoAutorizado, exigirAdmin } from '@/lib/auth/guards';
 import { listarApartamentos } from '@/lib/data/apartamentos';
 import {
   agruparPorDia,
   bandejaSinConfirmar,
   cargaPorAseador,
+  leerAlertasAtendidas,
+  leerAlertasDelAdmin,
   leerAseadoresActivos,
   leerOperacion,
+  leerUltimoExitoDeSync,
+  type AlertaDelAdmin,
+  type FilaDeOperacion,
 } from '@/lib/data/operacion';
+import {
+  alertasComputadas,
+  conteosPorTipo,
+  mezclarAlertas,
+  type AseoParaAlertas,
+  type NotificacionParaAlertas,
+} from '@/lib/domain/alertas';
 import { formatFechaBog } from '@/lib/domain/dates';
-import { createClient } from '@/lib/supabase/server';
 
 import { BandejaSinConfirmar } from './_components/BandejaSinConfirmar';
 import { BloqueDia } from './_components/BloqueDia';
@@ -17,6 +30,7 @@ import { DialogoCrearAseo } from './_components/DialogoCrearAseo';
 import { LeyendaDeAseos } from './_components/EstadoAseo';
 import { FranjaCarga } from './_components/FranjaCarga';
 import type { ContextoDeAcciones } from './_components/MenuAseo';
+import { PanelAlertas } from './_components/PanelAlertas';
 
 export const metadata: Metadata = {
   title: 'Operación · VivaGuest',
@@ -81,15 +95,110 @@ export const metadata: Metadata = {
  *
  * Son 39 filas y ~8 perfiles, en la misma sesion y en paralelo con las otras dos.
  */
-export default async function OperacionPage() {
-  const supabase = await createClient();
+/**
+ * Las filas de `cleanings` recortadas a lo que `alertasComputadas()` necesita.
+ *
+ * Es un mapeo, no una consulta: los ocho campos ya vienen en `FilaDeOperacion` y
+ * los dos del embed tambien. Traer las alertas computadas de un segundo viaje
+ * seria leer dos veces la misma tabla en la misma peticion.
+ *
+ * `apartamentoHoraLimite` viaja aunque el dominio NO la use para calcular el
+ * vencimiento: ese se calcula con `cleanings.hora_limite`, que es el snapshot que
+ * el trigger puso al crear el aseo, porque APTO-05 permite pactar una hora
+ * distinta para un aseo puntual. Va declarada para que la diferencia entre las
+ * dos horas quede a la vista y nadie cambie la fuente por descuido.
+ */
+function aseosParaAlertas(filas: FilaDeOperacion[]): AseoParaAlertas[] {
+  return filas.map((f) => ({
+    id: f.id,
+    property_id: f.property_id,
+    is_managed: f.is_managed,
+    state: f.state,
+    scheduled_date: f.scheduled_date,
+    hora_limite: f.hora_limite,
+    is_urgent: f.is_urgent,
+    created_at: f.created_at,
+    apartamento: f.property?.nombre ?? '',
+    apartamentoHoraLimite: f.property?.hora_limite ?? f.hora_limite,
+  }));
+}
 
-  // En paralelo: son tres consultas independientes contra la misma sesion, y
-  // encadenarlas con tres `await` seguidos sumaria las tres latencias por nada.
-  const [operacion, aseadores, apartamentos] = await Promise.all([
-    leerOperacion(supabase),
+/**
+ * Las filas de `notifications` con el nombre del apartamento ya resuelto.
+ *
+ * `leerAlertasDelAdmin()` trae `property_id` y no el nombre, y el join no se pide
+ * en esa consulta a proposito: el catalogo entero (39 filas) ya esta leido en
+ * esta misma peticion para otras dos cosas, asi que resolver el nombre es una
+ * busqueda en un mapa y no un embed mas.
+ *
+ * `null` y no un `Apartamento desconocido` inventado cuando la notificacion no
+ * cuelga de ninguno: quien decide como se ve un slot vacio es el componente.
+ */
+function notificacionesParaAlertas(
+  filas: AlertaDelAdmin[],
+  nombres: Record<string, string>,
+): NotificacionParaAlertas[] {
+  return filas.map((n) => ({
+    id: n.id,
+    type: n.type,
+    title: n.title,
+    body: n.body,
+    url: n.url,
+    cleaning_id: n.cleaning_id,
+    property_id: n.property_id,
+    created_at: n.created_at,
+    apartamento: n.property_id === null ? null : (nombres[n.property_id] ?? null),
+  }));
+}
+
+export default async function OperacionPage({
+  searchParams,
+}: {
+  /** `?alertas=atendidas` es el toggle `Ver atendidas` del panel (§11.4). */
+  searchParams: Promise<{ alertas?: string }>;
+}) {
+  // Se usa `exigirAdmin()` y no `createClient()` a secas porque esta pagina
+  // necesita el `id` del usuario: `notifications.recipient_id` es NOT NULL y no
+  // existe "una notificacion para el rol", asi que el panel se lee por
+  // destinatario. Que el layout ya haya autorizado no da acceso al `user` desde
+  // aca, y el guard cuesta la misma llamada que un `getUser()` suelto.
+  //
+  // Solo se traga `NoAutorizado`, misma regla que el layout: un fallo de entorno
+  // o de red tiene que propagarse y romper, no convertirse en un login.
+  const contexto = await exigirAdmin().catch((error: unknown) => {
+    if (error instanceof NoAutorizado) return null;
+    throw error;
+  });
+
+  if (!contexto) redirect('/login');
+
+  const { supabase, user } = contexto;
+
+  /**
+   * EL INSTANTE DE LA LECTURA, UNO SOLO PARA TODA LA PANTALLA (D-14).
+   *
+   * Se lee el reloj AQUI, una vez, y baja por parametro a todo lo que lo
+   * necesita: la ventana de la consulta, el computo de las alertas, la ventana de
+   * las atendidas y la marca de frescura de la cabecera. Llamar `Date.now()`
+   * dentro de cada superficie daria cuatro respuestas distintas a la misma
+   * pregunta —"¿de cuando son estos datos?"— y esa es exactamente la mentira
+   * silenciosa contra la que existe D-14.
+   */
+  const ahoraMs = Date.now();
+
+  const { alertas: modoAlertas } = await searchParams;
+  const verAtendidas = modoAlertas === 'atendidas';
+
+  // En paralelo: son consultas independientes contra la misma sesion, y
+  // encadenarlas con `await` seguidos sumaria todas las latencias por nada.
+  const [operacion, aseadores, apartamentos, notificaciones, ultimoExito] = await Promise.all([
+    leerOperacion(supabase, ahoraMs),
     leerAseadoresActivos(supabase),
     listarApartamentos(supabase),
+    verAtendidas
+      ? leerAlertasAtendidas(supabase, user.id, ahoraMs)
+      : leerAlertasDelAdmin(supabase, user.id),
+    leerUltimoExitoDeSync(supabase),
   ]);
 
   const bloques = agruparPorDia(operacion.filas, operacion.hoy);
@@ -129,6 +238,40 @@ export default async function OperacionPage() {
     responsables,
     hoy: operacion.hoy,
   };
+
+  /**
+   * ── LA DERIVACION DEL PANEL DE ALERTAS VIVE EN EL SERVIDOR ────────────────
+   *
+   * `alertasComputadas()`, `mezclarAlertas()` y `conteosPorTipo()` corren aca y no
+   * en el navegador. Bajarlas al cliente seria duplicar `lib/domain/alertas.ts`,
+   * y dos verdades sobre el mismo dato se desincronizan en el primer cambio. El
+   * componente solo filtra por tipo, que es una operacion que conserva el orden.
+   *
+   * En el modo `Ver atendidas` NO se computan las tres derivadas, y no es un
+   * olvido: urgente, hora limite vencida y calendario caido no tienen `read_at`,
+   * asi que no se pueden atender y no pueden estar en la lista de atendidas. Se
+   * pasa `[]` de forma explicita para que la ausencia sea una decision escrita y
+   * no un efecto lateral.
+   */
+  const computadas = verAtendidas
+    ? []
+    : alertasComputadas({
+        aseos: aseosParaAlertas(operacion.filas),
+        maxUltimoExito: ultimoExito,
+        ahoraMs,
+        hoy: operacion.hoy,
+      });
+
+  const nombresDeApartamento = Object.fromEntries(apartamentos.map((a) => [a.id, a.nombre]));
+
+  const alertas = mezclarAlertas(
+    notificacionesParaAlertas(notificaciones, nombresDeApartamento),
+    computadas,
+  );
+
+  // El orden de esta lista es el FIJO de `ORDEN_DE_TIPOS`, con los ceros. Nunca
+  // por conteo: una lista de filtro que se reordena sola es inusable.
+  const conteos = conteosPorTipo(alertas);
 
   return (
     <div className="flex flex-col gap-xl">
@@ -258,9 +401,18 @@ export default async function OperacionPage() {
           aria-label="Pendientes y alertas"
           className="flex flex-col gap-lg max-xl:order-first xl:sticky xl:top-barra xl:h-[calc(100svh-var(--spacing-barra)-var(--spacing-xl))]"
         >
-          {/* Bloque superior. El inferior queda para el panel de alertas del
-              plan 04-13, que se lleva el `flex-1` que sobra. */}
           <BandejaSinConfirmar filas={sinConfirmar} responsables={responsables} />
+
+          {/* Bloque inferior: se lleva el `flex-1` que sobra del carril, tenga
+              treinta alertas o ninguna. El panel NO desaparece cuando esta vacio,
+              porque su ausencia haria que la bandeja creciera y la geometria del
+              carril cambiara cada vez que entra o sale una alerta (§11.5). */}
+          <PanelAlertas
+            alertas={alertas}
+            conteos={conteos}
+            ahoraMs={ahoraMs}
+            modo={verAtendidas ? 'atendidas' : 'sin_atender'}
+          />
         </aside>
       </div>
     </div>

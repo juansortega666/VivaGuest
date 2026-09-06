@@ -487,6 +487,57 @@ export async function leerAlertasDelAdmin(
   return data ?? [];
 }
 
+/** Ventana del toggle `Ver atendidas` (UI-SPEC §11.4): siete días. */
+export const DIAS_DE_ATENDIDAS = 7;
+
+/**
+ * Las alertas YA ATENDIDAS del admin en los últimos siete días (UI-SPEC §11.4).
+ *
+ * Es la mitad de atrás del toggle `Ver atendidas`, y va en función aparte y no
+ * como un parámetro de `leerAlertasDelAdmin()` a propósito: esa consulta calza
+ * columna a columna con `notifications_inbox_idx`, que es PARCIAL
+ * (`where read_at is null`), y meterle una rama que anule ese filtro haría que su
+ * docstring dejara de ser cierta la mitad de las veces.
+ *
+ * **Esta consulta cae fuera del índice parcial y hace seq scan.** Con un admin y
+ * decenas de notificaciones es irrelevante, pero conviene saberlo antes de que
+ * alguien lo mida y lo reporte como regresión.
+ *
+ * ── LA VENTANA SE MIDE SOBRE `read_at`, NO SOBRE `created_at` ──────────────
+ *
+ * El toggle responde a "qué he cerrado yo últimamente", que es una pregunta sobre
+ * CUÁNDO SE ATENDIÓ. Con `created_at` una alerta de hace dos meses atendida hoy
+ * no aparecería, que es justo el caso en que el admin va a buscarla: acaba de
+ * pulsar el botón y quiere deshacerlo.
+ *
+ * El ORDEN sigue siendo por `created_at` descendente, porque quien ordena el
+ * panel es `mezclarAlertas()` por el instante del hecho (D-06) y esta lista entra
+ * ahí. Pedirlo ordenado igualmente hace estable la lista entre dos lecturas.
+ *
+ * @param ahoraMs El instante de la lectura, el mismo de toda la pantalla (D-14).
+ */
+export async function leerAlertasAtendidas(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  ahoraMs: number,
+): Promise<AlertaDelAdmin[]> {
+  const desde = new Date(ahoraMs - DIAS_DE_ATENDIDAS * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data, error } = await supabase
+    .from('notifications')
+    .select(
+      'id, type, title, body, url, created_at, read_at, recipient_id, cleaning_id, property_id',
+    )
+    .eq('recipient_id', userId)
+    .not('read_at', 'is', null)
+    .gte('read_at', desde)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return data ?? [];
+}
+
 /**
  * El `last_success_at` MÁS RECIENTE entre todos los feeds activos.
  *
