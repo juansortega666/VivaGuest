@@ -1,7 +1,7 @@
 'use client';
 
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { useId, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 
 import type { FilaDeOperacion } from '@/lib/data/operacion';
 import { estadoDeAseo } from '@/lib/domain/cleanings';
@@ -29,6 +29,13 @@ import { TablaDia } from './TablaDia';
  * posible, y ocupar una fila de 40px con el, en una lista de 30, empuja fuera
  * algo accionable. Pero el conteo esta a la vista y estan a un clic. Los
  * TERMINADOS si se quedan visibles: son el avance del dia.
+ *
+ * ── LA UNICA EXCEPCION AL "NACE COLAPSADO": EL ANCLA DE UNA ALERTA ─────────
+ * §11.3 pide que el clic de una alerta lleve a su fila «expandiendolo si estaba
+ * colapsado». `FilaAlerta` navega a `/operacion#aseo-{id}` y `FilaAseo` pone ese
+ * `id`, pero el contenido colapsado va con `hidden`: el navegador encuentra el
+ * elemento y no puede llevarlo a pantalla, asi que el clic no hace NADA y no
+ * avisa. Lo cierra `useAnclaDeAlerta()`, abajo.
  */
 
 /** Un dia con cero filas tambien pinta su cabecera: que no haya nada es informacion. */
@@ -67,6 +74,10 @@ export function BloqueDia({
   const [verCancelados, setVerCancelados] = useState(false);
 
   const { visibles, cancelados, sinConfirmar } = useMemo(() => particionar(filas), [filas]);
+
+  // El bloque agregado (`Siguientes`) tambien recibe las filas de sus cinco dias,
+  // asi que se expande y deja que el dia de dentro haga lo propio con las suyas.
+  useAnclaDeAlerta(filas, () => setExpandido(true));
 
   const agregado = children !== undefined;
   const total = visibles.length;
@@ -139,6 +150,95 @@ export function BloqueDia({
       </div>
     </section>
   );
+}
+
+/**
+ * EXPANDE EL BLOQUE CUANDO EL ANCLA DE UNA ALERTA APUNTA A UNA DE SUS FILAS.
+ *
+ * ── EL PROBLEMA, MEDIDO Y NO SUPUESTO (diferido del plan 04-13) ────────────
+ * `FilaAlerta` navega a `/operacion#aseo-{id}` y `FilaAseo` pone `id="aseo-{id}"`
+ * con su `scroll-mt-barra`. Funciona mientras el dia este abierto, que es el caso
+ * de `Hoy`. Pero `Mañana` y `Siguientes` NACEN COLAPSADOS (§8.1) y el contenido
+ * colapsado va con `hidden`, a proposito, para que el buscador del navegador lo
+ * siga encontrando. Un elemento `hidden` no tiene caja: el navegador resuelve el
+ * ancla, no puede desplazarse a el, y **el clic no hace absolutamente nada y
+ * tampoco avisa**. §11.3 pide lo contrario, con esas palabras: «expandiendolo si
+ * estaba colapsado».
+ *
+ * ── POR QUE TRES DISPARADORES Y NO SOLO `hashchange` ──────────────────────
+ * El caso MAYORITARIO —el admin ya esta en `/operacion` y pulsa una alerta del
+ * carril— no emite `hashchange`. El `<Link>` del App Router resuelve una
+ * navegacion de solo-hash sobre la misma ruta con `history.pushState`, y
+ * `pushState` no dispara ese evento por especificacion. Un `useEffect` que solo
+ * escuchara `hashchange` quedaria bonito y no arreglaria nada.
+ *
+ *   1. AL MONTAR. Cubre llegar desde otra ruta con el ancla ya en la URL
+ *      (una alerta pulsada desde `/apartamentos`, o el enlace pegado a mano).
+ *   2. `hashchange`. Cubre atras/adelante del navegador y cualquier ancla que no
+ *      pase por el router.
+ *   3. EL CLIC, EN FASE DE CAPTURA. Cubre el caso mayoritario. Se lee el `hash`
+ *      del `<a>` pulsado y no `location.hash`, porque en ese instante la URL
+ *      todavia es la vieja. Va en captura para llegar antes de que el router
+ *      haga lo suyo.
+ *
+ * ── Y EL DESPLAZAMIENTO SE HACE AQUI ──────────────────────────────────────
+ * Expandir no basta: para cuando React repinta, el intento de desplazamiento del
+ * navegador ya ocurrio contra un elemento sin caja. Por eso hay un segundo efecto
+ * que lleva la fila a pantalla DESPUES del repintado. `block: 'center'` y no el
+ * `start` por defecto: la fila queda a media altura y se ve el dia alrededor, que
+ * es lo que se fue a mirar.
+ *
+ * ── LO QUE NO HACE: REACCIONAR A CADA REFRESCO ────────────────────────────
+ * `SincronizacionEnVivo` llama a `router.refresh()` cuando entra un cambio por
+ * Realtime, y el `hash` sigue en la URL despues del primer clic. Si el efecto
+ * dependiera de `filas` —un array nuevo en cada render del RSC— cada refresco
+ * volveria a desplazar la pagina bajo el cursor. La dependencia es la CADENA de
+ * ids, que es estable mientras las filas sean las mismas.
+ */
+function useAnclaDeAlerta(filas: FilaDeOperacion[], expandir: () => void): void {
+  const claveDeFilas = filas.map((f) => f.id).join(',');
+
+  const [ancla, setAncla] = useState<string | null>(null);
+
+  useEffect(() => {
+    const ids = new Set(claveDeFilas === '' ? [] : claveDeFilas.split(',').map((id) => `aseo-${id}`));
+
+    function atender(hash: string) {
+      const id = hash.startsWith('#') ? hash.slice(1) : hash;
+      if (id === '' || !ids.has(id)) return;
+      expandir();
+      setAncla(id);
+    }
+
+    atender(window.location.hash);
+
+    const alCambiarHash = () => atender(window.location.hash);
+    window.addEventListener('hashchange', alCambiarHash);
+
+    const alHacerClic = (evento: MouseEvent) => {
+      const objetivo = evento.target;
+      if (!(objetivo instanceof Element)) return;
+      const enlace = objetivo.closest('a');
+      if (enlace === null) return;
+      atender(enlace.hash);
+    };
+    document.addEventListener('click', alHacerClic, true);
+
+    return () => {
+      window.removeEventListener('hashchange', alCambiarHash);
+      document.removeEventListener('click', alHacerClic, true);
+    };
+    // `expandir` es un `setState` envuelto en una flecha nueva en cada render;
+    // meterlo en las dependencias reinstalaria los listeners en cada uno.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claveDeFilas]);
+
+  useEffect(() => {
+    if (ancla === null) return;
+    document.getElementById(ancla)?.scrollIntoView({ block: 'center' });
+    // Se limpia para que un repintado posterior no vuelva a mover la pagina.
+    setAncla(null);
+  }, [ancla]);
 }
 
 /**
