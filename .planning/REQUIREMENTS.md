@@ -98,13 +98,13 @@
 
 ### Dashboard del admin
 
-- [ ] **DASH-01**: Admin ve los servicios organizados por día (hoy, mañana y siguientes)
+- [x] **DASH-01**: Admin ve los servicios organizados por día (hoy, mañana y siguientes)
 - [ ] **DASH-02**: Admin ve una bandeja persistente con los aseos sin confirmar
-- [ ] **DASH-03**: Admin ve la carga diaria por aseador para decidir si activa un suplente
+- [x] **DASH-03**: Admin ve la carga diaria por aseador para decidir si activa un suplente
 - [ ] **DASH-04**: Admin ve un panel de alertas con la misma jerarquía visual para: urgentes, extensión mal creada, "no puedo", daños, faltantes y calendario caído
 - [ ] **DASH-05**: Admin ve alertados los aseos cuya hora límite venció sin terminarse
 - [ ] **DASH-06**: Admin ve el historial cronológico de un apartamento
-- [ ] **DASH-07**: Los aseos de apartamentos con `gestion_vivaguest = false` se muestran con su fecha y a cargo de quién, sin estado ni acciones
+- [x] **DASH-07**: Los aseos de apartamentos con `gestion_vivaguest = false` se muestran con su fecha y a cargo de quién, sin estado ni acciones
 
 ### Financiero
 
@@ -237,13 +237,13 @@
 | NOTIF-02 | Fase 5 | Pending |
 | NOTIF-03 | Fase 5 | Pending |
 | NOTIF-04 | Fase 5 | Pending |
-| DASH-01 | Fase 4 | Pending |
+| DASH-01 | Fase 4 | Complete |
 | DASH-02 | Fase 4 | Pending |
-| DASH-03 | Fase 4 | Pending |
+| DASH-03 | Fase 4 | Complete |
 | DASH-04 | Fase 4 | Pending |
 | DASH-05 | Fase 4 | Pending |
 | DASH-06 | Fase 4 | Pending |
-| DASH-07 | Fase 4 | Pending |
+| DASH-07 | Fase 4 | Complete |
 | FIN-01 | Fase 1 | Pending |
 | FIN-02 | Fase 7 | Pending |
 | FIN-03 | Fase 7 | Pending |

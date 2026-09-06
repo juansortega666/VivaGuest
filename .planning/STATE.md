@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Fase 4 wave 4 cerrada (04-07, la asercion contra el reconcile y los senuelos). Siguiente: wave 5"
-last_updated: "2026-09-06T16:48:01.377Z"
-last_activity: 2026-09-06 -- Wave 4 cerrada: reprogramar sobrevive al sync, y los 12 senuelos de la capa de base de datos
+stopped_at: "Completado 04-09-PLAN.md. Siguiente: wave 6 (04-10, 04-11, 04-12)"
+last_updated: "2026-09-06T17:55:10.765Z"
+last_activity: 2026-09-06 -- 04-09 entregado: /operacion renderiza los tres bloques de dia con datos reales y es la raiz del admin
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 48
-  completed_plans: 41
-  percent: 33
+  completed_plans: 42
+  percent: 88
 ---
 
 # Project State
@@ -26,14 +26,22 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 ## Current Position
 
 Phase: 04 (dashboard-operativo-del-admin) — EXECUTING
-Plan: 7 of 14 de la Fase 4 (waves 1 a 4 cerradas)
-Status: Phase 04 EJECUTANDO, sin bloqueos. Siguiente: wave 5
-Last activity: 2026-09-06 -- Wave 4 cerrada. El plan 04-07 entrega la asercion que ninguna
-asercion pgTAP puede correr: `reschedule_cleaning` sobrevive a una corrida completa de
-`sync_feed_apply()` sobre el mismo feed sin cambios, medido con dos corridas encadenadas, y el aseo
-repuesto en la fecha del checkout real esta AFIRMADO en la prueba. Mas `senuelos-04.md`: doce
-mutaciones sobre las migraciones 14 y 15, once filas anotadas, cero escapes. Suites: unit 28/502,
+Plan: 8 of 14 de la Fase 4 (waves 1 a 5 cerradas; 04-08 y 04-09 entregados)
+Status: Phase 04 EJECUTANDO, sin bloqueos. Siguiente: wave 6 (04-10, 04-11, 04-12)
+Last activity: 2026-09-06 -- El plan 04-09 pone en pantalla lo que el motor lleva generando:
+`/operacion` renderiza los tres bloques de dia con datos reales sobre la rejilla de dos carriles
+(1000px de carril ancho a 1440, 840 a 1280, contra 532px de columnas fijas), la fila de 40px con su
+variante inerte de gestion externa (sin hover, sin area de clic completa, con "no aplica" en vez de
+"sin definir") y la franja de carga con todos los aseadores activos, ceros incluidos. `/operacion`
+es ahora la RAIZ del admin y el destino del wordmark; `TopNav` tiene tres links. El carril lateral
+queda con su presupuesto de altura cerrado, listo para la bandeja (04-10) y el panel (04-13).
+Render medido con el build de produccion levantado y cookie de admin real: 200, y 11 de 13 marcas
+del HTML ciertas (las dos falsas son del arnes de siembra, no de la UI). Suites: unit 28/504,
 integration 14/128, pgTAP 7/153 PASS.
+
+Del plan 04-07, que sigue vigente: `reschedule_cleaning` sobrevive a una corrida completa de
+`sync_feed_apply()` sobre el mismo feed sin cambios, medido con dos corridas encadenadas, y el aseo
+repuesto en la fecha del checkout real esta AFIRMADO en la prueba.
 
 Del plan 04-06, que sigue vigente: una sola
 consulta a `cleanings` con los dos embeds calificados por nombre de clave foranea alimenta el carril
@@ -50,7 +58,7 @@ serie. Se pierde paralelismo solo en las waves 4 y 6.
 OJO, CAMBIO DE SIGNO: a partir de la migracion 15, un `not ok` en 06_aseos_admin.test.sql YA NO es
 esperado, es una regresion. Mismo caso que 05_sync.test.sql tras la Fase 3.
 
-Progress: [█████████░] 85%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -77,6 +85,7 @@ Progress: [█████████░] 85%
 |------|----------|--------|----------|
 | Phase 04 P06 | 158min | 2 tasks | 3 files |
 | Phase 04 P07 | 39min | 2 tasks | 2 files |
+| Phase 04 P09 | 66min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -95,6 +104,8 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Fase 4] Los aseos cancelados se traen en la consulta y se filtran en memoria, porque la cabecera del dia lleva el toggle `Ver cancelados (N)` y necesita el conteo
 - [Fase 4] La prueba de una decision de schema que solo se manifiesta ENTRE corridas del sync vive en integracion, no en pgTAP: que reschedule_cleaning sobreviva al reconcile exige ejecutar sync_feed_apply() entero
 - [Fase 4] Un efecto aceptado se AFIRMA en la prueba: reprogramar deja un aseo sin confirmar en la fecha del checkout real, y eso esta en una asercion, no en un comentario
+- [Phase 04]: 04-09: /operacion es la raiz del admin (RAIZ.admin), y TopNav pasa a tres links con Operacion primero y el wordmark apuntando ahi
+- [Phase 04]: 04-09: el carril lateral reserva su presupuesto de altura cerrado ANTES de que existan sus dos cards, porque D-02 no se puede improvisar en 04-13
 
 ### Pending Todos
 
@@ -140,8 +151,8 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-06T16:55:00Z
-Stopped at: Fase 4, wave 4 cerrada (plan 04-07, la asercion contra el reconcile y los senuelos).
+Last session: 2026-09-06T17:55:10.761Z
+Stopped at: Completado 04-09-PLAN.md. Siguiente: wave 6 (04-10, 04-11, 04-12)
 
 **Sin bloqueos activos.** El stack local de Supabase esta arriba y sano (12 contenedores), la
 migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` 28 archivos / 502 tests,
@@ -169,6 +180,7 @@ migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` 28 arch
    veintitres (uno por aplicar cada senuelo y otro por revertirlo): ~20 de sus 39 minutos. No hay
    atajo honesto: aplicar el senuelo con un `create or replace` suelto prueba la funcion pero no la
    migracion. Presupuestarlo si un plan futuro vuelve a mutar migraciones.
+
 6. **El resto del reloj YA NO lo domina iCloud** con las caches calientes: en el 04-07, `tsc` tardo
    segundos, `db:test` 2,3 s y la integracion completa 9,7 s.
 
