@@ -31,10 +31,67 @@ import { LeyendaDeAseos } from './_components/EstadoAseo';
 import { FranjaCarga } from './_components/FranjaCarga';
 import type { ContextoDeAcciones } from './_components/MenuAseo';
 import { PanelAlertas } from './_components/PanelAlertas';
+import { SincronizacionEnVivo } from './_components/SincronizacionEnVivo';
 
 export const metadata: Metadata = {
   title: 'Operación · VivaGuest',
 };
+
+/**
+ * Las filas de `cleanings` recortadas a lo que `alertasComputadas()` necesita.
+ *
+ * Es un mapeo, no una consulta: los ocho campos ya vienen en `FilaDeOperacion` y
+ * los dos del embed tambien. Traer las alertas computadas de un segundo viaje
+ * seria leer dos veces la misma tabla en la misma peticion.
+ *
+ * `apartamentoHoraLimite` viaja aunque el dominio NO la use para calcular el
+ * vencimiento: ese se calcula con `cleanings.hora_limite`, que es el snapshot que
+ * el trigger puso al crear el aseo, porque APTO-05 permite pactar una hora
+ * distinta para un aseo puntual. Va declarada para que la diferencia entre las
+ * dos horas quede a la vista y nadie cambie la fuente por descuido.
+ */
+function aseosParaAlertas(filas: FilaDeOperacion[]): AseoParaAlertas[] {
+  return filas.map((f) => ({
+    id: f.id,
+    property_id: f.property_id,
+    is_managed: f.is_managed,
+    state: f.state,
+    scheduled_date: f.scheduled_date,
+    hora_limite: f.hora_limite,
+    is_urgent: f.is_urgent,
+    created_at: f.created_at,
+    apartamento: f.property?.nombre ?? '',
+    apartamentoHoraLimite: f.property?.hora_limite ?? f.hora_limite,
+  }));
+}
+
+/**
+ * Las filas de `notifications` con el nombre del apartamento ya resuelto.
+ *
+ * `leerAlertasDelAdmin()` trae `property_id` y no el nombre, y el join no se pide
+ * en esa consulta a proposito: el catalogo entero (39 filas) ya esta leido en
+ * esta misma peticion para otras dos cosas, asi que resolver el nombre es una
+ * busqueda en un mapa y no un embed mas.
+ *
+ * `null` y no un `Apartamento desconocido` inventado cuando la notificacion no
+ * cuelga de ninguno: quien decide como se ve un slot vacio es el componente.
+ */
+function notificacionesParaAlertas(
+  filas: AlertaDelAdmin[],
+  nombres: Record<string, string>,
+): NotificacionParaAlertas[] {
+  return filas.map((n) => ({
+    id: n.id,
+    type: n.type,
+    title: n.title,
+    body: n.body,
+    url: n.url,
+    cleaning_id: n.cleaning_id,
+    property_id: n.property_id,
+    created_at: n.created_at,
+    apartamento: n.property_id === null ? null : (nombres[n.property_id] ?? null),
+  }));
+}
 
 /**
  * `/operacion` — la pantalla de la Fase 4 (04-UI-SPEC.md §6).
@@ -95,62 +152,6 @@ export const metadata: Metadata = {
  *
  * Son 39 filas y ~8 perfiles, en la misma sesion y en paralelo con las otras dos.
  */
-/**
- * Las filas de `cleanings` recortadas a lo que `alertasComputadas()` necesita.
- *
- * Es un mapeo, no una consulta: los ocho campos ya vienen en `FilaDeOperacion` y
- * los dos del embed tambien. Traer las alertas computadas de un segundo viaje
- * seria leer dos veces la misma tabla en la misma peticion.
- *
- * `apartamentoHoraLimite` viaja aunque el dominio NO la use para calcular el
- * vencimiento: ese se calcula con `cleanings.hora_limite`, que es el snapshot que
- * el trigger puso al crear el aseo, porque APTO-05 permite pactar una hora
- * distinta para un aseo puntual. Va declarada para que la diferencia entre las
- * dos horas quede a la vista y nadie cambie la fuente por descuido.
- */
-function aseosParaAlertas(filas: FilaDeOperacion[]): AseoParaAlertas[] {
-  return filas.map((f) => ({
-    id: f.id,
-    property_id: f.property_id,
-    is_managed: f.is_managed,
-    state: f.state,
-    scheduled_date: f.scheduled_date,
-    hora_limite: f.hora_limite,
-    is_urgent: f.is_urgent,
-    created_at: f.created_at,
-    apartamento: f.property?.nombre ?? '',
-    apartamentoHoraLimite: f.property?.hora_limite ?? f.hora_limite,
-  }));
-}
-
-/**
- * Las filas de `notifications` con el nombre del apartamento ya resuelto.
- *
- * `leerAlertasDelAdmin()` trae `property_id` y no el nombre, y el join no se pide
- * en esa consulta a proposito: el catalogo entero (39 filas) ya esta leido en
- * esta misma peticion para otras dos cosas, asi que resolver el nombre es una
- * busqueda en un mapa y no un embed mas.
- *
- * `null` y no un `Apartamento desconocido` inventado cuando la notificacion no
- * cuelga de ninguno: quien decide como se ve un slot vacio es el componente.
- */
-function notificacionesParaAlertas(
-  filas: AlertaDelAdmin[],
-  nombres: Record<string, string>,
-): NotificacionParaAlertas[] {
-  return filas.map((n) => ({
-    id: n.id,
-    type: n.type,
-    title: n.title,
-    body: n.body,
-    url: n.url,
-    cleaning_id: n.cleaning_id,
-    property_id: n.property_id,
-    created_at: n.created_at,
-    apartamento: n.property_id === null ? null : (nombres[n.property_id] ?? null),
-  }));
-}
-
 export default async function OperacionPage({
   searchParams,
 }: {
@@ -288,9 +289,13 @@ export default async function OperacionPage({
         <h1 className="text-display text-foreground">Operación</h1>
 
         <div className="flex items-center gap-md">
-          {/* Sitio de la marca de ultima actualizacion (§13.1). La construye el
-              plan 04-13, que es quien tiene el instante de lectura y el estado de
-              sincronizacion. */}
+          {/*
+            La marca de ultima actualizacion (§13.1) y el canal de tiempo real que
+            la alimenta. Recibe `leidoEnMs`, que es EL instante de la lectura de
+            esta peticion: el mismo que usaron la ventana de la consulta y el
+            computo de las alertas. Es la marca unica que pide D-14.
+          */}
+          <SincronizacionEnVivo leidoEnMs={operacion.leidoEnMs} />
 
           {/* El dialogo trae su propio disparador, igual que
               `DialogoCrearAseador` de la Fase 2: el patron de "dialogo fuera del
