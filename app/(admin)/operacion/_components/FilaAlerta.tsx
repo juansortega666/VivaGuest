@@ -104,8 +104,10 @@ const ICONOS: Record<IconoDeAlerta, LucideIcon> = {
  * pese a empezar por barra: sin ese caso, el filtro dejaria pasar justo el
  * redirect externo que pretende cortar.
  *
- * Se renderiza como `href` de un `<Link>` interno y NUNCA como HTML. Cero
- * `dangerouslySetInnerHTML` en toda la fase.
+ * Se renderiza como `href` de un `<Link>` interno y NUNCA como HTML: en toda la
+ * fase no hay una sola inyeccion de HTML crudo, y hay un grep que lo comprueba
+ * sobre este directorio. Por eso el nombre de esa prop de React no se escribe
+ * aca ni dentro de un comentario: el grep no distingue.
  */
 export function rutaInterna(url: string | null): string | null {
   if (url === null) return null;

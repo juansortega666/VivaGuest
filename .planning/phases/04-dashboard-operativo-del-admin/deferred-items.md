@@ -142,3 +142,56 @@ diciendo lo viejo.
 
 **A quién le toca:** al plan que vuelva a tocar `app/(admin)/operacion/_components/`, o a un
 `gsd-quick`.
+
+---
+
+## El clic de una alerta no expande el día colapsado que contiene el aseo (04-13)
+
+**Hallado durante:** la tarea 1 del plan 04-13, al construir el destino del clic de `FilaAlerta`.
+
+**Estado:** el plan 04-13 añadió `id="aseo-{id}"` y `scroll-mt-barra` a `FilaAseo`, así que el ancla
+`/operacion#aseo-{id}` **existe en el documento y funciona cuando el día ya está expandido**. `Hoy`
+nace expandido, que es el caso mayoritario de las alertas.
+
+**Lo que falta:** `Mañana` y `Siguientes` nacen colapsados (§8.1) y `BloqueDia` guarda ese estado en
+un `useState` local. Un ancla a una fila que no está en el DOM no lleva a ninguna parte: el navegador
+no encuentra el `id` y se queda donde estaba, sin decir nada. El contrato lo pide explícito en §11.3:
+«expandiéndolo si estaba colapsado».
+
+**Qué haría falta:** que `BloqueDia` lea el `hash` al montar (y en `hashchange`) y se expanda si
+alguna de sus filas coincide. Es un `useEffect` con la lista de ids del bloque.
+
+**Por qué NO se hizo desde 04-13:** `BloqueDia.tsx` es del plan 04-09 y no está en el
+`files_modified` de 04-13. La regla de alcance dice que solo se auto-corrige lo que causan los
+cambios del plan en curso, y el `id` del ancla sí lo causa; la expansión es una función nueva de otro
+componente.
+
+**A quién le toca:** al plan 04-14, o a un `gsd-quick`.
+
+---
+
+## `hora_limite_vencida` solo se computa dentro de la ventana de hoy … hoy+6 (04-13)
+
+**Hallado durante:** la tarea 2 del plan 04-13, al alimentar `alertasComputadas()` con las filas de
+`leerOperacion()`.
+
+**Estado:** `alertasComputadas()` **no acota por fecha** el vencimiento de la hora límite, y su
+comentario dice literalmente por qué: «un aseo de anteayer sin terminar es justo el que no se puede
+perder». Pero su entrada son las filas que ya trajo `leerOperacion()`, y esa consulta arranca en
+`hoyBog()`. Resultado: **un aseo de ayer o de antier con la hora límite pasada y sin terminar no
+produce alerta**, porque su fila nunca llega al cómputo.
+
+El caso mayoritario sí funciona: un aseo de HOY cuya hora límite ya pasó aparece en el panel, que es
+lo que el admin mira durante la jornada.
+
+**Qué haría falta:** o bien una consulta propia del panel que barra hacia atrás los aseos vivos con
+`scheduled_date < hoy`, o bien ampliar el límite inferior de la ventana de `leerOperacion()`.
+
+**Por qué NO se hizo desde 04-13:** la segunda opción cambia la ventana que comparten las TRES
+superficies de `/operacion` (los días, la bandeja y los chips de carga) y metería aseos vencidos en
+el bloque `Hoy`, que es un cambio de comportamiento del carril ancho, no del panel. La primera añade
+un cuarto viaje a `cleanings` en cada carga. Las dos son decisiones de alcance, no correcciones.
+
+**A quién le toca:** decisión de producto. Candidato natural: la Fase 5, que es la que drena la cola
+de `notifications` y puede escribir el tipo `hora_limite_vencida` de verdad — hoy **ninguna migración
+lo escribe**, y por eso es obligatoriamente computado.
