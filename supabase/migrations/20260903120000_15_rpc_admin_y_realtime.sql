@@ -632,3 +632,65 @@ comment on function public.clear_review_flag(uuid) is
 revoke all     on function public.clear_review_flag(uuid) from public, anon;
 grant  execute on function public.clear_review_flag(uuid) to authenticated;
 
+
+-- ===========================================================================
+-- PUBLICACIÓN DE REALTIME — D-13
+--
+-- El admin deja la pantalla abierta todo el día y el motor de sync corre cada 30
+-- minutos: sin refresco, actúa sobre un mundo viejo. Realtime sobre
+-- `postgres_changes` NO ENTREGA NADA de una tabla que no esté en la publicación
+-- `supabase_realtime`, y EL FALLO ES SILENCIOSO: el canal se suscribe, responde
+-- `SUBSCRIBED`, y no llega un solo evento nunca. Hasta esta migración,
+-- `supabase_realtime` no aparecía en ninguna migración del repo.
+--
+-- IDEMPOTENTE A PROPÓSITO. `alter publication ... add table` falla si la tabla ya
+-- es miembro, y en un proyecto hospedado la publicación puede traer tablas
+-- añadidas desde el Studio. El proyecto de Supabase de producción todavía no
+-- existe (el checkpoint A1 de la Fase 1 sigue abierto), así que su estado NO SE
+-- PUEDE MEDIR: hay que consultar el catálogo antes de añadir, y tolerar que la
+-- publicación no exista todavía.
+--
+-- NO SE TOCA LA IDENTIDAD DE RÉPLICA DE ESTAS DOS TABLAS, y va escrito por qué:
+-- ponerla completa solo hace falta para filtrar eventos DELETE y para poblar el
+-- registro anterior en los UPDATE, y el patrón de integración de esta fase ignora
+-- el payload y solo dispara `router.refresh()`. Ponerla completa mete la fila
+-- entera en el WAL en cada UPDATE: coste permanente en la base a cambio de nada.
+--
+-- `postgres_changes` autoriza CADA EVENTO contra la RLS POR SUSCRIPTOR: para
+-- `cleanings` eso evalúa `cleanings_admin_all` y por tanto `private.is_admin()`,
+-- que consulta `profiles`. Con un suscriptor es un `exists` por evento; el
+-- régimen que describe el benchmark publicado (500 clientes) este proyecto no lo
+-- alcanza ni de lejos. Mitiga T-04-13: además de la RLS por evento, el cliente
+-- del plan 04-13 ignora el payload, así que el dato no llega al navegador por
+-- esta vía.
+-- ===========================================================================
+do $realtime$
+begin
+  if not exists (
+    select 1 from pg_catalog.pg_publication where pubname = 'supabase_realtime'
+  ) then
+    raise notice 'supabase_realtime no existe todavía: no se publica nada.';
+    return;
+  end if;
+
+  if not exists (
+    select 1
+      from pg_catalog.pg_publication_tables
+     where pubname    = 'supabase_realtime'
+       and schemaname = 'public'
+       and tablename  = 'cleanings'
+  ) then
+    alter publication supabase_realtime add table public.cleanings;
+  end if;
+
+  if not exists (
+    select 1
+      from pg_catalog.pg_publication_tables
+     where pubname    = 'supabase_realtime'
+       and schemaname = 'public'
+       and tablename  = 'notifications'
+  ) then
+    alter publication supabase_realtime add table public.notifications;
+  end if;
+end
+$realtime$;
