@@ -86,3 +86,34 @@ Postgres. GoTrue, Storage, Realtime y Edge Runtime se quedan abajo, y sin GoTrue
 falla con `name resolution failed`, que parece un problema de red y no lo es. Encima, si el CLI cree
 que el stack ya está arriba, `npx supabase start` NO recrea los contenedores que falten: devuelve OK
 y los deja parados. La salida es `npx supabase stop && npx supabase start`.
+
+---
+
+## `npm run lint` falla en `e2e/fixtures.ts`, y es preexistente
+
+**Encontrado durante:** plan 04-10, cuya Task 3 tiene `npm run lint` en su verificación.
+
+**Qué pasa:** tres errores de `react-hooks/rules-of-hooks`, todos en el mismo archivo:
+
+```
+e2e/fixtures.ts
+  104:11  error  React Hook "use" is called in function "paginaAdmin" …
+  110:11  error  React Hook "use" is called in function "paginaAseador" …
+  116:11  error  React Hook "use" is called in function "paginaAseador2" …
+```
+
+**Por qué es un falso positivo:** el `use` de esas líneas es el `use` de las **fixtures de
+Playwright** (`async ({ browser }, use) => { … await use(page) }`), no el hook `use` de React. La
+regla lo detecta por el nombre y no por su origen, y el archivo no importa nada de React.
+
+**Por qué NO se arregla en este plan:** el archivo es de la Fase 2 (`814e0cd`, plan 02-06), no lo
+toca ninguno de los tres commits de 04-10, y la regla de alcance dice que solo se auto-corrige lo que
+causan los cambios del plan en curso. Tocarlo desde acá metería un cambio de configuración de lint en
+un commit de UI.
+
+**Qué haría falta:** una entrada en `eslint.config.mjs` que apague `react-hooks/rules-of-hooks` para
+`e2e/**`, que es donde `use` significa otra cosa. Un `eslint-disable` por línea también sirve, pero
+son tres hoy y una por fixture nueva a partir de mañana.
+
+**A quién le toca:** al plan 04-14, que es el que vuelve a tocar `e2e/`, o a un `gsd-quick` de una
+línea.
