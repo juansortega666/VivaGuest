@@ -14,6 +14,29 @@
 -- base local, omite sin duplicar. El camino de creacion desde cero NO se ha ejercitado
 -- todavia: clonar la base para probarlo requiere que no haya sesiones activas, y el stack
 -- estaba en uso. Lo ejercita el primer `db reset` real que corra un plan de esta fase.
+--
+-- ── EJERCITADO EL 2026-09-06 POR EL PLAN 04-14, Y SALIO ROTO ────────────────────
+--
+-- Los cuatro `''` de abajo NO son decorativos y son la razon por la que este bloque
+-- lleva un comentario tan largo. `confirmation_token`, `recovery_token`,
+-- `email_change_token_new` y `email_change` son las UNICAS cuatro columnas de texto de
+-- `auth.users` que NO tienen DEFAULT en el schema (las otras cuatro, `phone_change`,
+-- `phone_change_token`, `email_change_token_current` y `reauthentication_token`, sí lo
+-- tienen, y por eso nunca dieron guerra). Un insert que las omite las deja en NULL, y
+-- GoTrue las escanea a un `string` de Go que no admite NULL:
+--
+--   GET /admin/users -> 500
+--   "unable to fetch records: sql: Scan error on column index 3,
+--    name \"confirmation_token\": converting NULL to string is unsupported"
+--
+-- Y no rompe solo el listado de usuarios: **rompe la suite E2E entera**, porque
+-- `e2e/global-setup.ts` pagina `listUsers()` para borrar y recrear los usuarios semilla
+-- antes de la primera prueba. El sintoma es "Database error finding users" al arrancar
+-- Playwright, que no menciona ni esta tabla ni este seed.
+--
+-- Medido en la base local el 2026-09-06: las tres filas de este seed tenian las cuatro
+-- columnas en NULL, y ninguna otra fila de `auth.users` (todas creadas por la Admin API)
+-- las tenia. Con los cuatro `''` puestos, `listUsers()` vuelve a 200.
 
 do $$
 declare
@@ -39,17 +62,23 @@ begin
   insert into auth.users (
     id, instance_id, aud, role, email, encrypted_password,
     email_confirmed_at, created_at, updated_at,
-    raw_app_meta_data, raw_user_meta_data
+    raw_app_meta_data, raw_user_meta_data,
+    -- Las cuatro sin DEFAULT en el schema. Ver la cabecera: en NULL rompen
+    -- `GET /admin/users` con un 500 y con el la suite E2E completa.
+    confirmation_token, recovery_token, email_change_token_new, email_change
   ) values
     (v_admin, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
      'admin@vivaguest.test', v_hash, now(), now(), now(),
-     '{"provider":"email","providers":["email"],"role":"admin"}'::jsonb, '{}'::jsonb),
+     '{"provider":"email","providers":["email"],"role":"admin"}'::jsonb, '{}'::jsonb,
+     '', '', '', ''),
     (v_maria, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
      'maria@vivaguest.test', v_hash, now(), now(), now(),
-     '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb),
+     '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb,
+     '', '', '', ''),
     (v_luz,   '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
      'luz@vivaguest.test', v_hash, now(), now(), now(),
-     '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb)
+     '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb,
+     '', '', '', '')
   on conflict (id) do nothing;
 
   -- El trigger de la Fase 1 materializa `profiles` con rol `aseador` siempre, sin mirar
