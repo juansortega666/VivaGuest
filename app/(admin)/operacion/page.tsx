@@ -2,6 +2,18 @@ import { Plus } from 'lucide-react';
 import type { Metadata } from 'next';
 
 import { Button } from '@/components/ui/button';
+import {
+  agruparPorDia,
+  cargaPorAseador,
+  leerAseadoresActivos,
+  leerOperacion,
+} from '@/lib/data/operacion';
+import { formatFechaBog } from '@/lib/domain/dates';
+import { createClient } from '@/lib/supabase/server';
+
+import { BloqueDia } from './_components/BloqueDia';
+import { LeyendaDeAseos } from './_components/EstadoAseo';
+import { FranjaCarga } from './_components/FranjaCarga';
 
 export const metadata: Metadata = {
   title: 'Operación · VivaGuest',
@@ -43,8 +55,32 @@ export const metadata: Metadata = {
  * `max-xl:order-first`.
  *
  * No se construye vista movil de `(admin)`.
+ *
+ * ── UNA SOLA IDA A `cleanings` PARA LAS TRES SUPERFICIES ───────────────────
+ * `leerOperacion()` trae la ventana entera (hoy … hoy+6) con los dos embeds, y
+ * `agruparPorDia`, `bandejaSinConfirmar` y `cargaPorAseador` son proyecciones
+ * PURAS sobre ese mismo conjunto. Asi la pantalla tiene UNA marca de tiempo que
+ * mostrar y no tres, que es lo que D-14 pide. La lista de aseadores activos si es
+ * un segundo viaje: vive en `profiles` y no hay forma de traerla en el mismo.
  */
-export default function OperacionPage() {
+export default async function OperacionPage() {
+  const supabase = await createClient();
+
+  // En paralelo: son dos consultas independientes contra la misma sesion, y
+  // encadenarlas con dos `await` seguidos sumaria las dos latencias por nada.
+  const [operacion, aseadores] = await Promise.all([
+    leerOperacion(supabase),
+    leerAseadoresActivos(supabase),
+  ]);
+
+  const bloques = agruparPorDia(operacion.filas, operacion.hoy);
+  const chips = cargaPorAseador(operacion.filas, operacion.hoy, aseadores);
+
+  // `Siguientes` cuenta lo de sus cinco dias juntos en su cabecera, y cada dia
+  // vuelve a contar lo suyo en la propia. No es duplicar: la de fuera es la que se
+  // ve con el bloque cerrado, que es como nace.
+  const filasSiguientes = bloques.siguientes.flatMap((grupo) => grupo.filas);
+
   return (
     <div className="flex flex-col gap-xl">
       {/*
@@ -73,11 +109,68 @@ export default function OperacionPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-2xl xl:grid-cols-[minmax(0,1fr)_var(--container-rail)]">
-        {/* Carril ancho: franja de carga, los tres bloques de dia y la leyenda.
-            Lo llena la tercera tarea de este mismo plan. `min-w-0` para que una
-            tabla ancha haga scroll dentro de su card en vez de ensanchar la
-            pista. */}
-        <div className="flex min-w-0 flex-col gap-lg"></div>
+        {/* Carril ancho. `min-w-0` para que una tabla ancha haga scroll dentro de
+            su card en vez de ensanchar la pista de la rejilla. */}
+        <div className="flex min-w-0 flex-col gap-lg">
+          <FranjaCarga chips={chips} />
+
+          {/*
+            `Hoy` nace expandido; `Manana` y `Siguientes`, colapsados (§8.1). El
+            estado no se persiste: cada carga vuelve a esto mismo.
+          */}
+          <BloqueDia
+            rotulo="Hoy"
+            fecha={bloques.hoy.fecha}
+            filas={bloques.hoy.filas}
+            expandidoInicial
+          />
+
+          <BloqueDia rotulo="Mañana" fecha={bloques.manana.fecha} filas={bloques.manana.filas} />
+
+          {/*
+            `Siguientes` AGRUPA POR DIA, no es una lista corrida: DASH-01 pide
+            "organizados por dia", y 31 filas seguidas pierden justo el ancla que
+            el requisito nombra. Cinco dias es el horizonte con el que se decide un
+            suplente; mas alla no hay ninguna decision que tomar hoy.
+
+            Los dias de dentro nacen abiertos si tienen algo y cerrados si no:
+            cinco estados vacios apilados al abrir el bloque son un muro, y §8.1
+            dice literalmente que el vacio se ve "al expandir".
+          */}
+          <BloqueDia
+            rotulo={`Siguientes (${bloques.siguientes.length} días)`}
+            filas={filasSiguientes}
+          >
+            <div className="flex flex-col gap-lg p-md">
+              {bloques.siguientes.map((grupo) => (
+                <BloqueDia
+                  key={grupo.fecha}
+                  fecha={grupo.fecha}
+                  filas={grupo.filas}
+                  expandidoInicial={grupo.filas.length > 0}
+                />
+              ))}
+            </div>
+          </BloqueDia>
+
+          {/*
+            Lo que queda mas alla del horizonte se CUENTA, no se agrupa, y va sin
+            expansion: no hay ninguna decision que tomar hoy sobre un aseo de
+            dentro de dos semanas, pero saber que existe evita la pregunta
+            "¿y no hay nada mas?".
+          */}
+          {bloques.masAllaDelHorizonte > 0 && (
+            <p className="text-micro text-muted-foreground">
+              Hay {bloques.masAllaDelHorizonte}{' '}
+              {bloques.masAllaDelHorizonte === 1 ? 'aseo programado' : 'aseos programados'} después
+              del {formatFechaBog(bloques.ultimoDiaDelHorizonte)}.
+            </p>
+          )}
+
+          {/* La leyenda va UNA SOLA VEZ, al pie del carril (§5). Repetirla bajo
+              cada uno de los tres dias seria tres veces el mismo parrafo. */}
+          <LeyendaDeAseos />
+        </div>
 
         {/*
           ── EL CARRIL LATERAL, Y POR QUE TIENE ALTURA CERRADA (§6.2) ─────────
