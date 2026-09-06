@@ -3,7 +3,7 @@
 Hallazgos fuera del alcance del plan que los encontró. No se arreglan ahí: la regla del proyecto es
 que solo se auto-corrige lo que causó el cambio en curso, y estos son anteriores.
 
-## 1. `npm run lint` sale en rojo con 3 errores preexistentes
+## 1. ~~`npm run lint` sale en rojo con 3 errores preexistentes~~ RESUELTO 2026-09-06
 
 **Encontrado por los planes 04-01 y 04-04 por separado, el 2026-09-03.** El 04-01 lo midió sobre el
 árbol limpio **antes de escribir una línea**, así que la preexistencia está probada, no supuesta.
@@ -33,6 +33,11 @@ Wave 0.
 **A quién le toca:** al primer plan de la Fase 4 que toque `e2e/`, que por el grafo es el 04-14.
 Conviene cerrarlo antes de que alguien meta `lint` a CI y descubra que el repo entero está rojo por
 tres líneas de fixtures.
+
+**Cerrado el 2026-09-06 por el plan 04-14**, commit `2076f9f`. Se apagó
+`react-hooks/rules-of-hooks` para `e2e/**/*.ts` en `eslint.config.mjs`, con el alcance más estrecho
+posible: solo esa regla y solo ese directorio. `npm run lint` pasa de 3 errores a 0. Quedan 2
+warnings de variables sin usar en tests, que no rompen nada y son de otros planes.
 
 ## 2. ~~El checkout principal sigue con ~140 archivos duplicados de iCloud~~ RESUELTO 2026-09-04
 
@@ -145,7 +150,7 @@ diciendo lo viejo.
 
 ---
 
-## El clic de una alerta no expande el día colapsado que contiene el aseo (04-13)
+## ~~El clic de una alerta no expande el día colapsado que contiene el aseo (04-13)~~ RESUELTO 2026-09-06
 
 **Hallado durante:** la tarea 1 del plan 04-13, al construir el destino del clic de `FilaAlerta`.
 
@@ -167,6 +172,15 @@ cambios del plan en curso, y el `id` del ancla sí lo causa; la expansión es un
 componente.
 
 **A quién le toca:** al plan 04-14, o a un `gsd-quick`.
+
+**Cerrado el 2026-09-06 por el plan 04-14**, commit `2871898`. `BloqueDia` monta
+`useAnclaDeAlerta()`, que expande el bloque y lleva la fila a pantalla. Lleva TRES disparadores y no
+uno, y la razón está medida: el caso mayoritario —el admin ya está en `/operacion` y pulsa una
+alerta del carril— **no emite `hashchange`**, porque el `<Link>` del App Router resuelve una
+navegación de solo-hash con `history.pushState` y `pushState` no dispara ese evento. Los tres son
+el montaje, `hashchange` (atrás/adelante del navegador) y el clic en fase de captura, que es el que
+cubre el caso mayoritario. Afirmado en `e2e/operacion.spec.ts`: «pulsar una alerta de un aseo de
+mañana ABRE el bloque Mañana y lleva a su fila».
 
 ---
 
@@ -195,3 +209,120 @@ un cuarto viaje a `cleanings` en cada carga. Las dos son decisiones de alcance, 
 **A quién le toca:** decisión de producto. Candidato natural: la Fase 5, que es la que drena la cola
 de `notifications` y puede escribir el tipo `hora_limite_vencida` de verdad — hoy **ninguna migración
 lo escribe**, y por eso es obligatoriamente computado.
+
+---
+
+## ⚠️ ALTA — `AlertDialog` y `Tooltip` se renderizan con 4 y 8 píxeles de ancho (04-14)
+
+**Hallado durante:** la tarea 1 del plan 04-14, midiendo por qué el `Sheet` de confirmación era
+inusable en el navegador. **Es un defecto de la Fase 2 y afecta a toda la aplicación, no solo a
+`/operacion`.**
+
+**La causa, medida en el CSS del build de producción:**
+
+```
+max-w-sm{max-width:var(--spacing-sm)}     ->   8px   (deberían ser 384px)
+max-w-xs{max-width:var(--spacing-xs)}     ->   4px   (deberían ser 320px)
+```
+
+`max-w-<nombre>` en Tailwind v4.3 resuelve el nombre contra `--spacing-*` **antes** que contra
+`--container-*`, y `02-UI-SPEC.md` §2 declara la escala de espaciado con nombres de talla
+(`--spacing-xs: 4px`, `--spacing-sm: 8px`, `--spacing-md: 12px`, `--spacing-lg: 16px`). Toda
+primitiva de shadcn que use `max-w-xs|sm|md|lg` queda con un ancho de entre 4 y 16 píxeles.
+
+**Qué se cerró en el 04-14 y qué no.** El commit `1e758bc` arregló `cn()` para que
+`tailwind-merge` reconozca los `max-w-*` con nombre del proyecto, de modo que el override en el
+sitio de uso —el patrón que `components/ui/sheet.tsx` documenta— DESPLACE al `max-w-sm` de la
+primitiva. Con eso quedan bien las dos superficies que sí llevan override:
+
+- `Sheet` → `data-[side=right]:sm:max-w-sheet` → 480px. **Medido en `e2e/operacion.spec.ts`.**
+- `Dialog` → `sm:max-w-dialogo` → 480px. Son los cinco diálogos de `/operacion` y los de la Fase 2.
+
+**Siguen rotos los que NO llevan override en su sitio de uso:**
+
+- `components/ui/alert-dialog.tsx:55` — `data-[size=default]:max-w-xs` y
+  `data-[size=default]:sm:max-w-sm`. Los usan `DialogoCerrarAseo`, `DialogoCancelarAseo`,
+  `DialogoDesactivarApartamento` y `DialogoDesactivarAseador`. Medido: la caja del diálogo mide
+  ~32px (el `max-width` de 8px más los 16px de padding a cada lado) y el texto se desborda fuera.
+- `components/ui/tooltip.tsx:53` — `max-w-xs` → 4px. Afecta al tooltip de la marca de frescura y al
+  del botón de confirmar sin responsable.
+
+**Por qué NO se cerró desde el 04-14:** el arreglo correcto es una decisión de sistema de diseño, no
+una corrección mecánica, y hay tres caminos con costes muy distintos:
+
+1. Renombrar la escala `--spacing-*` para quitar la colisión. Es lo más correcto y toca cientos de
+   usos (`p-md`, `gap-sm`, `px-xl`) en todo el repo.
+2. Añadir el override documentado (`className="sm:max-w-dialogo"`) en cada sitio de uso de
+   `AlertDialog`, y un token propio para el tooltip. Es pequeño y disperso.
+3. Editar las primitivas de `components/ui/`, que el repo declara regenerables a propósito.
+
+Probado y DESCARTADO: declarar `--container-xs/sm/md/lg` a mano en `@theme` **no lo corrige**, el
+espaciado gana igual. `@utility max-w-sm { … }` tampoco: Tailwind emite la declaración propia
+después de la del usuario dentro de la misma regla.
+
+**A quién le toca:** decisión del dueño del `UI-SPEC`. Es lo primero que hay que mirar de la
+Fase 5, porque toda la PWA del aseador se construye sobre las mismas primitivas.
+
+---
+
+## La causa raíz del cuelgue de `revalidatePath` en `/operacion` no está identificada (04-14)
+
+**Hallado durante:** la tarea 1 del plan 04-14. **Rodeado, no resuelto.**
+
+El síntoma y la bisección completa están en la cabecera de
+`app/(admin)/operacion/_actions.ts`. Lo que quedó sin explicar es el mecanismo: con la página
+reducida a su `<h1>` y una action de dos líneas que solo llama `revalidatePath('/operacion')`, el
+cuelgue **aparece y desaparece al añadir o quitar UN client component cualquiera** del árbol —se
+probó con un `<span>` trivial—. Es un umbral de tamaño, no de contenido.
+
+Descartados con medición: el motor (la fila se escribe siempre), la red (la respuesta llega entera y
+es autoconsistente), Realtime, `searchParams`, la compresión (`compress: false` no cambia nada),
+`revalidatePath('/operacion', 'page')`, y cualquier componente concreto de la pantalla.
+
+**Qué haría falta:** un caso mínimo reproducible fuera de este repo y un reporte a Next. Mientras
+tanto el rodeo (`router.refresh()` en el cliente) está en su sitio y anclado por dos aserciones
+unitarias y por `e2e/operacion.spec.ts`.
+
+**A quién le toca:** a quien actualice Next. Antes de volver a poner `revalidatePath`, reproducir el
+caso mínimo con la versión nueva.
+
+---
+
+## El `Select` de tipo de `Crear aseo` muestra el slug crudo `repaso` (04-14)
+
+**Hallado durante:** la tarea 1 del plan 04-14, leyendo el árbol de accesibilidad del diálogo:
+
+```
+combobox "Tipo repaso": repaso
+```
+
+`DialogoCrearAseo.tsx:317` usa `<SelectValue />` a secas, y la primitiva de Base UI pinta el VALOR,
+no la etiqueta del ítem elegido. `DialogoReasignar.tsx:238` hace lo correcto: le pasa una función
+(`{(v) => aseadores.find(...)?.full_name ?? 'Elige un aseador'}`).
+
+Es vocabulario de máquina en la pantalla, que es justo lo que T-04-12 prohíbe. No es grave —el menú
+desplegado sí dice `Repaso` y `Emergencia`— pero el valor cerrado, que es lo que el admin ve el 95%
+del tiempo, dice `repaso`.
+
+**Qué haría falta:** `<SelectValue>{(v) => copyDeTipoDeAseo(String(v))}</SelectValue>`, que además
+cierra de paso el diferido de `Repaso` escrito a mano de arriba.
+
+**Por qué NO se hizo desde el 04-14:** `DialogoCrearAseo.tsx` no está en su `files_modified` y el
+plan ya acumuló dos correcciones de otros planes que sí eran bloqueantes. Esta no lo es.
+
+**A quién le toca:** al plan que vuelva a tocar `app/(admin)/operacion/_components/`, o a un
+`gsd-quick` de una línea junto con el diferido de `copyDeTipoDeAseo()`.
+
+---
+
+## `.env 2.example`, duplicado de iCloud superviviente (04-14)
+
+**Hallado durante:** la tarea 3 del plan 04-14, en la comprobación transversal de "ningún archivo
+con sufijo numérico volvió al checkout".
+
+Es el único que quedó, y es **inofensivo**: está en `.gitignore` (`.env*`), así que no puede viajar
+por git, y nadie lo lee (el real es `.env.example`). Se reporta y no se borra porque es un archivo
+del usuario en su máquina.
+
+**A quién le toca:** al usuario, `rm '.env 2.example'`. Recurrente mientras el proyecto viva en una
+carpeta sincronizada.
