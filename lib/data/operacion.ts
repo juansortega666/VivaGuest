@@ -424,6 +424,144 @@ export function cargaPorAseador(
   return chips;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LAS TRES CONSULTAS AUXILIARES
+//
+// Van aparte de la consulta única porque leen OTRAS tablas: no son proyecciones
+// del mismo conjunto de filas y no habría forma de traerlas en el mismo viaje.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Una alerta del panel, tal como la pinta la fila de 64px de UI-SPEC §11.3. */
+export type AlertaDelAdmin = Pick<
+  Tables<'notifications'>,
+  | 'id'
+  | 'type'
+  | 'title'
+  | 'body'
+  | 'url'
+  | 'created_at'
+  | 'read_at'
+  | 'recipient_id'
+  | 'cleaning_id'
+  | 'property_id'
+>;
+
+/** Un aseador activo, para los chips de carga y el `Select` de reasignar. */
+export type AseadorActivo = Pick<Tables<'profiles'>, 'id' | 'full_name' | 'is_active'>;
+
+/**
+ * Las alertas SIN ATENDER del admin, más reciente primero (DASH-04, DASH-05).
+ *
+ * El filtro (`recipient_id` + `read_at is null`) y el orden coinciden EXACTO con
+ * `notifications_inbox_idx`, que es parcial `where read_at is null`.
+ *
+ * ── DOS COSAS QUE VAN A LLEGAR COMO REPORTE DE BUG ─────────────────────────
+ *
+ * 1. **El toggle `Ver atendidas` cae FUERA del índice parcial** y hace seq scan.
+ *    Con un solo admin y decenas de notificaciones es irrelevante, pero conviene
+ *    saberlo antes de que alguien lo mida y lo reporte como regresión.
+ *
+ * 2. **Cinco de las once notificaciones del sistema van a TODOS los admins
+ *    activos, y `notifications.recipient_id` es NOT NULL.** No existe "una
+ *    notificación para el rol": cada alerta se inserta una vez por admin activo,
+ *    así que marcar una como atendida NO la marca para los demás. Es correcto por
+ *    diseño, porque `read_at` es por destinatario, no por hecho.
+ *
+ * `userId` se pasa aunque `notifications_own_select` ya acote a `auth.uid()`: la
+ * policy decide qué filas son visibles, el filtro decide qué índice se usa. Sin
+ * él PostgREST no puede aprovechar `notifications_inbox_idx`.
+ */
+export async function leerAlertasDelAdmin(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<AlertaDelAdmin[]> {
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('id, type, title, body, url, created_at, read_at, recipient_id, cleaning_id, property_id')
+    .eq('recipient_id', userId)
+    .is('read_at', null)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return data ?? [];
+}
+
+/**
+ * El `last_success_at` MÁS RECIENTE entre todos los feeds activos.
+ *
+ * Es la entrada de `estadoDeSincronizacion()`, que es la única capa del sistema
+ * que no es ciega a su propia muerte: se computa AL LEER, así que se dispara
+ * aunque no corra absolutamente nada dentro de la base.
+ *
+ * ── LA TRAMPA, Y NO ES OPCIONAL ────────────────────────────────────────────
+ *
+ * PostgREST no tiene `max()`. Se resuelve ordenando y quedándose con la primera
+ * fila, y ahí aparece el detalle que lo rompe todo: **por defecto Postgres pone
+ * los NULOS PRIMERO en orden descendente**. Un feed recién conectado que todavía
+ * no corrió tiene `last_success_at` nulo, así que sin `nullsFirst: false` esta
+ * función devolvería `null`, `estadoDeSincronizacion(null, …)` diría `'caida'` y
+ * el panel pintaría la alerta global de calendario caído con el sistema
+ * perfectamente sano. Conectar un apartamento nuevo dispararía una falsa alarma
+ * permanente.
+ *
+ * El test de integración siembra exactamente ese escenario (un feed que nunca
+ * sincronizó al lado de otro que sí) y quitar `nullsFirst: false` lo pone rojo.
+ *
+ * Devuelve `null` solo cuando de verdad ningún feed activo ha sincronizado
+ * nunca, que es lo que `estadoDeSincronizacion()` interpreta como caída, y es la
+ * lectura correcta: un sistema en el que nada ha sincronizado jamás no está sano.
+ */
+export async function leerUltimoExitoDeSync(
+  supabase: SupabaseClient<Database>,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('calendar_feeds')
+    .select('last_success_at')
+    .eq('is_active', true)
+    .order('last_success_at', { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+
+  return data?.last_success_at ?? null;
+}
+
+/**
+ * Los perfiles con rol `aseador` que están ACTIVOS.
+ *
+ * NO se reutiliza `listarAseadoresActivos` de `lib/data/apartamentos.ts` pese al
+ * nombre: esa función devuelve activos E INACTIVOS a propósito, porque el
+ * `Select` de responsable tiene que seguir mostrando a quien fue desactivado
+ * para no borrar el dato en silencio (UI-SPEC §8.3). Aquí la pregunta es otra:
+ * a quién se le puede asignar trabajo HOY, y a alguien desactivado no. Importar
+ * la otra y filtrar en el llamante repetiría el filtro en cada consumidor.
+ *
+ * `is_active` viaja en la fila aunque siempre valga `true`: es lo que permite a
+ * quien reciba esta lista afirmarlo sin volver a la base, y quita la tentación
+ * de asumirlo.
+ *
+ * El orden va por `localeCompare` en la capa que pinta, no aquí: `order` de
+ * PostgREST usa la colación de la base y los chips se reordenan por conteo de
+ * todas formas. Se pide ordenado igualmente para que la lista sea estable entre
+ * dos cargas de la misma pantalla.
+ */
+export async function leerAseadoresActivos(
+  supabase: SupabaseClient<Database>,
+): Promise<AseadorActivo[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, full_name, is_active')
+    .eq('role', 'aseador')
+    .eq('is_active', true)
+    .order('full_name', { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  return data ?? [];
+}
+
 /** El nombre del apartamento, o cadena vacía si la RLS no dejó resolver el embed. */
 function nombreDelApartamento(fila: FilaDeOperacion): string {
   return fila.property?.nombre ?? '';
