@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Completado 04-08-PLAN.md. Siguiente: wave 6 (04-10, 04-11, 04-12)"
-last_updated: "2026-09-06T18:54:11.818Z"
+stopped_at: "Completado 04-11-PLAN.md. Siguiente: 04-12, 04-13 y 04-14"
+last_updated: "2026-09-06T19:11:03.308Z"
 last_activity: 2026-09-06
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 48
-  completed_plans: 44
+  completed_plans: 45
   percent: 33
 ---
 
@@ -26,7 +26,7 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 ## Current Position
 
 Phase: 04 (dashboard-operativo-del-admin) — EXECUTING
-Plan: 10 of 14 de la Fase 4 (waves 1 a 5 cerradas; 04-08 y 04-09 entregados)
+Plan: 11 of 14 de la Fase 4 (waves 1 a 5 cerradas; 04-08 y 04-09 entregados)
 Status: Ready to execute
 Last activity: 2026-09-06
 con `exigirAdmin()` como PRIMERA operacion de las nueve y un test que lo mide por lo que NO llega a
@@ -73,7 +73,7 @@ serie. Se pierde paralelismo solo en las waves 4 y 6.
 OJO, CAMBIO DE SIGNO: a partir de la migracion 15, un `not ok` en 06_aseos_admin.test.sql YA NO es
 esperado, es una regresion. Mismo caso que 05_sync.test.sql tras la Fase 3.
 
-Progress: [█████████░] 92%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -103,6 +103,7 @@ Progress: [█████████░] 92%
 | Phase 04 P09 | 66min | 3 tasks | 10 files |
 | Phase 04 P08 | 47min | 3 tasks | 5 files |
 | Phase 04 P10 | 68min | 3 tasks | 6 files |
+| Phase 04 P11 | 42min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -128,6 +129,9 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Phase 04]: 04-10: la tanda del Sheet se congela al montar; el revalidatePath de confirmarAseo no puede cambiar el aseo que el admin esta mirando
 - [Phase 04]: 04-10: Saltar este tambien ante un apartamento sin responsable, no solo ante un fallo de la base: si no, la tanda queda sin salida
 - [Phase 04]: 04-10: el responsable fijo del Sheet sale de listarApartamentos y no de un embed nuevo, porque un aseo sin confirmar todavia no tiene aseador_id
+- [Phase 04]: 04-11: Reasignar solo sobre Pendiente, no sobre En curso — reassign_cleaning exige started_at is null
+- [Phase 04]: 04-11: Marcar como revisado se anade al menu (fuera del UI-SPEC §7.3): la migracion 13 prometia que solo el admin apaga needs_review y no habia superficie
+- [Phase 04]: 04-11: se monta solo el dialogo abierto, no los cinco — con 30 filas serian 150 useActionState en reposo
 
 ### Pending Todos
 
@@ -173,8 +177,8 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-06T18:53:52.957Z
-Stopped at: Completado 04-08-PLAN.md. Siguiente: wave 6 (04-10, 04-11, 04-12)
+Last session: 2026-09-06T19:11:03.303Z
+Stopped at: Completado 04-11-PLAN.md. Siguiente: 04-12, 04-13 y 04-14
 
 **Sin bloqueos activos.** El stack local de Supabase esta arriba y sano (12 contenedores), la
 migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` **29 archivos / 548 tests**,
