@@ -55,12 +55,12 @@
 - [ ] **ASEO-01**: Todo aseo nace en Pendiente sin confirmar y aparece en la bandeja "Sin confirmar"
 - [ ] **ASEO-02**: Admin confirma el aseo en un solo paso escribiendo número de huéspedes e instrucciones
 - [ ] **ASEO-03**: Al confirmar, el aseo queda asignado en firme al responsable del apartamento
-- [ ] **ASEO-04**: Admin reasigna un aseo puntual sin modificar el responsable ni el suplente del apartamento
-- [ ] **ASEO-05**: Admin crea aseos manuales tipo `repaso` y `emergencia`
-- [ ] **ASEO-06**: Admin reprograma la fecha de un aseo
+- [x] **ASEO-04**: Admin reasigna un aseo puntual sin modificar el responsable ni el suplente del apartamento
+- [x] **ASEO-05**: Admin crea aseos manuales tipo `repaso` y `emergencia`
+- [x] **ASEO-06**: Admin reprograma la fecha de un aseo
 - [ ] **ASEO-07**: El sistema impide crear un segundo aseo activo para el mismo apartamento y fecha, con mensaje de error explícito
-- [ ] **ASEO-08**: Admin cierra manualmente un aseo que la realidad ya resolvió
-- [ ] **ASEO-09**: Admin cancela un aseo
+- [x] **ASEO-08**: Admin cierra manualmente un aseo que la realidad ya resolvió
+- [x] **ASEO-09**: Admin cancela un aseo
 
 ### PWA del aseador
 
@@ -209,12 +209,12 @@
 | ASEO-01 | Fase 4 | Pending |
 | ASEO-02 | Fase 4 | Pending |
 | ASEO-03 | Fase 4 | Pending |
-| ASEO-04 | Fase 4 | Pending |
-| ASEO-05 | Fase 4 | Pending |
-| ASEO-06 | Fase 4 | Pending |
+| ASEO-04 | Fase 4 | Complete |
+| ASEO-05 | Fase 4 | Complete |
+| ASEO-06 | Fase 4 | Complete |
 | ASEO-07 | Fase 1 | Pending |
-| ASEO-08 | Fase 4 | Pending |
-| ASEO-09 | Fase 4 | Pending |
+| ASEO-08 | Fase 4 | Complete |
+| ASEO-09 | Fase 4 | Complete |
 | PWA-01 | Fase 6 | Pending |
 | PWA-02 | Fase 5 | Pending |
 | PWA-03 | Fase 5 | Pending |

@@ -1283,6 +1283,9 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cancel_cleaning: { Args: { p_cleaning: string }; Returns: undefined }
+      clear_review_flag: { Args: { p_cleaning: string }; Returns: undefined }
+      close_cleaning: { Args: { p_cleaning: string }; Returns: undefined }
       confirm_cleaning: {
         Args: {
           p_cleaning: string
@@ -1291,6 +1294,14 @@ export type Database = {
         }
         Returns: undefined
       }
+      create_manual_cleaning: {
+        Args: {
+          p_fecha: string
+          p_property: string
+          p_tipo: Database["public"]["Enums"]["cleaning_type"]
+        }
+        Returns: string
+      }
       decline_cleaning: {
         Args: { p_cleaning: string; p_motivo: string }
         Returns: undefined
@@ -1298,6 +1309,14 @@ export type Database = {
       dispatch_feed_syncs: { Args: never; Returns: number }
       feed_health_watchdog: { Args: never; Returns: undefined }
       finish_cleaning: { Args: { p_cleaning: string }; Returns: undefined }
+      reassign_cleaning: {
+        Args: { p_aseador: string; p_cleaning: string }
+        Returns: undefined
+      }
+      reschedule_cleaning: {
+        Args: { p_cleaning: string; p_fecha: string }
+        Returns: undefined
+      }
       reveal_access_code: {
         Args: { p_cleaning: string }
         Returns: {
