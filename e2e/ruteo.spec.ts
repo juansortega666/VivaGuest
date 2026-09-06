@@ -54,20 +54,28 @@ test.describe('Aseador autenticado', () => {
   });
 });
 
+/**
+ * LA RAIZ DEL ADMIN ES `/operacion` DESDE EL PLAN 04-09, NO `/apartamentos`.
+ *
+ * El dashboard operativo es lo que el admin abre para trabajar; el catalogo es
+ * donde va a configurar. La tabla completa vive en `lib/auth/routing.test.ts`,
+ * que es la fuente: estos tres tests la comprueban de punta a punta, con el
+ * middleware de verdad y una cookie de sesion real.
+ */
 test.describe('Admin autenticado', () => {
-  test('navegar a /mis-aseos rebota a /apartamentos', async ({ paginaAdmin }) => {
+  test('navegar a /mis-aseos rebota a /operacion', async ({ paginaAdmin }) => {
     await paginaAdmin.goto('/mis-aseos');
-    await expect(paginaAdmin).toHaveURL(/\/apartamentos$/);
+    await expect(paginaAdmin).toHaveURL(/\/operacion$/);
   });
 
-  test('la raiz lo lleva a /apartamentos', async ({ paginaAdmin }) => {
+  test('la raiz lo lleva a /operacion', async ({ paginaAdmin }) => {
     await paginaAdmin.goto('/');
-    await expect(paginaAdmin).toHaveURL(/\/apartamentos$/);
+    await expect(paginaAdmin).toHaveURL(/\/operacion$/);
   });
 
   test('/login lo devuelve a su raiz', async ({ paginaAdmin }) => {
     await paginaAdmin.goto('/login');
-    await expect(paginaAdmin).toHaveURL(/\/apartamentos$/);
+    await expect(paginaAdmin).toHaveURL(/\/operacion$/);
   });
 });
 

@@ -9,7 +9,7 @@ import { expect, leerCredenciales, test } from './fixtures';
  */
 
 test.describe('Login por rol', () => {
-  test('el admin entra y aterriza en /apartamentos', async ({ page }) => {
+  test('el admin entra y aterriza en /operacion', async ({ page }) => {
     const { admin } = leerCredenciales();
 
     await page.goto('/login');
@@ -18,11 +18,13 @@ test.describe('Login por rol', () => {
     await page.getByRole('button', { name: 'Entrar' }).click();
 
     // La pantalla de login redirige a `/` y es el MIDDLEWARE quien elige la raiz
-    // segun `app_metadata.role`. Se comprueba la URL final, no el contenido:
-    // `/apartamentos` todavia no existe como pagina en esta wave (la construye el
-    // plan 02-07) y devuelve 404. Lo que este test mide es el ruteo, y el ruteo
-    // ocurre entero antes de que exista la pagina.
-    await expect(page).toHaveURL(/\/apartamentos$/);
+    // segun `app_metadata.role`. Lo que este test mide es el RUTEO, no la
+    // pantalla de destino.
+    //
+    // La raiz del admin es `/operacion` desde el plan 04-09, no `/apartamentos`:
+    // el dashboard operativo es lo que se abre para trabajar y el catalogo es
+    // donde se va a configurar. La tabla vive en `lib/auth/routing.test.ts`.
+    await expect(page).toHaveURL(/\/operacion$/);
   });
 
   test('el aseador entra y aterriza en /mis-aseos', async ({ page }) => {

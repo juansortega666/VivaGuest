@@ -195,7 +195,20 @@ describe('la validacion corta antes de la RPC', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// 3. EL CAMINO FELIZ: RPC CORRECTA, COPY LITERAL, REVALIDACION
+// 3. EL CAMINO FELIZ: RPC CORRECTA, COPY LITERAL, Y CERO REVALIDACION
+//
+// ── POR QUE NINGUNA ACTION PUEDE LLAMAR `revalidatePath` (plan 04-14) ───────
+//
+// Hasta el 04-14, las nueve la llamaban y estos tests lo AFIRMABAN. Se quito
+// porque colgaba el navegador: la mutacion se escribia, el servidor respondia
+// 200 con la carga util completa en ~50 ms, y el cliente no la aplicaba nunca.
+// El boton del dialogo se quedaba en su gerundio para siempre, sin toast y sin
+// cerrar. Medido por biseccion sobre `next@15.5.24`; el detalle esta en la
+// cabecera de `_actions.ts`.
+//
+// La asercion se INVIERTE en vez de borrarse: sin ella, el dia que alguien
+// vuelva a anadir la llamada —que es lo natural al escribir la decima action—
+// nada se pondria rojo y el sintoma reaparecerria en el navegador.
 // ════════════════════════════════════════════════════════════════════════════
 
 describe('camino feliz', () => {
@@ -210,7 +223,7 @@ describe('camino feliz', () => {
       p_instrucciones: 'Toallas extra',
     });
     expect(r).toEqual({ ok: true, mensaje: 'Aseo confirmado.' });
-    expect(revalidatePath).toHaveBeenCalledWith('/operacion');
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it('confirmarAseo manda null cuando no hay instrucciones', async () => {
@@ -270,7 +283,7 @@ describe('camino feliz', () => {
     const r = await accion(null, fd({ aseo_id: ASEO }));
     expect(rpc).toHaveBeenCalledWith(nombreRpc, { p_cleaning: ASEO });
     expect(r).toEqual({ ok: true, mensaje });
-    expect(revalidatePath).toHaveBeenCalledWith('/operacion');
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it('NINGUNA usa el cliente de servicio: solo hay una ruta, la del JWT del usuario', async () => {
@@ -294,6 +307,29 @@ describe('camino feliz', () => {
 
     expect(codigo).not.toContain('createAdminClient');
     expect(codigo).not.toMatch(/from\s+'@?\/?lib\/supabase\/admin'/);
+  });
+
+  it('NINGUNA llama revalidatePath: colgaba el navegador y el rodeo esta anclado aqui', async () => {
+    // Los `expect(revalidatePath).not.toHaveBeenCalled()` de arriba cubren las
+    // nueve actions una por una. Esto cubre la DECIMA, la que alguien escriba
+    // manana copiando el patron de otra pantalla: es una asercion sobre el
+    // ARCHIVO, no sobre una llamada, asi que una action nueva con la linea
+    // dentro la rompe aunque nadie le haya escrito un test.
+    //
+    // Mismo tratamiento de comentarios que la asercion de arriba: la cabecera de
+    // `_actions.ts` nombra `revalidatePath` en prosa para explicar por que NO
+    // esta, y una prohibicion explicada no es una violacion.
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const fuente = readFileSync(fileURLToPath(new URL('./_actions.ts', import.meta.url)), 'utf8');
+
+    const codigo = fuente
+      .split('\n')
+      .filter((l) => !/^\s*(\/\/|\/\*|\*)/.test(l))
+      .join('\n');
+
+    expect(codigo).not.toMatch(/revalidatePath\s*\(/);
+    expect(codigo).not.toMatch(/from\s+'next\/cache'/);
   });
 });
 
