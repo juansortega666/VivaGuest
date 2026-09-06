@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Fase 4 wave 3 cerrada (04-06, capa de lectura). Siguiente: wave 4"
-last_updated: "2026-09-06T16:11:58.461Z"
-last_activity: 2026-09-06 -- Wave 3 cerrada: lib/data/operacion.ts, la capa de lectura del dashboard
+stopped_at: "Fase 4 wave 4 cerrada (04-07, la asercion contra el reconcile y los senuelos). Siguiente: wave 5"
+last_updated: "2026-09-06T16:48:01.377Z"
+last_activity: 2026-09-06 -- Wave 4 cerrada: reprogramar sobrevive al sync, y los 12 senuelos de la capa de base de datos
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 48
-  completed_plans: 40
+  completed_plans: 41
   percent: 33
 ---
 
@@ -21,14 +21,21 @@ progress:
 Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 
 **Core value:** Que ningún aseo se pierda: todo checkout detectado en calendario termina en un aseo confirmado, asignado y ejecutado con evidencia, sin coordinación manual por WhatsApp.
-**Current focus:** Fase 4, wave 2 de 8 cerrada. Migracion 15 en verde. Siguiente: wave 3 (plan 04-06)
+**Current focus:** Fase 4, waves 1 a 4 cerradas. Siguiente: wave 5
 
 ## Current Position
 
 Phase: 04 (dashboard-operativo-del-admin) — EXECUTING
-Plan: 6 of 14 de la Fase 4 (waves 1, 2 y 3 cerradas)
-Status: Phase 04 EJECUTANDO, sin bloqueos. Siguiente: wave 4
-Last activity: 2026-09-06 -- Wave 3 cerrada. El plan 04-06 entrega `lib/data/operacion.ts`: una sola
+Plan: 7 of 14 de la Fase 4 (waves 1 a 4 cerradas)
+Status: Phase 04 EJECUTANDO, sin bloqueos. Siguiente: wave 5
+Last activity: 2026-09-06 -- Wave 4 cerrada. El plan 04-07 entrega la asercion que ninguna
+asercion pgTAP puede correr: `reschedule_cleaning` sobrevive a una corrida completa de
+`sync_feed_apply()` sobre el mismo feed sin cambios, medido con dos corridas encadenadas, y el aseo
+repuesto en la fecha del checkout real esta AFIRMADO en la prueba. Mas `senuelos-04.md`: doce
+mutaciones sobre las migraciones 14 y 15, once filas anotadas, cero escapes. Suites: unit 28/502,
+integration 14/128, pgTAP 7/153 PASS.
+
+Del plan 04-06, que sigue vigente: una sola
 consulta a `cleanings` con los dos embeds calificados por nombre de clave foranea alimenta el carril
 ancho, la bandeja y los chips con un unico instante de lectura, mas las tres consultas auxiliares del
 panel de alertas. 21 unitarios y 10 de integracion nuevos; los tres señuelos del plan corridos y
@@ -43,7 +50,7 @@ serie. Se pierde paralelismo solo en las waves 4 y 6.
 OJO, CAMBIO DE SIGNO: a partir de la migracion 15, un `not ok` en 06_aseos_admin.test.sql YA NO es
 esperado, es una regresion. Mismo caso que 05_sync.test.sql tras la Fase 3.
 
-Progress: [████████░░] 83%
+Progress: [█████████░] 85%
 
 ## Performance Metrics
 
@@ -69,6 +76,7 @@ Progress: [████████░░] 83%
 | Plan | Duracion | Tareas | Archivos |
 |------|----------|--------|----------|
 | Phase 04 P06 | 158min | 2 tasks | 3 files |
+| Phase 04 P07 | 39min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -85,6 +93,8 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Fase 4] Todo embed de PostgREST hacia una tabla con mas de una clave foranea va calificado por nombre de FK (`profiles!cleanings_aseador_id_fkey`): sin el, PGRST201 en tiempo de ejecucion, y `tsc` no lo ve
 - [Fase 4] El carril ancho llega hasta hoy+6 y lo que queda mas lejos solo se cuenta: cinco dias es el horizonte con el que se decide un suplente
 - [Fase 4] Los aseos cancelados se traen en la consulta y se filtran en memoria, porque la cabecera del dia lleva el toggle `Ver cancelados (N)` y necesita el conteo
+- [Fase 4] La prueba de una decision de schema que solo se manifiesta ENTRE corridas del sync vive en integracion, no en pgTAP: que reschedule_cleaning sobreviva al reconcile exige ejecutar sync_feed_apply() entero
+- [Fase 4] Un efecto aceptado se AFIRMA en la prueba: reprogramar deja un aseo sin confirmar en la fecha del checkout real, y eso esta en una asercion, no en un comentario
 
 ### Pending Todos
 
@@ -130,27 +140,37 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-06T16:08:54Z
-Stopped at: Fase 4, wave 3 cerrada (plan 04-06, la capa de lectura del dashboard).
+Last session: 2026-09-06T16:55:00Z
+Stopped at: Fase 4, wave 4 cerrada (plan 04-07, la asercion contra el reconcile y los senuelos).
 
 **Sin bloqueos activos.** El stack local de Supabase esta arriba y sano (12 contenedores), la
 migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` 28 archivos / 502 tests,
-`test:integration` 13 archivos / 125 tests, `db:test` `Files=7, Tests=153, Result: PASS`.
+`test:integration` **14 archivos / 128 tests**, `db:test` `Files=7, Tests=153, Result: PASS`.
 
 **Lo que hay que saber antes de tocar nada:**
 
 1. **Worktrees DESACTIVADOS** para el resto de la fase (decision del 2026-09-06, arriba). Los planes
    corren en el checkout principal, en serie.
+
 2. **CAMBIO DE SIGNO vigente:** un `not ok` en `06_aseos_admin.test.sql` YA NO es esperado, es una
    regresion.
+
 3. **El I/O de iCloud domina el reloj de las herramientas de build, y esta medido** (04-06): `tsc` en
    frio tardo 6 min 39 s consumiendo 6 s de CPU; `eslint` llego a 53 minutos con 4,4 s de CPU. Con las
    caches calientes bajan a 3 s y a segundos respectivamente. Recomendacion: correr `npx tsc --noEmit`
    una vez al empezar la sesion, y NO dar por colgado un proceso a 0 % de CPU sin mirar antes su tiempo
    acumulado con `ps -o time`.
+
 4. **Los duplicados de iCloud con sufijo numerico siguen apareciendo.** En el 04-06 rompieron
    `npx tsc --noEmit` con 11 errores desde `.next/types/cache-life.d 2.ts` y `routes.d 2.ts`. Se
    apartaron a mano (no se borraron); `.next/` esta en `.gitignore` y `next build` lo regenera.
 
-Siguiente: la wave 4 de la Fase 4.
+5. **`npm run db:reset` cuesta 54 s medidos, y es lo que domina un plan de senuelos.** El 04-07 hizo
+   veintitres (uno por aplicar cada senuelo y otro por revertirlo): ~20 de sus 39 minutos. No hay
+   atajo honesto: aplicar el senuelo con un `create or replace` suelto prueba la funcion pero no la
+   migracion. Presupuestarlo si un plan futuro vuelve a mutar migraciones.
+6. **El resto del reloj YA NO lo domina iCloud** con las caches calientes: en el 04-07, `tsc` tardo
+   segundos, `db:test` 2,3 s y la integracion completa 9,7 s.
+
+Siguiente: la wave 5 de la Fase 4.
 Resume file: None
