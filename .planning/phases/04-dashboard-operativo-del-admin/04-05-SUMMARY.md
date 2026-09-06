@@ -165,6 +165,23 @@ Listo para el resto de la Wave 2 y para toda la UI de la fase:
 
 Sin bloqueos abiertos por este plan.
 
+## Self-Check: PASSED
+
+Archivos declarados, verificados en disco:
+
+- `supabase/migrations/20260903120000_15_rpc_admin_y_realtime.sql` — presente (34.133 bytes)
+- `lib/database.types.ts` — presente (46.333 bytes)
+- `.planning/phases/04-dashboard-operativo-del-admin/04-05-SUMMARY.md` — presente
+
+Commits declarados, verificados en `git log`:
+
+- `cbad610` — presente
+- `6e9727c` — presente
+- `e15e53a` — presente
+- `bc3b042` — presente
+
+Sin elementos faltantes. `supabase/tests/06_aseos_admin.test.sql` no aparece en ningún commit de este plan: el contrato quedó intacto.
+
 ---
 *Phase: 04-dashboard-operativo-del-admin*
 *Completed: 2026-09-06*
