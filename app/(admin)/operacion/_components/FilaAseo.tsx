@@ -1,0 +1,264 @@
+import { Flag, Zap } from 'lucide-react';
+import Link from 'next/link';
+
+import { Badge } from '@/components/ui/badge';
+import { TableCell, TableRow } from '@/components/ui/table';
+import type { FilaDeOperacion } from '@/lib/data/operacion';
+import { copyDeReviewReason, estadoDeAseo } from '@/lib/domain/cleanings';
+import { formatHoraLimite } from '@/lib/domain/dates';
+
+import { EstadoAseo } from './EstadoAseo';
+
+/**
+ * La fila de aseo (04-UI-SPEC.md §7). Es la unidad visual que mas se repite en la
+ * pantalla, y sale del patron ya establecido en `TablaApartamentos.tsx`.
+ *
+ * Seis celdas, con los anchos del contrato de §7.1:
+ *
+ *   ESTADO 132px · APARTAMENTO flexible (min 200px) · HORA LIMITE 88px a la
+ *   derecha · A CARGO 176px · HUESPEDES 88px a la derecha · menu 48px
+ *
+ * Las cinco fijas suman 532px, asi que a 1280px —el minimo soportado, con el
+ * carril ancho en 840px— APARTAMENTO recibe 308px contra su minimo de 200.
+ *
+ * El encabezado se llama `A CARGO` y no `ASEADOR` a proposito: es la unica
+ * columna que tiene que servir a la vez al aseador de una fila gestionada y al
+ * contacto externo de una inerte. Dos encabezados distintos exigirian dos tablas.
+ *
+ * ── COMPORTAMIENTO, DICHO EXPLICITAMENTE PARA QUE NO SE REINVENTE (§7.2) ────
+ * Alto 40px, `border-bottom`, hover a `--canvas`, SIN zebra: zebra mas iconos de
+ * color es ruido. La fila NO es un `<div>` clicable: el `<a>` vive en la celda
+ * APARTAMENTO y estira su area con `::after { inset: 0 }`; la celda del menu va
+ * por encima con `relative z-10`, porque sin eso el clic en el `⋯` cae en el link
+ * y navega al detalle en vez de abrir el menu. El foco de fila se pinta con
+ * `has-[a:focus-visible]:bg-canvas`, no con un `role="button"` falso.
+ *
+ * ── EL MENU DE ACCIONES LLEGA EN EL PLAN 04-11 ─────────────────────────────
+ * La celda existe desde hoy, con su ancho, para que la rejilla no se mueva cuando
+ * `MenuAseo` aterrice. Lo que NO se hace es pintar un `⋯` que no abra nada.
+ */
+
+/**
+ * El em dash de una celda que no trae dato, con su explicacion para lector de
+ * pantalla.
+ *
+ * ── LA DIFERENCIA ENTRE "sin definir" Y "no aplica" NO ES ESTILO (§7.4) ─────
+ * En una fila gestionada sin confirmar, HUESPEDES esta vacio porque el dato
+ * todavia no existe y alguien tiene que ir a ponerlo: "sin definir", igual que en
+ * la Fase 2. En una fila inerte, HORA LIMITE y HUESPEDES estan vacios porque la
+ * base los PROHIBE por `cl_unmanaged_is_inert`: "no aplica". Decir "sin definir"
+ * ahi sugeriria que alguien deberia ir a llenarlo, y no hay nada que llenar.
+ */
+function SinDato({ motivo }: { motivo: 'sin definir' | 'no aplica' }) {
+  return (
+    <span className="text-muted-foreground">
+      <span aria-hidden="true">—</span>
+      <span className="sr-only">{motivo}</span>
+    </span>
+  );
+}
+
+/**
+ * Tipo de aseo: badge INLINE, nunca columna propia (§5.1).
+ *
+ * `normal` no lleva badge: es el default, y un badge que diga `Normal` en 27 de 30
+ * filas es puro ruido. Los otros dos van sin icono, porque llevan texto y el texto
+ * ya cumple la regla de nunca color solo.
+ *
+ * `text-micro font-semibold` pisa el `text-xs font-medium` que trae el `Badge`
+ * generado: el contrato de tipografia declara exactamente dos pesos, 400 y 600, y
+ * prohibe el 500.
+ */
+function BadgeDeTipo({ tipo }: { tipo: FilaDeOperacion['tipo'] }) {
+  if (tipo === 'normal') return null;
+
+  if (tipo === 'repaso') {
+    return (
+      <Badge variant="secondary" className="text-micro font-semibold">
+        Repaso
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge className="bg-surface-warn text-micro font-semibold text-status-warn">Emergencia</Badge>
+  );
+}
+
+/**
+ * Las dos senales inline de §5.2. No son estados y por eso no viven en la columna
+ * ESTADO: un aseo urgente sigue estando pendiente o en curso.
+ *
+ * Van con `aria-label` y NO con `aria-hidden`: son iconos sin texto adyacente que
+ * los explique, al reves que el de la celda ESTADO.
+ */
+function SenalesInline({ fila }: { fila: FilaDeOperacion }) {
+  return (
+    <>
+      {fila.is_urgent && (
+        <Zap
+          className="size-3.5 shrink-0 text-status-warn"
+          strokeWidth={2}
+          aria-label="Entra huésped el mismo día"
+        />
+      )}
+
+      {fila.needs_review && (
+        // El copy sale del mapa de slugs, NUNCA el slug crudo (T-04-12). `title`
+        // para el mouse y `aria-label` para el lector: el mismo texto en los dos
+        // canales.
+        //
+        // El `title` va en un `<span>` que envuelve y no en el icono: los
+        // componentes de lucide tipan sus props como `Omit<LucideProps, 'ref'>` y
+        // `title` no esta ahi, asi que `tsc` lo rechaza. Medido contra
+        // `lucide-react` 1.39.0 en el build de este plan.
+        <span title={copyDeReviewReason(fila.review_reason)} className="flex shrink-0">
+          <Flag
+            className="size-3.5 text-status-warn"
+            strokeWidth={2}
+            aria-label={copyDeReviewReason(fila.review_reason)}
+          />
+        </span>
+      )}
+    </>
+  );
+}
+
+/** El ancla al detalle del apartamento. `estirada` aplica el `::after` de §7.2. */
+function EnlaceAlApartamento({
+  fila,
+  estirada,
+}: {
+  fila: FilaDeOperacion;
+  estirada: boolean;
+}) {
+  const nombre = fila.property?.nombre;
+
+  // El embed solo puede venir nulo si la RLS no dejo resolverlo. Para el admin no
+  // pasa. Se pinta el hueco en vez de un link con texto vacio, que seria un
+  // control sin nombre accesible.
+  if (!nombre) return <SinDato motivo="sin definir" />;
+
+  return (
+    <Link
+      href={`/apartamentos/${fila.property_id}`}
+      className={`transicion rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
+        estirada ? 'after:absolute after:inset-0' : ''
+      }`}
+    >
+      {nombre}
+    </Link>
+  );
+}
+
+export function FilaAseo({ fila }: { fila: FilaDeOperacion }) {
+  const { clave } = estadoDeAseo(fila);
+  const inerte = clave === 'externa';
+
+  return (
+    <TableRow
+      // `relative` para que el `::after` del ancla tenga esta fila como bloque
+      // contenedor y cubra toda su anchura.
+      //
+      // ── LAS DOS DE LAS TRES REGLAS DE LA FILA INERTE QUE VIVEN AQUI ───────
+      // 1. NO reacciona al mouse: sin `hover:bg-canvas`. Es la senal mas honesta
+      //    que existe, porque nada aqui responde. Una fila deshabilitada por fallo
+      //    SI reaccionaria y ademas diria por que.
+      // 2. NO hay area de clic de fila completa: el `::after` no se aplica (ver
+      //    `estirada`), asi que solo el texto del nombre es clicable. Abrir el
+      //    apartamento es navegacion de lectura, no una accion sobre el aseo;
+      //    extender el area a toda la fila la volveria a sentir como un control.
+      //
+      // Lo que NO se hace: pintarla gris entera, que la haria leer como
+      // deshabilitada por fallo, ni sacarla a otra vista, que romperia el
+      // panorama del dia que el admin necesita (§7.4, D-20).
+      className={
+        inerte
+          ? 'relative h-fila border-b border-border bg-background'
+          : 'transicion relative h-fila border-b border-border bg-background hover:bg-canvas has-[a:focus-visible]:bg-canvas'
+      }
+    >
+      <TableCell className="w-col-estado-aseo px-md">
+        <EstadoAseo aseo={fila} />
+      </TableCell>
+
+      {/*
+        El nombre va en 14/600 TAMBIEN en la fila inerte (§3, §7.4). Bajarlo a 400
+        o a `--muted-foreground` la haria leer como deshabilitada, que es
+        exactamente la lectura que hay que evitar. Lo que la inerte no lleva es
+        badge de tipo ni senales inline: no tiene tipo de aseo ni flags, por
+        `cl_unmanaged_is_inert`.
+      */}
+      <TableCell className="min-w-col-nombre px-md text-body font-semibold">
+        <span className="flex items-center gap-xs">
+          <EnlaceAlApartamento fila={fila} estirada={!inerte} />
+
+          {!inerte && (
+            <>
+              <BadgeDeTipo tipo={fila.tipo} />
+              <SenalesInline fila={fila} />
+            </>
+          )}
+        </span>
+      </TableCell>
+
+      <TableCell className="w-col-hora px-md text-right text-body tabular-nums">
+        {inerte ? <SinDato motivo="no aplica" /> : formatHoraLimite(fila.hora_limite)}
+      </TableCell>
+
+      {/*
+        A CARGO. En la fila inerte es `properties.contacto_externo`, que es
+        literalmente el "a cargo de quien" que pide DASH-07: truncado, con el texto
+        completo en `title`, porque truncar sin `title` es esconder el dato.
+      */}
+      <TableCell className="w-col-acargo max-w-col-acargo px-md text-body">
+        <CeldaACargo fila={fila} inerte={inerte} />
+      </TableCell>
+
+      <TableCell className="w-col-huespedes px-md text-right text-body tabular-nums">
+        {inerte || fila.num_huespedes === null ? (
+          <SinDato motivo={inerte ? 'no aplica' : 'sin definir'} />
+        ) : (
+          fila.num_huespedes
+        )}
+      </TableCell>
+
+      {/*
+        La celda del menu EXISTE en las dos variantes, para no romper la rejilla, y
+        en la inerte esta VACIA: sin `⋯`, ni deshabilitado ni atenuado. Un item
+        atenuado que no dice por que es peor que su ausencia.
+
+        Y ocultar acciones no es autorizar (T-04-17): la garantia real es el CHECK
+        `cl_unmanaged_is_inert`, que hace fallar con 23514 cualquier escritura sobre
+        estas filas, mas el filtro `is_managed` dentro de las seis RPC. La UI
+        refleja el CHECK, no lo reimplementa (D-21).
+
+        El `MenuAseo` de la variante gestionada lo cablea el plan 04-11.
+      */}
+      <TableCell className="relative z-10 w-col-menu px-md" />
+    </TableRow>
+  );
+}
+
+/**
+ * A CARGO: el aseador asignado, o el contacto externo si la fila es inerte.
+ *
+ * Vacio en una fila gestionada NO es un em dash: es `Sin asignar` en
+ * `--status-warn`, porque un aseo de hoy sin nadie detras es lo unico de esta
+ * columna sobre lo que hay que hacer algo.
+ */
+function CeldaACargo({ fila, inerte }: { fila: FilaDeOperacion; inerte: boolean }) {
+  const texto = inerte ? fila.property?.contacto_externo : fila.aseador?.full_name;
+
+  if (!texto) {
+    if (inerte) return <SinDato motivo="no aplica" />;
+
+    return <span className="text-status-warn">Sin asignar</span>;
+  }
+
+  return (
+    <span className="block truncate" title={texto}>
+      {texto}
+    </span>
+  );
+}
