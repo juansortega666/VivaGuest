@@ -17,20 +17,30 @@ import { cn } from '@/lib/utils';
  * Barra superior del admin (UI-SPEC §6.1).
  *
  * Es Client Component por UNA sola razon: `usePathname()`, que es lo que decide
- * cual de los dos links esta activo. El resto del shell se queda en servidor. La
+ * cual de los tres links esta activo. El resto del shell se queda en servidor. La
  * alternativa (convertir `layout.tsx` entero en cliente) arrastraria al bundle el
  * guard y la fabrica de Supabase de servidor, que ni siquiera pueden viajar al
  * navegador porque declaran `server-only`.
  */
 
 /**
- * Los dos links de esta fase.
+ * Los tres links del admin, en este orden (04-UI-SPEC.md §6.3).
  *
- * NO se anaden aqui los de fases futuras. Dia, Sin confirmar y Alertas llegan en
- * la Fase 4; dejarlos hoy como links muertos o deshabilitados es peor que no
- * tenerlos, porque promete navegacion que no existe.
+ * ── SUPERSEDE DE `02-UI-SPEC.md` §6.1 ───────────────────────────────────────
+ * Aquel contrato anticipaba que la Fase 4 anadiria `Dia`, `Sin confirmar` y
+ * `Alertas`, y se escribio ANTES de D-01. D-01 fija una sola ruta para todo el
+ * dashboard operativo, asi que esos tres links apuntarian los tres a la misma
+ * pantalla: tres links muertos. Lo que la Fase 4 anade es UNO, `Operacion`.
+ *
+ * Va primero porque es la pantalla de trabajo, y es tambien el destino del
+ * wordmark y el aterrizaje del admin tras el login (`RAIZ.admin` en
+ * `lib/auth/routing.ts`).
+ *
+ * Sigue en pie la regla de la Fase 2: no se anaden aqui links de fases futuras.
+ * Un link muerto o deshabilitado promete navegacion que no existe.
  */
 const ENLACES = [
+  { href: '/operacion', etiqueta: 'Operación' },
   { href: '/apartamentos', etiqueta: 'Apartamentos' },
   { href: '/aseadores', etiqueta: 'Aseadores' },
 ] as const;
@@ -70,7 +80,7 @@ export function TopNav({ nombre }: { nombre: string }) {
           lo que haria doloroso el rebrand.
         */}
         <Link
-          href="/apartamentos"
+          href="/operacion"
           className="transicion font-brand text-heading text-foreground hover:opacity-80"
         >
           VivaGuest

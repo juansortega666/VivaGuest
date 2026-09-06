@@ -15,17 +15,28 @@
 
 export type Rol = 'admin' | 'aseador';
 
-/** Ruta de aterrizaje de cada rol. La del aseador es `/mis-aseos` (UI-SPEC §12.2). */
+/**
+ * Ruta de aterrizaje de cada rol. La del aseador es `/mis-aseos` (UI-SPEC §12.2).
+ *
+ * La del admin paso de `/apartamentos` a `/operacion` en la Fase 4
+ * (04-UI-SPEC.md §6.3): el catalogo es configuracion y se toca de vez en cuando;
+ * la operacion del dia es el trabajo, y es lo que el admin quiere ver al entrar.
+ */
 export const RAIZ: Record<Rol, string> = {
-  admin: '/apartamentos',
+  admin: '/operacion',
   aseador: '/mis-aseos',
 };
 
 /** Rutas accesibles sin sesion. Se acepta la ruta exacta y sus subrutas. */
 export const PUBLICAS: readonly string[] = ['/login'];
 
-/** Prefijos de la zona del admin. Fase 4 anadira `/dia`, `/sin-confirmar`, `/alertas`. */
-const ZONA_ADMIN: readonly string[] = ['/apartamentos', '/aseadores'];
+/**
+ * Prefijos de la zona del admin.
+ *
+ * La Fase 4 anade UNA sola ruta y no las tres que anticipaba `02-UI-SPEC.md`
+ * §6.1: D-01 fija `/operacion` como la unica superficie del dashboard operativo.
+ */
+const ZONA_ADMIN: readonly string[] = ['/operacion', '/apartamentos', '/aseadores'];
 
 /** Prefijos de la zona del aseador. */
 const ZONA_ASEADOR: readonly string[] = ['/mis-aseos'];
