@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: "Completado 04-08-PLAN.md. Siguiente: wave 6 (04-10, 04-11, 04-12)"
-last_updated: "2026-09-06T18:34:31.394Z"
-last_activity: 2026-09-06 -- 04-08 entregado: las nueve Server Actions de /operacion, con el guard primero y el error de ASEO-07 legible
+last_updated: "2026-09-06T18:54:11.818Z"
+last_activity: 2026-09-06
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 48
-  completed_plans: 43
-  percent: 90
+  completed_plans: 44
+  percent: 33
 ---
 
 # Project State
@@ -26,9 +26,9 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 ## Current Position
 
 Phase: 04 (dashboard-operativo-del-admin) — EXECUTING
-Plan: 9 of 14 de la Fase 4 (waves 1 a 5 cerradas; 04-08 y 04-09 entregados)
-Status: Phase 04 EJECUTANDO, sin bloqueos. Siguiente: wave 6 (04-10, 04-11, 04-12)
-Last activity: 2026-09-06 -- El plan 04-08 pone las nueve Server Actions de `/operacion` en su sitio,
+Plan: 10 of 14 de la Fase 4 (waves 1 a 5 cerradas; 04-08 y 04-09 entregados)
+Status: Ready to execute
+Last activity: 2026-09-06
 con `exigirAdmin()` como PRIMERA operacion de las nueve y un test que lo mide por lo que NO llega a
 la base. El error de ASEO-07 sale interpolado con el nombre del apartamento y con `campo: 'fecha'`,
 asi que puede ir inline bajo el input. `marcarAlertaAtendida` escribe UNICAMENTE `read_at`, afirmado
@@ -73,7 +73,7 @@ serie. Se pierde paralelismo solo en las waves 4 y 6.
 OJO, CAMBIO DE SIGNO: a partir de la migracion 15, un `not ok` en 06_aseos_admin.test.sql YA NO es
 esperado, es una regresion. Mismo caso que 05_sync.test.sql tras la Fase 3.
 
-Progress: [█████████░] 90%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
@@ -102,6 +102,7 @@ Progress: [█████████░] 90%
 | Phase 04 P07 | 39min | 2 tasks | 2 files |
 | Phase 04 P09 | 66min | 3 tasks | 10 files |
 | Phase 04 P08 | 47min | 3 tasks | 5 files |
+| Phase 04 P10 | 68min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -124,6 +125,9 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Phase 04]: 04-09: el carril lateral reserva su presupuesto de altura cerrado ANTES de que existan sus dos cards, porque D-02 no se puede improvisar en 04-13
 - [Phase 04]: 04-08: el español de un P0001 viaja en el hint de Postgres, no en el message; mapDbError lo lee o la UI pinta el token de maquina (medido contra PostgREST)
 - [Phase 04]: 04-08: un UPDATE que afecta a cero filas por RLS no levanta error, asi que devolverlo como exito rompe el estado optimista del panel de alertas
+- [Phase 04]: 04-10: la tanda del Sheet se congela al montar; el revalidatePath de confirmarAseo no puede cambiar el aseo que el admin esta mirando
+- [Phase 04]: 04-10: Saltar este tambien ante un apartamento sin responsable, no solo ante un fallo de la base: si no, la tanda queda sin salida
+- [Phase 04]: 04-10: el responsable fijo del Sheet sale de listarApartamentos y no de un embed nuevo, porque un aseo sin confirmar todavia no tiene aseador_id
 
 ### Pending Todos
 
@@ -169,7 +173,7 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-06T18:34:25.430Z
+Last session: 2026-09-06T18:53:52.957Z
 Stopped at: Completado 04-08-PLAN.md. Siguiente: wave 6 (04-10, 04-11, 04-12)
 
 **Sin bloqueos activos.** El stack local de Supabase esta arriba y sano (12 contenedores), la

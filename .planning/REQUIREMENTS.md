@@ -52,7 +52,7 @@
 
 ### Ciclo de vida del aseo
 
-- [ ] **ASEO-01**: Todo aseo nace en Pendiente sin confirmar y aparece en la bandeja "Sin confirmar"
+- [x] **ASEO-01**: Todo aseo nace en Pendiente sin confirmar y aparece en la bandeja "Sin confirmar"
 - [x] **ASEO-02**: Admin confirma el aseo en un solo paso escribiendo número de huéspedes e instrucciones
 - [x] **ASEO-03**: Al confirmar, el aseo queda asignado en firme al responsable del apartamento
 - [x] **ASEO-04**: Admin reasigna un aseo puntual sin modificar el responsable ni el suplente del apartamento
@@ -99,7 +99,7 @@
 ### Dashboard del admin
 
 - [x] **DASH-01**: Admin ve los servicios organizados por día (hoy, mañana y siguientes)
-- [ ] **DASH-02**: Admin ve una bandeja persistente con los aseos sin confirmar
+- [x] **DASH-02**: Admin ve una bandeja persistente con los aseos sin confirmar
 - [x] **DASH-03**: Admin ve la carga diaria por aseador para decidir si activa un suplente
 - [x] **DASH-04**: Admin ve un panel de alertas con la misma jerarquía visual para: urgentes, extensión mal creada, "no puedo", daños, faltantes y calendario caído
 - [ ] **DASH-05**: Admin ve alertados los aseos cuya hora límite venció sin terminarse
@@ -206,7 +206,7 @@
 | SYNC-09 | Fase 3 | Complete |
 | SYNC-10 | Fase 3 | Complete |
 | SYNC-11 | Fase 3 | Complete |
-| ASEO-01 | Fase 4 | Pending |
+| ASEO-01 | Fase 4 | Complete |
 | ASEO-02 | Fase 4 | Complete |
 | ASEO-03 | Fase 4 | Complete |
 | ASEO-04 | Fase 4 | Complete |
@@ -238,7 +238,7 @@
 | NOTIF-03 | Fase 5 | Pending |
 | NOTIF-04 | Fase 5 | Pending |
 | DASH-01 | Fase 4 | Complete |
-| DASH-02 | Fase 4 | Pending |
+| DASH-02 | Fase 4 | Complete |
 | DASH-03 | Fase 4 | Complete |
 | DASH-04 | Fase 4 | Complete |
 | DASH-05 | Fase 4 | Pending |
