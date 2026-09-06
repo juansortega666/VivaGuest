@@ -2,7 +2,6 @@
 
 import 'server-only';
 
-import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { NoAutorizado, exigirAdmin } from '@/lib/auth/guards';
@@ -13,6 +12,50 @@ import { campoDeConstraint, mapDbError, type DbErrorLike } from '@/lib/domain/er
 
 /**
  * LAS NUEVE SERVER ACTIONS DE LA PANTALLA DE OPERACIÓN.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * NINGUNA LLAMA `revalidatePath('/operacion')`, Y NO ES UN OLVIDO. ESTÁ MEDIDO.
+ *
+ * Con `revalidatePath('/operacion')` dentro de cualquiera de estas nueve
+ * actions, **el navegador se queda colgado**: la mutación se escribe en la base,
+ * el servidor responde 200 con la carga útil completa en ~50 ms, y el cliente no
+ * la aplica NUNCA. Lo que ve el admin es el botón del diálogo en `Cancelando…`
+ * para siempre, sin toast, sin cierre del diálogo y con la fila intacta. La única
+ * salida es recargar a mano.
+ *
+ * Reproducido y acotado por bisección el 2026-09-06 (plan 04-14) sobre
+ * `next@15.5.24` con `next build && next start`:
+ *
+ *   - NO es el motor: la fila queda `cancelada` en Postgres en todos los casos.
+ *   - NO es la red: la respuesta llega entera (36 KB), y todas las filas del
+ *     payload de flight están definidas y son autoconsistentes. El valor de
+ *     retorno de la action viaja dentro, correcto.
+ *   - NO es Realtime: con el WebSocket cerrado a la fuerza pasa igual.
+ *   - NO es `searchParams`, ni la marca de frescura, ni el carril lateral, ni
+ *     ningún componente concreto: con la página reducida a su `<h1>` y una
+ *     action de dos líneas que SOLO llama `revalidatePath`, sigue colgándose.
+ *   - NO cambia con `revalidatePath('/operacion', 'page')` ni con `compress: false`.
+ *   - SÍ desaparece en cuanto se quita `revalidatePath`. Medido las dos
+ *     direcciones, varias veces.
+ *   - El disparador es de TAMAÑO, no de contenido: partiendo de una página
+ *     mínima que funciona, añadir UN client component más —da igual cuál, se
+ *     probó con un `<span>` trivial— la vuelve a colgar.
+ *
+ * QUÉ SE PIERDE: nada observable. `(admin)/layout.tsx` declara `force-dynamic`,
+ * así que esta ruta no tiene caché de ruta completa que invalidar, y el único
+ * consumidor es el admin que acaba de pulsar el botón.
+ *
+ * QUÉ LO SUSTITUYE: `router.refresh()` en el cliente, que YA estaba en los cinco
+ * diálogos, en `MenuAseo` y en `SheetConfirmar` desde los planes 04-10 y 04-11
+ * («la action ya llamó a revalidatePath; esto pide el árbol de servidor YA»).
+ * Ese refresco no pasa por la transición de la action, y funciona: medido con la
+ * fila pasando a `Cancelado` y el bloque del día a `Ver cancelados (1)`.
+ * `FilaAlerta` era el único sitio que no lo tenía; el plan 04-14 se lo añadió.
+ *
+ * SI ALGÚN DÍA SE QUIERE VOLVER A PONER: hay que reproducir primero el caso
+ * mínimo con la versión de Next de ese momento. La causa raíz no está
+ * identificada y por eso esto es un rodeo declarado, no una preferencia.
+ * ════════════════════════════════════════════════════════════════════════════
  *
  * ── EL ORDEN DE LAS TRES PRIMERAS OPERACIONES NO ES ESTILÍSTICO ─────────────
  *
@@ -268,7 +311,6 @@ export async function confirmarAseo(
   });
   if (error) return fallo(error);
 
-  revalidatePath('/operacion');
   return { ok: true, mensaje: 'Aseo confirmado.' };
 }
 
@@ -294,7 +336,6 @@ export async function reasignarAseo(
   });
   if (error) return fallo(error);
 
-  revalidatePath('/operacion');
 
   const nombre = parseado.data.aseador_nombre;
   return {
@@ -334,7 +375,6 @@ export async function crearAseoManual(
 
   if (error) return errorDeAseoDuplicado(error, apartamento_nombre, fecha) ?? fallo(error);
 
-  revalidatePath('/operacion');
   return { ok: true, mensaje: 'Aseo creado. Está en la bandeja Sin confirmar.' };
 }
 
@@ -369,7 +409,6 @@ export async function reprogramarAseo(
 
   if (error) return errorDeAseoDuplicado(error, apartamento_nombre, fecha) ?? fallo(error);
 
-  revalidatePath('/operacion');
   return { ok: true, mensaje: `El aseo quedó para el ${formatFechaBog(fecha)}.` };
 }
 
@@ -389,7 +428,6 @@ export async function cerrarAseo(
   });
   if (error) return fallo(error);
 
-  revalidatePath('/operacion');
   return { ok: true, mensaje: 'El aseo quedó cerrado.' };
 }
 
@@ -409,7 +447,6 @@ export async function cancelarAseo(
   });
   if (error) return fallo(error);
 
-  revalidatePath('/operacion');
   return { ok: true, mensaje: 'El aseo quedó cancelado.' };
 }
 
@@ -435,7 +472,6 @@ export async function limpiarMarcaDeRevision(
   });
   if (error) return fallo(error);
 
-  revalidatePath('/operacion');
   return { ok: true, mensaje: 'El aseo quedó marcado como revisado.' };
 }
 
@@ -497,7 +533,6 @@ async function escribirMarcaDeAtendida(
     return { ok: false, error: 'No se encontró el registro solicitado.' };
   }
 
-  revalidatePath('/operacion');
   return { ok: true, mensaje };
 }
 

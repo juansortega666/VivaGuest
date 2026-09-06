@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
 import { toast } from 'sonner';
 
@@ -138,6 +139,7 @@ export function FilaAlerta({
    */
   onOptimista: (id: string) => void;
 }) {
+  const router = useRouter();
   const [enVuelo, startTransition] = useTransition();
 
   const presentacion = presentacionDeAlerta(alerta.clave);
@@ -172,9 +174,19 @@ export function FilaAlerta({
    * aplicado sobre algo que nunca se escribio.
    *
    * La vuelta NO se programa aca: `useOptimistic` revierte solo al terminar la
-   * transicion, y para entonces el `revalidatePath('/operacion')` de la action ya
-   * trajo la lista de verdad. En el camino feliz la fila ya no esta; en el de
-   * fallo, vuelve.
+   * transicion, y para entonces el `router.refresh()` de abajo ya trajo la lista
+   * de verdad. En el camino feliz la fila ya no esta; en el de fallo, vuelve.
+   *
+   * ── EL `router.refresh()` ES LO QUE TRAE LA LISTA DE VERDAD (plan 04-14) ──
+   * Hasta el 04-14 este era el UNICO sitio de la pantalla que no lo llamaba,
+   * porque se apoyaba en el `revalidatePath('/operacion')` de la action. Esa
+   * llamada se quito de las nueve actions: colgaba el navegador entero, con el
+   * boton en su estado pendiente para siempre y sin aplicar nunca la respuesta
+   * del servidor. La medicion completa esta en la cabecera de `_actions.ts`.
+   *
+   * Sin este refresco, `useOptimistic` revertiria al terminar la transicion y la
+   * fila atendida REAPARECERIA en el panel pese a estar escrita en la base, que
+   * es peor que no tener estado optimista.
    */
   function resolver() {
     startTransition(async () => {
@@ -185,6 +197,8 @@ export function FilaAlerta({
         : await marcarAlertaAtendida(alerta.id);
 
       if (!resultado.ok) toast.error(resultado.error);
+
+      router.refresh();
     });
   }
 
