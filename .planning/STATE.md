@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Fase 4 wave 2 cerrada. Migracion 15 aplicada. Siguiente: wave 3 (04-06)"
-last_updated: "2026-09-06T00:00:00.000Z"
-last_activity: 2026-09-06 -- Wave 2 cerrada: las seis RPC del admin y Realtime, contrato pgTAP en verde
+stopped_at: "Fase 4 wave 3 cerrada (04-06, capa de lectura). Siguiente: wave 4"
+last_updated: "2026-09-06T16:11:58.461Z"
+last_activity: 2026-09-06 -- Wave 3 cerrada: lib/data/operacion.ts, la capa de lectura del dashboard
 progress:
   total_phases: 9
   completed_phases: 3
-  total_plans: 34
-  completed_plans: 31
+  total_plans: 48
+  completed_plans: 40
   percent: 33
 ---
 
@@ -26,12 +26,13 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 ## Current Position
 
 Phase: 04 (dashboard-operativo-del-admin) — EXECUTING
-Plan: 5 of 14 de la Fase 4 (waves 1 y 2 cerradas)
-Status: Phase 04 EJECUTANDO, sin bloqueos. Siguiente: wave 3, plan 04-06
-Last activity: 2026-09-06 -- Wave 2 cerrada. La migracion 15 entrega las seis RPC SECURITY DEFINER
-del admin y publica cleanings y notifications en supabase_realtime. El contrato 06_aseos_admin
-paso de 32 rojos a 41/41 verdes SIN tocar una sola asercion. db:test completo en PASS: 7 archivos,
-153 aserciones. Commit de merge bf34ec1.
+Plan: 6 of 14 de la Fase 4 (waves 1, 2 y 3 cerradas)
+Status: Phase 04 EJECUTANDO, sin bloqueos. Siguiente: wave 4
+Last activity: 2026-09-06 -- Wave 3 cerrada. El plan 04-06 entrega `lib/data/operacion.ts`: una sola
+consulta a `cleanings` con los dos embeds calificados por nombre de clave foranea alimenta el carril
+ancho, la bandeja y los chips con un unico instante de lectura, mas las tres consultas auxiliares del
+panel de alertas. 21 unitarios y 10 de integracion nuevos; los tres señuelos del plan corridos y
+rojos. Suites: unit 28/502, integration 13/125, pgTAP 7/153 PASS.
 
 DECISION DE EJECUCION 2026-09-06: worktrees DESACTIVADOS para el resto de la fase. Medido por el
 ejecutor del 04-05: git dentro de iCloud avanza a ~5 archivos/minuto, y el reset inicial del
@@ -42,7 +43,7 @@ serie. Se pierde paralelismo solo en las waves 4 y 6.
 OJO, CAMBIO DE SIGNO: a partir de la migracion 15, un `not ok` en 06_aseos_admin.test.sql YA NO es
 esperado, es una regresion. Mismo caso que 05_sync.test.sql tras la Fase 3.
 
-Progress: [███░░░░░░░] 33% (3 de 9 fases)
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
@@ -56,7 +57,7 @@ Progress: [███░░░░░░░] 33% (3 de 9 fases)
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 04 | 1 medido (P06) | 158min | 158min |
 
 **Recent Trend:**
 
@@ -64,6 +65,10 @@ Progress: [███░░░░░░░] 33% (3 de 9 fases)
 - Trend: —
 
 *Se actualiza al completar cada plan*
+
+| Plan | Duracion | Tareas | Archivos |
+|------|----------|--------|----------|
+| Phase 04 P06 | 158min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -77,6 +82,9 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - La autorización nunca se apoya en claims del JWT (la desactivación de un aseador debe surtir efecto inmediato)
 - PWA offline-first desde el día uno, con cola de mutaciones en IndexedDB e idempotencia por `client_event_id`
 - El scheduler corre en `pg_cron` + `pg_net` con fan-out por feed, no en Vercel Cron
+- [Fase 4] Todo embed de PostgREST hacia una tabla con mas de una clave foranea va calificado por nombre de FK (`profiles!cleanings_aseador_id_fkey`): sin el, PGRST201 en tiempo de ejecucion, y `tsc` no lo ve
+- [Fase 4] El carril ancho llega hasta hoy+6 y lo que queda mas lejos solo se cuenta: cinco dias es el horizonte con el que se decide un suplente
+- [Fase 4] Los aseos cancelados se traen en la consulta y se filtran en memoria, porque la cabecera del dia lleva el toggle `Ver cancelados (N)` y necesita el conteo
 
 ### Pending Todos
 
@@ -122,22 +130,27 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-03
-Stopped at: Fase 4, wave 1 de 8 cerrada y mergeada (04-01 a 04-04).
+Last session: 2026-09-06T16:08:54Z
+Stopped at: Fase 4, wave 3 cerrada (plan 04-06, la capa de lectura del dashboard).
 
-**BLOQUEO ACTIVO, requiere accion del usuario:**
-1. Docker Desktop no arranca. Tenia un dialogo modal: pulsar **Quit**, NUNCA "Reset to factory
-   defaults" (borraria los volumenes con la base local). Luego abrirlo normal. Sin Docker no corren
-   `db:reset`, `db:test` ni `test:integration`.
-2. `git clean -fd -e "ci/README.md" -e "supabase/snippets" -e ".claude/worktrees"` sobre el checkout
-   principal, todavia con ~140 duplicados de iCloud, cuatro de ellos migraciones.
+**Sin bloqueos activos.** El stack local de Supabase esta arriba y sano (12 contenedores), la
+migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` 28 archivos / 502 tests,
+`test:integration` 13 archivos / 125 tests, `db:test` `Files=7, Tests=153, Result: PASS`.
 
-**Deuda que hay que cerrar ANTES de la wave 2:** el plan 04-01 quedo commiteado pero SIN VERIFICAR.
-`supabase/tests/06_aseos_admin.test.sql` son 1164 lineas con `plan(41)` que no se han ejecutado ni
-una vez; solo se comprobo balance de comillas y que hay 41 llamadas a `is()`. Va a tener errores de
-sintaxis. Secuencia de cierre: `db:reset` -> `db:test` (comprobando que `ok + not ok = 41` y que los
-rojos son los 33 listados en la cabecera) -> arreglar sintaxis -> `db:types:check` ->
-`test:integration`.
+**Lo que hay que saber antes de tocar nada:**
 
-Siguiente wave: la 2, con el plan 04-05 (migracion 15, las seis RPC y Realtime).
+1. **Worktrees DESACTIVADOS** para el resto de la fase (decision del 2026-09-06, arriba). Los planes
+   corren en el checkout principal, en serie.
+2. **CAMBIO DE SIGNO vigente:** un `not ok` en `06_aseos_admin.test.sql` YA NO es esperado, es una
+   regresion.
+3. **El I/O de iCloud domina el reloj de las herramientas de build, y esta medido** (04-06): `tsc` en
+   frio tardo 6 min 39 s consumiendo 6 s de CPU; `eslint` llego a 53 minutos con 4,4 s de CPU. Con las
+   caches calientes bajan a 3 s y a segundos respectivamente. Recomendacion: correr `npx tsc --noEmit`
+   una vez al empezar la sesion, y NO dar por colgado un proceso a 0 % de CPU sin mirar antes su tiempo
+   acumulado con `ps -o time`.
+4. **Los duplicados de iCloud con sufijo numerico siguen apareciendo.** En el 04-06 rompieron
+   `npx tsc --noEmit` con 11 errores desde `.next/types/cache-life.d 2.ts` y `routes.d 2.ts`. Se
+   apartaron a mano (no se borraron); `.next/` esta en `.gitignore` y `next build` lo regenera.
+
+Siguiente: la wave 4 de la Fase 4.
 Resume file: None
