@@ -166,6 +166,17 @@ export function FilaAseo({
 
   return (
     <TableRow
+      // EL DESTINO DE LAS ALERTAS DEL PANEL (D-08, plan 04-13). `FilaAlerta`
+      // construye su `href` como `/operacion#aseo-{id}`, asi que el ancla tiene
+      // que existir en el documento o el enlace no lleva a ninguna parte.
+      //
+      // `scroll-mt-barra` compensa la barra superior fija de 56px: sin el, el
+      // navegador deja la fila justo DEBAJO del cromo y el admin aterriza sin ver
+      // lo que fue a buscar.
+      //
+      // Lo que esto NO hace todavia: expandir el bloque del dia si estaba
+      // colapsado. Ver `deferred-items.md`.
+      id={`aseo-${fila.id}`}
       // `relative` para que el `::after` del ancla tenga esta fila como bloque
       // contenedor y cubra toda su anchura.
       //
@@ -183,8 +194,8 @@ export function FilaAseo({
       // panorama del dia que el admin necesita (§7.4, D-20).
       className={
         inerte
-          ? 'relative h-fila border-b border-border bg-background'
-          : 'transicion relative h-fila border-b border-border bg-background hover:bg-canvas has-[a:focus-visible]:bg-canvas'
+          ? 'relative h-fila scroll-mt-barra border-b border-border bg-background'
+          : 'transicion relative h-fila scroll-mt-barra border-b border-border bg-background hover:bg-canvas has-[a:focus-visible]:bg-canvas'
       }
     >
       <TableCell className="w-col-estado-aseo px-md">

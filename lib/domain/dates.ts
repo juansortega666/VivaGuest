@@ -303,3 +303,35 @@ function diaAnterior(iso: string): string {
   const [ano, mes, dia] = iso.split('-').map(Number);
   return DIA_ISO.format(new Date(Date.UTC(ano, mes - 1, dia - 1)));
 }
+
+/**
+ * Hora del reloj de Bogota de un INSTANTE: `"14:32"`.
+ *
+ * Es `HORA_BOGOTA` expuesto, y existe porque la marca de ultima actualizacion
+ * (04-UI-SPEC.md §13.1) pinta el absoluto al lado del relativo. Reconstruir el
+ * `Intl.DateTimeFormat` en el componente seria convertir un instante a mano fuera
+ * de este archivo, que es justo lo que la cabecera prohibe.
+ *
+ * Devuelve `null` si la marca es nula o ilegible, misma regla que `tiempoRelativo`.
+ */
+export function formatHoraBog(instante: number | string | null | undefined): string | null {
+  const ms = aMilisegundos(instante);
+  return ms === null ? null : HORA_BOGOTA.format(new Date(ms));
+}
+
+/**
+ * Instante completo en hora de Bogota: `"jue, 3 de septiembre, 14:32"`.
+ *
+ * Va SOLO en atributos `title`, nunca como texto visible: es el absoluto que
+ * respalda un tiempo relativo (`hace 8 min`) en la fila del panel de alertas
+ * (§11.3). Un relativo sin su absoluto detras obliga a hacer la cuenta a mano.
+ *
+ * El dia se resuelve con `HOY_BOGOTA` y se formatea con `formatFechaBog`, asi que
+ * la conversion instante -> dia calendario pasa por la unica zona del repo y no
+ * por una resta de cinco horas escrita a mano.
+ */
+export function formatInstanteBog(instante: number | string | null | undefined): string | null {
+  const ms = aMilisegundos(instante);
+  if (ms === null) return null;
+  return `${formatFechaBog(HOY_BOGOTA.format(new Date(ms)))}, ${HORA_BOGOTA.format(new Date(ms))}`;
+}
