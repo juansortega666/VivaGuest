@@ -8,6 +8,7 @@ import { copyDeReviewReason, estadoDeAseo } from '@/lib/domain/cleanings';
 import { formatHoraLimite } from '@/lib/domain/dates';
 
 import { EstadoAseo } from './EstadoAseo';
+import { MenuAseo, type ContextoDeAcciones } from './MenuAseo';
 
 /**
  * La fila de aseo (04-UI-SPEC.md §7). Es la unidad visual que mas se repite en la
@@ -33,9 +34,10 @@ import { EstadoAseo } from './EstadoAseo';
  * y navega al detalle en vez de abrir el menu. El foco de fila se pinta con
  * `has-[a:focus-visible]:bg-canvas`, no con un `role="button"` falso.
  *
- * ── EL MENU DE ACCIONES LLEGA EN EL PLAN 04-11 ─────────────────────────────
- * La celda existe desde hoy, con su ancho, para que la rejilla no se mueva cuando
- * `MenuAseo` aterrice. Lo que NO se hace es pintar un `⋯` que no abra nada.
+ * ── EL MENU DE ACCIONES (plan 04-11) ───────────────────────────────────────
+ * La sexta celda monta `MenuAseo` en la variante gestionada y queda VACIA en la
+ * inerte. El `relative z-10` de la celda es lo que impide que el clic en el `⋯`
+ * caiga en el `::after` del ancla y navegue al detalle en vez de abrir el menu.
  */
 
 /**
@@ -151,7 +153,14 @@ function EnlaceAlApartamento({
   );
 }
 
-export function FilaAseo({ fila }: { fila: FilaDeOperacion }) {
+export function FilaAseo({
+  fila,
+  acciones,
+}: {
+  fila: FilaDeOperacion;
+  /** Lo que el menu necesita y la fila no trae. Ver `MenuAseo.tsx`. */
+  acciones: ContextoDeAcciones;
+}) {
   const { clave } = estadoDeAseo(fila);
   const inerte = clave === 'externa';
 
@@ -225,17 +234,18 @@ export function FilaAseo({ fila }: { fila: FilaDeOperacion }) {
 
       {/*
         La celda del menu EXISTE en las dos variantes, para no romper la rejilla, y
-        en la inerte esta VACIA: sin `⋯`, ni deshabilitado ni atenuado. Un item
-        atenuado que no dice por que es peor que su ausencia.
+        en la inerte esta VACIA: `MenuAseo` no se renderiza en absoluto, ni
+        deshabilitado ni atenuado. Un item atenuado que no dice por que es peor que
+        su ausencia.
 
         Y ocultar acciones no es autorizar (T-04-17): la garantia real es el CHECK
         `cl_unmanaged_is_inert`, que hace fallar con 23514 cualquier escritura sobre
         estas filas, mas el filtro `is_managed` dentro de las seis RPC. La UI
         refleja el CHECK, no lo reimplementa (D-21).
-
-        El `MenuAseo` de la variante gestionada lo cablea el plan 04-11.
       */}
-      <TableCell className="relative z-10 w-col-menu px-md" />
+      <TableCell className="relative z-10 w-col-menu px-md">
+        {!inerte && <MenuAseo fila={fila} acciones={acciones} />}
+      </TableCell>
     </TableRow>
   );
 }

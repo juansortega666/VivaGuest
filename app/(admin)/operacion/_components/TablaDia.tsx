@@ -11,6 +11,7 @@ import type { FilaDeOperacion } from '@/lib/data/operacion';
 
 import { EstadoVacio } from '../../_components/EstadoVacio';
 import { FilaAseo } from './FilaAseo';
+import type { ContextoDeAcciones } from './MenuAseo';
 
 /**
  * La tabla densa de UN dia (04-UI-SPEC.md §7 y §8.1).
@@ -58,7 +59,17 @@ function ordenarFilasDelDia(filas: FilaDeOperacion[]): FilaDeOperacion[] {
 /** El tratamiento de encabezado de columna de §7.2: 32px, `--canvas`, 12/600. */
 const TH = 'px-md text-micro font-semibold tracking-columna text-muted-foreground uppercase';
 
-export function TablaDia({ filas }: { filas: FilaDeOperacion[] }) {
+export function TablaDia({
+  filas,
+  acciones,
+}: {
+  filas: FilaDeOperacion[];
+  /**
+   * Lo que el menu de cada fila necesita y la fila no trae. Atraviesa este
+   * componente sin usarse: `TablaDia` no monta el menu, lo monta `FilaAseo`.
+   */
+  acciones: ContextoDeAcciones;
+}) {
   if (filas.length === 0) {
     return (
       <EstadoVacio
@@ -95,7 +106,7 @@ export function TablaDia({ filas }: { filas: FilaDeOperacion[] }) {
 
         <TableBody>
           {ordenadas.map((fila) => (
-            <FilaAseo key={fila.id} fila={fila} />
+            <FilaAseo key={fila.id} fila={fila} acciones={acciones} />
           ))}
         </TableBody>
       </Table>

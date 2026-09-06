@@ -16,6 +16,7 @@ import { BloqueDia } from './_components/BloqueDia';
 import { DialogoCrearAseo } from './_components/DialogoCrearAseo';
 import { LeyendaDeAseos } from './_components/EstadoAseo';
 import { FranjaCarga } from './_components/FranjaCarga';
+import type { ContextoDeAcciones } from './_components/MenuAseo';
 
 export const metadata: Metadata = {
   title: 'Operación · VivaGuest',
@@ -115,6 +116,20 @@ export default async function OperacionPage() {
   // ve con el bloque cerrado, que es como nace.
   const filasSiguientes = bloques.siguientes.flatMap((grupo) => grupo.filas);
 
+  // Lo que el menu de cada fila necesita y la fila no trae (plan 04-11). Baja por
+  // `BloqueDia` -> `TablaDia` -> `FilaAseo` sin que ninguno de los tres lo use:
+  // el consumidor es `MenuAseo`. Va como UN objeto y no como tres props sueltas
+  // para que anadir un cuarto dato manana no vuelva a tocar los tres.
+  //
+  // Los tres datos ya estaban leidos: `aseadores` alimenta los chips de carga,
+  // `responsables` alimenta la bandeja, y `hoy` es el dia de negocio que la
+  // consulta uso para su ventana. No hay ningun viaje nuevo a la base.
+  const acciones: ContextoDeAcciones = {
+    aseadores,
+    responsables,
+    hoy: operacion.hoy,
+  };
+
   return (
     <div className="flex flex-col gap-xl">
       {/*
@@ -156,10 +171,16 @@ export default async function OperacionPage() {
             rotulo="Hoy"
             fecha={bloques.hoy.fecha}
             filas={bloques.hoy.filas}
+            acciones={acciones}
             expandidoInicial
           />
 
-          <BloqueDia rotulo="Mañana" fecha={bloques.manana.fecha} filas={bloques.manana.filas} />
+          <BloqueDia
+            rotulo="Mañana"
+            fecha={bloques.manana.fecha}
+            filas={bloques.manana.filas}
+            acciones={acciones}
+          />
 
           {/*
             `Siguientes` AGRUPA POR DIA, no es una lista corrida: DASH-01 pide
@@ -174,6 +195,7 @@ export default async function OperacionPage() {
           <BloqueDia
             rotulo={`Siguientes (${bloques.siguientes.length} días)`}
             filas={filasSiguientes}
+            acciones={acciones}
           >
             <div className="flex flex-col gap-lg p-md">
               {bloques.siguientes.map((grupo) => (
@@ -181,6 +203,7 @@ export default async function OperacionPage() {
                   key={grupo.fecha}
                   fecha={grupo.fecha}
                   filas={grupo.filas}
+                  acciones={acciones}
                   expandidoInicial={grupo.filas.length > 0}
                 />
               ))}

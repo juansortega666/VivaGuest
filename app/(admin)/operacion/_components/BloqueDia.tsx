@@ -7,6 +7,7 @@ import type { FilaDeOperacion } from '@/lib/data/operacion';
 import { estadoDeAseo } from '@/lib/domain/cleanings';
 import { formatFechaBog } from '@/lib/domain/dates';
 
+import type { ContextoDeAcciones } from './MenuAseo';
 import { TablaDia } from './TablaDia';
 
 /**
@@ -35,6 +36,7 @@ export function BloqueDia({
   rotulo,
   fecha,
   filas,
+  acciones,
   expandidoInicial = false,
   children,
 }: {
@@ -44,6 +46,11 @@ export function BloqueDia({
   fecha?: string;
   /** Las filas del dia. En el bloque agregado, las de todos sus dias, solo para contar. */
   filas: FilaDeOperacion[];
+  /**
+   * Lo que el menu de cada fila necesita y la fila no trae. Atraviesa este
+   * componente sin usarse; en el bloque agregado lo reciben los dias de dentro.
+   */
+  acciones: ContextoDeAcciones;
   expandidoInicial?: boolean;
   /**
    * Contenido propio en vez de la tabla. Lo usa `Siguientes`, que no es un dia:
@@ -121,7 +128,14 @@ export function BloqueDia({
         existe siempre, que es lo que el atributo promete.
       */}
       <div id={idContenido} hidden={!expandido}>
-        {agregado ? children : <TablaDia filas={verCancelados ? [...visibles, ...cancelados] : visibles} />}
+        {agregado ? (
+          children
+        ) : (
+          <TablaDia
+            filas={verCancelados ? [...visibles, ...cancelados] : visibles}
+            acciones={acciones}
+          />
+        )}
       </div>
     </section>
   );
