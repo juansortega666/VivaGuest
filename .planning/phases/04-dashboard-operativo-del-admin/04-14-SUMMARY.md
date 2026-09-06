@@ -343,3 +343,12 @@ o que el panel salte o cambie de tamaño entre uno y otro.
 ---
 
 **Responde «aprobado», o describe qué falló en cada uno de los tres puntos.**
+
+---
+
+## Self-Check: PASSED
+
+Los tres specs existen y superan sus `min_lines` (654 / 491 / 296 contra 150 / 100 / —), la captura
+en escala de grises está en `test-results/`, y los once commits del plan están en el árbol:
+`2076f9f`, `2871898`, `df02f2c`, `5f8298b`, `1e758bc`, `0110067`, `564bab8`, `850de11`, `32dd263`,
+`995ffd8`, `4c322e6`.
