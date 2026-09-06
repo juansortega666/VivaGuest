@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Fase 4 wave 1 cerrada y VERIFICADA. Desbloqueada. Siguiente: wave 2 (04-05)"
-last_updated: "2026-09-04T11:20:00.000Z"
-last_activity: 2026-09-04 -- Verificacion de 04-01 cerrada: contrato pgTAP medido en rojo esperado
+stopped_at: "Fase 4 wave 2 cerrada. Migracion 15 aplicada. Siguiente: wave 3 (04-06)"
+last_updated: "2026-09-06T00:00:00.000Z"
+last_activity: 2026-09-06 -- Wave 2 cerrada: las seis RPC del admin y Realtime, contrato pgTAP en verde
 progress:
   total_phases: 9
   completed_phases: 3
@@ -21,17 +21,26 @@ progress:
 Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 
 **Core value:** Que ningún aseo se pierda: todo checkout detectado en calendario termina en un aseo confirmado, asignado y ejecutado con evidencia, sin coordinación manual por WhatsApp.
-**Current focus:** Fase 4, wave 1 de 8 cerrada y verificada. Lista para la wave 2 (plan 04-05)
+**Current focus:** Fase 4, wave 2 de 8 cerrada. Migracion 15 en verde. Siguiente: wave 3 (plan 04-06)
 
 ## Current Position
 
 Phase: 04 (dashboard-operativo-del-admin) — EXECUTING
-Plan: 4 of 14 de la Fase 4 (wave 1 cerrada y VERIFICADA)
-Status: Phase 04 EJECUTANDO, sin bloqueos. Siguiente: wave 2, plan 04-05 (migracion 15)
-Last activity: 2026-09-04 -- Verificacion de 04-01 cerrada. db:reset, db:test, db:types:check y
-test:integration medidos con el stack local arriba. El contrato pgTAP de las seis RPC del admin
-corre por primera vez: 41 aserciones, 32 en rojo esperado (no 33: la 28 es un control positivo).
-481 unitarios y 115 de integracion en verde. Commit 3a4de07.
+Plan: 5 of 14 de la Fase 4 (waves 1 y 2 cerradas)
+Status: Phase 04 EJECUTANDO, sin bloqueos. Siguiente: wave 3, plan 04-06
+Last activity: 2026-09-06 -- Wave 2 cerrada. La migracion 15 entrega las seis RPC SECURITY DEFINER
+del admin y publica cleanings y notifications en supabase_realtime. El contrato 06_aseos_admin
+paso de 32 rojos a 41/41 verdes SIN tocar una sola asercion. db:test completo en PASS: 7 archivos,
+153 aserciones. Commit de merge bf34ec1.
+
+DECISION DE EJECUCION 2026-09-06: worktrees DESACTIVADOS para el resto de la fase. Medido por el
+ejecutor del 04-05: git dentro de iCloud avanza a ~5 archivos/minuto, y el reset inicial del
+worktree consumio 35 de sus 62 minutos, con dos timeouts y un index.lock huerfano. Con 9 planes
+restantes serian ~5 horas de puro arranque. Los planes ahora corren en el checkout principal, en
+serie. Se pierde paralelismo solo en las waves 4 y 6.
+
+OJO, CAMBIO DE SIGNO: a partir de la migracion 15, un `not ok` en 06_aseos_admin.test.sql YA NO es
+esperado, es una regresion. Mismo caso que 05_sync.test.sql tras la Fase 3.
 
 Progress: [███░░░░░░░] 33% (3 de 9 fases)
 
