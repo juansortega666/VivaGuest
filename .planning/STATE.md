@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completado 04-12-PLAN.md
-last_updated: "2026-09-06T19:29:34.583Z"
+stopped_at: Completado 04-13-PLAN.md
+last_updated: "2026-09-06T19:48:56.613Z"
 last_activity: 2026-09-06
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 48
-  completed_plans: 46
+  completed_plans: 47
   percent: 33
 ---
 
@@ -26,7 +26,7 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 ## Current Position
 
 Phase: 04 (dashboard-operativo-del-admin) — EXECUTING
-Plan: 12 of 14 de la Fase 4 (waves 1 a 5 cerradas; 04-08 y 04-09 entregados)
+Plan: 13 of 14 de la Fase 4 (waves 1 a 5 cerradas; 04-08 y 04-09 entregados)
 Status: Ready to execute
 Last activity: 2026-09-06
 con `exigirAdmin()` como PRIMERA operacion de las nueve y un test que lo mide por lo que NO llega a
@@ -73,7 +73,7 @@ serie. Se pierde paralelismo solo en las waves 4 y 6.
 OJO, CAMBIO DE SIGNO: a partir de la migracion 15, un `not ok` en 06_aseos_admin.test.sql YA NO es
 esperado, es una regresion. Mismo caso que 05_sync.test.sql tras la Fase 3.
 
-Progress: [██████████] 96%
+Progress: [██████████] 98%
 
 ## Performance Metrics
 
@@ -105,6 +105,7 @@ Progress: [██████████] 96%
 | Phase 04 P10 | 68min | 3 tasks | 6 files |
 | Phase 04 P11 | 42min | 3 tasks | 10 files |
 | Phase 04 P12 | 20min | 2 tasks | 8 files |
+| Phase 04 P13 | 35min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -135,6 +136,12 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Phase 04]: 04-11: se monta solo el dialogo abierto, no los cinco — con 30 filas serian 150 useActionState en reposo
 - [Phase 04]: 04-12: el historial vive dentro de la ficha del apartamento (D-22), es de solo lectura (D-23) y NO filtra los danos resueltos. damages_open_idx es parcial sobre los no resueltos y copiar ese predicado esconde justo el dato que hace util el historial; senuelo corrido y rojo en las dos suites.
 - [Phase 04]: 04-12: el 'Ver 30 mas' del historial va por query string (?historial=) y no por useState, asi la seccion sigue siendo un RSC. El parametro pasa por limiteDeHistorial(), que lo redondea al bloque de 30 y le pone techo de 300: acaba en el limit de dos consultas a Postgres.
+- [Phase 04]: 04-13: el contador del panel de alertas muestra el TOTAL, nunca lo renderizado ni lo que queda tras el filtro. Es la unica garantia medible de que el scroll interno no es un escondite (criterio 4 del ROADMAP).
+- [Phase 04]: 04-13: el toggle Ver atendidas va en la URL (?alertas=atendidas) y el filtro por tipo en useState. La regla: lo que cambia QUE FILAS lee el servidor vive en la URL; lo que solo filtra lo ya traido vive en el cliente.
+- [Phase 04]: 04-13: la suscripcion de Realtime es un DISPARADOR y no una fuente de datos: llama router.refresh() y no lee el payload. Evita duplicar lib/domain/, el N+1 de los embeds sin resolver y REPLICA IDENTITY FULL, y conserva el estado del cliente.
+- [Phase 04]: 04-13: el estado inicial del canal es DEGRADADO, no en vivo. Antes del primer SUBSCRIBED no hay conexion, y arrancar en verde para bajar a ambar es la mentira silenciosa que D-14 existe para evitar.
+- [Phase 04]: 04-13: el sondeo de respaldo (120s en vivo, 30s caido, pausado con la pestana oculta) se construye SIEMPRE. Es lo que deja a Realtime como una capa que se puede quitar sin romper la pantalla, que es el escenario de hoy con el checkpoint A1 abierto.
+- [Phase 04]: 04-13: el estado optimista de Marcar como atendida usa useOptimistic con base vacia, no useState. Revierte solo al terminar la transicion, y eso cubre el ok:false por CERO FILAS AFECTADAS sin restaurar el id a mano en la rama de fallo.
 
 ### Pending Todos
 
@@ -180,8 +187,8 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-06T19:29:28.414Z
-Stopped at: Completado 04-12-PLAN.md
+Last session: 2026-09-06T19:48:15.737Z
+Stopped at: Completado 04-13-PLAN.md
 
 **Sin bloqueos activos.** El stack local de Supabase esta arriba y sano (12 contenedores), la
 migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` **29 archivos / 548 tests**,

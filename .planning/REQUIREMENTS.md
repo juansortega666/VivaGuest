@@ -102,7 +102,7 @@
 - [x] **DASH-02**: Admin ve una bandeja persistente con los aseos sin confirmar
 - [x] **DASH-03**: Admin ve la carga diaria por aseador para decidir si activa un suplente
 - [x] **DASH-04**: Admin ve un panel de alertas con la misma jerarquía visual para: urgentes, extensión mal creada, "no puedo", daños, faltantes y calendario caído
-- [ ] **DASH-05**: Admin ve alertados los aseos cuya hora límite venció sin terminarse
+- [x] **DASH-05**: Admin ve alertados los aseos cuya hora límite venció sin terminarse
 - [x] **DASH-06**: Admin ve el historial cronológico de un apartamento
 - [x] **DASH-07**: Los aseos de apartamentos con `gestion_vivaguest = false` se muestran con su fecha y a cargo de quién, sin estado ni acciones
 
@@ -241,7 +241,7 @@
 | DASH-02 | Fase 4 | Complete |
 | DASH-03 | Fase 4 | Complete |
 | DASH-04 | Fase 4 | Complete |
-| DASH-05 | Fase 4 | Pending |
+| DASH-05 | Fase 4 | Complete |
 | DASH-06 | Fase 4 | Complete |
 | DASH-07 | Fase 4 | Complete |
 | FIN-01 | Fase 1 | Pending |
