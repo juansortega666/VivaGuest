@@ -201,3 +201,7 @@ Las cuatro líneas base del entorno se mantienen exactas: 153 pgTAP, 567 unitari
 ## Nota sobre notificaciones
 
 Este plan **lee** filas de `notifications` y escribe su `read_at`. **Nadie drena esa cola todavía**: el push al aseador es la Fase 5. Ningún texto de esta pantalla dice ni sugiere que se le avisó a nadie.
+
+## Self-Check: PASSED
+
+Los cuatro archivos declarados existen en disco, los cinco commits existen en el historial, y los tres artefactos con `min_lines` lo superan: `FilaAlerta.tsx` 329 (mínimo 90), `PanelAlertas.tsx` 280 (mínimo 130), `SincronizacionEnVivo.tsx` 205 (mínimo 90).
