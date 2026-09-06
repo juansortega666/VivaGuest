@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completado 04-13-PLAN.md
-last_updated: "2026-09-06T19:48:56.613Z"
+stopped_at: Completado 04-14-PLAN.md; pendiente el checkpoint humano de las tres verificaciones perceptuales
+last_updated: "2026-09-06T21:49:49.868Z"
 last_activity: 2026-09-06
 progress:
   total_phases: 9
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 48
-  completed_plans: 47
-  percent: 33
+  completed_plans: 48
+  percent: 44
 ---
 
 # Project State
@@ -21,14 +21,42 @@ progress:
 Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 
 **Core value:** Que ningún aseo se pierda: todo checkout detectado en calendario termina en un aseo confirmado, asignado y ejecutado con evidencia, sin coordinación manual por WhatsApp.
-**Current focus:** Fase 4, waves 1 a 4 cerradas. Siguiente: wave 5
+**Current focus:** Fase 4 con sus 14 planes entregados. Pendiente: el visto bueno humano sobre las tres verificaciones perceptuales del plan 04-14.
 
 ## Current Position
 
-Phase: 04 (dashboard-operativo-del-admin) — EXECUTING
-Plan: 13 of 14 de la Fase 4 (waves 1 a 5 cerradas; 04-08 y 04-09 entregados)
-Status: Ready to execute
+Phase: 04 (dashboard-operativo-del-admin) — CHECKPOINT HUMANO
+Plan: 14 of 14 de la Fase 4, todos entregados
+Status: Automatico en verde; esperando el visto bueno del usuario
 Last activity: 2026-09-06
+
+Del plan 04-14, que cierra la fase:
+
+Los tres specs de Playwright encontraron que `/operacion` NO FUNCIONABA en el build de produccion, y
+ninguna de las otras tres capas de prueba podia verlo. Dos defectos bloqueantes, los dos corregidos y
+medidos:
+
+1. Toda mutacion colgaba el navegador. Con `revalidatePath('/operacion')` en cualquiera de las nueve
+   Server Actions, la fila se escribia en la base, el servidor respondia 200 con la carga util
+   completa en ~50 ms, y el cliente no la aplicaba NUNCA: el boton se quedaba en `Cancelando…` para
+   siempre, sin toast y sin cerrar el dialogo. Se quito la llamada de las nueve; el refresco lo pide
+   `router.refresh()` en el cliente, que los cinco dialogos ya llamaban. La causa raiz NO esta
+   identificada y el disparador es de TAMANO del arbol de cliente, no de contenido.
+2. El `Sheet` de confirmacion encadenada media OCHO PIXELES de ancho. `max-w-<nombre>` en Tailwind
+   v4.3 resuelve contra `--spacing-*` antes que contra `--container-*`, y la escala de espaciado de
+   02-UI-SPEC §2 usa nombres de talla: `max-w-sm` compilaba a `var(--spacing-sm)` = 8px. Ademas
+   `tailwind-merge` no reconocia `max-w-sheet`, asi que el override del sitio de uso no desplazaba al
+   de la primitiva. Corregido en `cn()`; el Sheet mide sus 480px y el spec lo MIDE.
+
+SIGUE ROTO Y ES LO PRIMERO A MIRAR: `AlertDialog` (~32px) y `Tooltip` (4px), que no llevan override.
+Es una decision de sistema de diseno y afecta a toda la app, incluida la PWA de la Fase 6.
+
+NO SE CERRO, Y TOCA EL CORE VALUE: `hora_limite_vencida` sigue sin computarse para aseos anteriores a
+hoy, porque la ventana de `leerOperacion()` arranca en `hoyBog()`. Un aseo de ayer vencido y sin
+terminar no produce alerta. Candidato: Fase 5.
+
+Suites: pgTAP 7/153 PASS, unit 31/568, integration 16/145, e2e 16/96, `ci:arch` OK, `lint` 0 errores
+(eran 3), `tsc` OK, `db:types:check` sin diferencias, `build` verde. Senuelos de la fase: 17 de 17.
 con `exigirAdmin()` como PRIMERA operacion de las nueve y un test que lo mide por lo que NO llega a
 la base. El error de ASEO-07 sale interpolado con el nombre del apartamento y con `campo: 'fecha'`,
 asi que puede ir inline bajo el input. `marcarAlertaAtendida` escribe UNICAMENTE `read_at`, afirmado
@@ -73,7 +101,7 @@ serie. Se pierde paralelismo solo en las waves 4 y 6.
 OJO, CAMBIO DE SIGNO: a partir de la migracion 15, un `not ok` en 06_aseos_admin.test.sql YA NO es
 esperado, es una regresion. Mismo caso que 05_sync.test.sql tras la Fase 3.
 
-Progress: [██████████] 98%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -106,6 +134,7 @@ Progress: [██████████] 98%
 | Phase 04 P11 | 42min | 3 tasks | 10 files |
 | Phase 04 P12 | 20min | 2 tasks | 8 files |
 | Phase 04 P13 | 35min | 3 tasks | 8 files |
+| Phase 04 P14 | 3h 40m | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -142,6 +171,8 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Phase 04]: 04-13: el estado inicial del canal es DEGRADADO, no en vivo. Antes del primer SUBSCRIBED no hay conexion, y arrancar en verde para bajar a ambar es la mentira silenciosa que D-14 existe para evitar.
 - [Phase 04]: 04-13: el sondeo de respaldo (120s en vivo, 30s caido, pausado con la pestana oculta) se construye SIEMPRE. Es lo que deja a Realtime como una capa que se puede quitar sin romper la pantalla, que es el escenario de hoy con el checkpoint A1 abierto.
 - [Phase 04]: 04-13: el estado optimista de Marcar como atendida usa useOptimistic con base vacia, no useState. Revierte solo al terminar la transicion, y eso cubre el ok:false por CERO FILAS AFECTADAS sin restaurar el id a mano en la rama de fallo.
+- [Phase ?]: 04-14: las nueve Server Actions de /operacion NO llaman revalidatePath; colgaba el navegador y el refresco lo pide router.refresh() en el cliente
+- [Phase ?]: 04-14: cn() usa extendTailwindMerge con los max-w-* del proyecto; sin eso el Sheet de confirmacion medía 8px
 
 ### Pending Todos
 
@@ -153,6 +184,7 @@ Ninguno.
 - **[Fase 3, resuelto por diseño]** La contradiccion sobre la estabilidad del `UID` de Airbnb dejo de ser bloqueante: la identidad del aseo es `(property_id, scheduled_date)`, no la reserva. La instrumentacion (`feed_sync_runs.uid_rotations` y `min_ends_on`) quedo escrita y se lee al tercer dia de sync en produccion, ver `deferred-items.md` de la Fase 3
 - **[Fase 1] Abierto de producto:** la lista definitiva de tareas del checklist bloquea el seed del catálogo, no el schema. Se arranca con el catálogo provisional (máximo 3 tareas por tipo de cuarto), editable sin migración
 - **[Fase 5] Riesgo aceptado:** push como único canal, sin semáforo de entregabilidad. Si en el piloto de Bogotá un aseo confirmado nunca llega al aseador, entra el semáforo (NOTIF-V2-01)
+- ALTA (04-14): AlertDialog (~32px) y Tooltip (4px) colapsados. max-w-<nombre> resuelve contra --spacing-* antes que --container-* en Tailwind v4.3. Decision de sistema de diseno, afecta a toda la app, mirar antes de la Fase 5
 
 ## Consecuencias de la Fase 1 para fases posteriores
 
@@ -187,7 +219,7 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-06T19:48:15.737Z
+Last session: 2026-09-06T21:49:40.726Z
 Stopped at: Completado 04-13-PLAN.md
 
 **Sin bloqueos activos.** El stack local de Supabase esta arriba y sano (12 contenedores), la

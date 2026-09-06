@@ -146,7 +146,7 @@ Plans:
 - [x] 04-11-PLAN.md — `MenuAseo` y los cuatro diálogos de mutación
 - [x] 04-12-PLAN.md — Historial del apartamento con los daños (DASH-06, REPORT-04)
 - [x] 04-13-PLAN.md — Panel de alertas, marca de frescura y Realtime con degradación
-- [ ] 04-14-PLAN.md — E2E, prueba de escala de grises y puerta de fase
+- [x] 04-14-PLAN.md — E2E, prueba de escala de grises y puerta de fase
 **UI hint**: yes
 
 **Costura conocida:** al confirmar, el aseo queda asignado pero **no se notifica a nadie** hasta que exista la Fase 5. El evento se escribe en la cola de notificaciones y se drena cuando el worker exista. Es intencional, no un olvido.
@@ -249,7 +249,7 @@ Fases con patrón ya documentado en el research (se puede saltar):
 | 1. Fundación, schema y RLS | 9/9 | Complete (passed_with_gaps) | 2026-09-01 |
 | 2. Acceso y administración del catálogo | 15/15 | Executed — 2 checkpoints humanos abiertos | 2026-09-02 |
 | 3. Motor de sincronización iCal | 10/10 | Complete (passed_with_gaps) | 2026-09-03 |
-| 4. Dashboard operativo del admin | 13/14 | In Progress|  |
+| 4. Dashboard operativo del admin | 14/14 | Complete   | 2026-09-06 |
 | 5. Notificaciones push e instalación de la PWA | 0/TBD | Not started | - |
 | 6. PWA del aseador, offline-first | 0/TBD | Not started | - |
 | 7. Financiero | 0/TBD | Not started | - |
