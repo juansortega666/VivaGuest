@@ -21,7 +21,7 @@ import {
  * (`PostgrestError`) o el driver directo. Se tipa laxo a propósito: el error puede
  * venir de una Server Action, de un RPC o del cliente, y ninguno garantiza la forma.
  */
-export type DbErrorLike = { code?: string; message?: string };
+export type DbErrorLike = { code?: string; message?: string; hint?: string };
 
 const MENSAJE_GENERICO =
   'No se pudo completar la operación. Intenta de nuevo; si persiste, reporta el problema.';
@@ -133,6 +133,14 @@ const CAMPOS_POR_CONSTRAINT: ReadonlyArray<readonly [string, string]> = [
   // también: lo dispara el pipeline iCal, no un formulario.
 ];
 
+/** El primero de los candidatos que trae texto util. `undefined` si ninguno. */
+function primeroConTexto(...candidatos: Array<string | undefined>): string | undefined {
+  for (const c of candidatos) {
+    if (c && c.trim().length > 0) return c;
+  }
+  return undefined;
+}
+
 function buscar(
   tabla: ReadonlyArray<readonly [string, string]>,
   message: string | undefined,
@@ -151,7 +159,8 @@ function buscar(
  *  - Siempre devuelve un string. Nunca lanza, ni con `{}` ni con `null` disfrazado.
  *  - Nunca devuelve el texto crudo de Postgres, con una única excepción: `P0001`, que
  *    es el errcode con el que los RPC `SECURITY DEFINER` de este proyecto levantan
- *    mensajes de negocio ya redactados en español.
+ *    mensajes de negocio ya redactados en español. Y ese texto viaja en el `hint`,
+ *    no en el `message`: ver la rama de `P0001` más abajo.
  *  - No filtra qué recurso se pidió en el caso de `42501` (permiso denegado): decirle
  *    a un aseador que existe la tabla `property_secrets` ya es información de más.
  */
@@ -179,8 +188,17 @@ export function mapDbError(e: DbErrorLike): string {
     case 'PGRST301': // JWT inválido o expirado (PostgREST)
       return MENSAJE_NO_AUTORIZADO;
 
-    case 'P0001': // raise exception desde un RPC: el mensaje ya viene redactado
-      return message && message.trim().length > 0 ? message : MENSAJE_GENERICO;
+    case 'P0001':
+      // MEDIDO el 2026-09-06 contra PostgREST, y corrige lo que este mismo
+      // archivo daba por hecho: los RPC del proyecto levantan la excepcion con
+      // un TOKEN de maquina como mensaje y el texto en español en el `hint`.
+      // La respuesta real de `close_cleaning` sobre un aseo inexistente es
+      //   { code: 'P0001', message: 'aseo_no_cerrable',
+      //     hint: 'El aseo no existe, es de gestion externa, …' }
+      // Devolver `message` a secas pintaba `aseo_no_cerrable` en pantalla: un
+      // identificador interno, en la cara del admin. Por eso el `hint` manda y
+      // el mensaje queda de respaldo, para los RPC que no lo traigan.
+      return primeroConTexto(e?.hint, message) ?? MENSAJE_GENERICO;
 
     case 'PGRST116': // 0 filas donde se esperaba exactamente 1
       return 'No se encontró el registro solicitado.';

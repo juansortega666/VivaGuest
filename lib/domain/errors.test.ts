@@ -91,6 +91,41 @@ describe('mapDbError', () => {
     expect(msg).toBe('El aseo ya fue completado y no admite mas cambios.');
   });
 
+  // MEDIDO contra PostgREST el 2026-09-06: los RPC del proyecto levantan la
+  // excepcion con un TOKEN de maquina como `message` y el texto en español en el
+  // `hint`. La respuesta literal de `close_cleaning` sobre un aseo inexistente:
+  //   { code: 'P0001', message: 'aseo_no_cerrable', hint: 'El aseo no existe, …' }
+  // Sin esta rama, el admin veia `aseo_no_cerrable` en pantalla.
+  it('con P0001 manda el hint, que es donde los RPC ponen el español', () => {
+    const msg = mapDbError({
+      code: 'P0001',
+      message: 'aseo_no_cerrable',
+      hint: 'El aseo no existe, es de gestión externa, o ya está cerrado o cancelado.',
+    });
+    expect(msg).toBe('El aseo no existe, es de gestión externa, o ya está cerrado o cancelado.');
+    expect(msg).not.toContain('aseo_no_cerrable');
+  });
+
+  it('un P0001 sin hint sigue cayendo al mensaje, no al generico', () => {
+    const msg = mapDbError({ code: 'P0001', message: 'Mensaje ya redactado.', hint: '   ' });
+    expect(msg).toBe('Mensaje ya redactado.');
+  });
+
+  it('un P0001 sin hint y sin mensaje cae al generico, y no lanza', () => {
+    const msg = mapDbError({ code: 'P0001' });
+    expect(msg.length).toBeGreaterThan(0);
+  });
+
+  it('el hint NO se usa fuera de P0001: un 42501 no puede filtrar el recurso', () => {
+    const msg = mapDbError({
+      code: '42501',
+      message: 'permission denied for table property_secrets',
+      hint: 'GRANT SELECT ON public.property_secrets TO authenticated;',
+    });
+    expect(msg).toBe('No tienes permiso para esta operación.');
+    expect(msg).not.toContain('GRANT');
+  });
+
   it('cae al generico si un 23505 no reconoce el nombre del indice', () => {
     const msg = mapDbError({ code: '23505', message: dup('indice_que_no_existe') });
     expect(msg.length).toBeGreaterThan(0);

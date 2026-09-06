@@ -43,7 +43,9 @@ let respuestaUpdate: RespuestaFalsa = { data: [{ id: 'n1' }], error: null };
 const rpc = vi.fn(async () => respuestaRpc);
 const select = vi.fn(async () => respuestaUpdate);
 const eq = vi.fn(() => ({ select, eq }));
-const update = vi.fn(() => ({ eq }));
+// El parametro va tipado a proposito: sin el, `update.mock.calls[0][0]` es una
+// tupla vacia para TypeScript y la asercion de la unica columna no compila.
+const update = vi.fn((_valores: Record<string, unknown>) => ({ eq }));
 const from = vi.fn(() => ({ update }));
 
 const USUARIO = { id: '11111111-1111-4111-8111-111111111111' };
@@ -280,8 +282,18 @@ describe('camino feliz', () => {
     // `fileURLToPath` y no `.pathname`: la ruta lleva `(admin)` y un espacio
     // basta para que la forma cruda de la URL deje de ser una ruta valida.
     const fuente = readFileSync(fileURLToPath(new URL('./_actions.ts', import.meta.url)), 'utf8');
-    expect(fuente).not.toContain('createAdminClient');
-    expect(fuente).not.toContain('supabase/admin');
+
+    // Se filtran los comentarios ANTES de buscar, con el mismo criterio que usa
+    // `scripts/ci/check-service-role.sh`: la cabecera de `_actions.ts` nombra la
+    // fabrica para explicar por que NO se usa, y una prohibicion explicada no es
+    // una violacion. Lo que se prohibe es el codigo.
+    const codigo = fuente
+      .split('\n')
+      .filter((l) => !/^\s*(\/\/|\/\*|\*)/.test(l))
+      .join('\n');
+
+    expect(codigo).not.toContain('createAdminClient');
+    expect(codigo).not.toMatch(/from\s+'@?\/?lib\/supabase\/admin'/);
   });
 });
 
@@ -433,7 +445,7 @@ describe('marcarAlertaAtendida escribe UNA columna', () => {
     expect(from).toHaveBeenCalledWith('notifications');
     expect(update).toHaveBeenCalledTimes(1);
 
-    const escrito = update.mock.calls[0][0] as Record<string, unknown>;
+    const escrito = update.mock.calls[0][0];
     // El grant de `notifications` es de TABLA y la policy acota FILAS, no
     // columnas: nada en la base impide que un `update` con el objeto entero
     // sobrescriba `title`, `body`, `url` o `payload`. La disciplina es de la
@@ -448,7 +460,7 @@ describe('marcarAlertaAtendida escribe UNA columna', () => {
 
   it('devolverAlertaAlPanel escribe `read_at: null` y nada mas', async () => {
     await devolverAlertaAlPanel(ALERTA);
-    const escrito = update.mock.calls[0][0] as Record<string, unknown>;
+    const escrito = update.mock.calls[0][0];
     expect(escrito).toEqual({ read_at: null });
   });
 
