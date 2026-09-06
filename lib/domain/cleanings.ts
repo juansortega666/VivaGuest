@@ -155,6 +155,30 @@ function derivarClave(c: EntradaEstadoAseo): ClaveEstadoAseo {
 }
 
 /**
+ * Copy del `tipo` de aseo (UI-SPEC §5.1).
+ *
+ * `normal` devuelve `null` a proposito y no la cadena `'Normal'`: el tipo por
+ * defecto NO se pinta. Un badge en cada fila que dijera `Normal` es ruido en el
+ * 95 % de las filas y le quita al `Repaso` justo la prominencia que le da ser la
+ * excepcion. Quien llama decide como pintarlo —badge en la fila de la tabla,
+ * texto suelto en la linea 2 del historial— pero la PALABRA sale de aqui.
+ *
+ * Sin rama por defecto y con `switch` exhaustivo, misma regla que
+ * `derivarClave()`: el dia que la migracion anada un cuarto valor a
+ * `cleaning_type`, `tsc` rompe aqui.
+ */
+export function copyDeTipoDeAseo(tipo: Tables<'cleanings'>['tipo']): string | null {
+  switch (tipo) {
+    case 'normal':
+      return null;
+    case 'repaso':
+      return 'Repaso';
+    case 'emergencia':
+      return 'Emergencia';
+  }
+}
+
+/**
  * Copy de los slugs de `cancel_reason` (UI-SPEC §18.2).
  *
  * Vive aqui y no en el componente por la misma razon que la derivacion de estado: el

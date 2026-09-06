@@ -11,11 +11,16 @@ import {
   listarClusters,
   listarTiposDeCuarto,
 } from '@/lib/data/apartamentos';
+import { leerHistorial } from '@/lib/data/historial';
 import { createClient } from '@/lib/supabase/server';
 
 import { leerSecretos } from '../_actions';
 import { EstadoApartamento } from '../_components/EstadoApartamento';
 import { FormularioApartamento } from '../_components/FormularioApartamento';
+import {
+  HistorialApartamento,
+  limiteDeHistorial,
+} from '../_components/HistorialApartamento';
 
 export const metadata: Metadata = {
   title: 'Editar apartamento · VivaGuest',
@@ -43,8 +48,10 @@ export const metadata: Metadata = {
  */
 export default async function EditarApartamentoPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ historial?: string }>;
 }) {
   const { id } = await params;
   const supabase = await createClient();
@@ -52,11 +59,18 @@ export default async function EditarApartamentoPage({
   const apartamento = await leerApartamento(supabase, id);
   if (!apartamento) notFound();
 
-  const [filas, aseadores, tipos, secretos] = await Promise.all([
+  // Cuantas entradas del historial mostrar. Llega de la QUERY STRING, asi que
+  // pasa por `limiteDeHistorial()`, que la redondea al bloque de 30 y le pone
+  // techo: sin eso, `?historial=999999` es una consulta arbitrariamente grande
+  // servida a cualquiera que sepa escribirla.
+  const limiteHistorial = limiteDeHistorial((await searchParams).historial);
+
+  const [filas, aseadores, tipos, secretos, historial] = await Promise.all([
     listarApartamentos(supabase),
     listarAseadoresActivos(supabase),
     listarTiposDeCuarto(supabase),
     leerSecretos(id),
+    leerHistorial(supabase, id, limiteHistorial),
   ]);
 
   // `leerApartamento` ya trajo las dos colecciones de la sección 5. Los cuartos
@@ -93,6 +107,21 @@ export default async function EditarApartamentoPage({
         secretosGuardados={secretos}
         cuartosGuardados={cuartos}
         faltantesGuardados={faltantes}
+      />
+
+      {/*
+        El historial va DESPUES del formulario y como seccion mas de la ficha, no
+        en una ruta propia (D-22): es contexto de lo de arriba, no un destino. No
+        toca el formulario ni su barra de acciones fija.
+
+        Se renderiza tambien en unidades de gestion externa: sus aseos inertes
+        aparecen con `CircleDashed` y sin aseador, porque el historial de fechas
+        si es real aunque VivaGuest no las opere.
+      */}
+      <HistorialApartamento
+        propertyId={propiedad.id}
+        historial={historial}
+        limite={limiteHistorial}
       />
     </div>
   );

@@ -117,3 +117,28 @@ son tres hoy y una por fixture nueva a partir de mañana.
 
 **A quién le toca:** al plan 04-14, que es el que vuelve a tocar `e2e/`, o a un `gsd-quick` de una
 línea.
+
+---
+
+## `Repaso` y `Emergencia` escritos a mano en dos sitios de `/operacion` (04-12)
+
+**Hallado durante:** la tarea 2 del plan 04-12, al necesitar el mismo copy en la línea 2 del
+historial.
+
+**Estado:** el plan 04-12 añadió `copyDeTipoDeAseo()` a `lib/domain/cleanings.ts`, junto a los otros
+dos mapas de copy del módulo, y el historial lo usa. Los dos sitios que ya existían siguen con la
+cadena literal:
+
+- `app/(admin)/operacion/_components/FilaAseo.tsx:80` — el `Badge` de tipo.
+- `app/(admin)/operacion/_components/DialogoCrearAseo.tsx:84` — la opción del `Select`.
+
+**Por qué NO se cambiaron desde 04-12:** son archivos de los planes 04-10 y 04-11 y ninguno de los
+dos está en el `files_modified` de 04-12. La regla de alcance dice que solo se auto-corrige lo que
+causan los cambios del plan en curso.
+
+**Qué haría falta:** sustituir las dos cadenas por `copyDeTipoDeAseo(tipo)`. Es mecánico y la salida
+es idéntica; lo que compra es que el día que `Repaso` cambie de nombre no se quede la mitad de la app
+diciendo lo viejo.
+
+**A quién le toca:** al plan que vuelva a tocar `app/(admin)/operacion/_components/`, o a un
+`gsd-quick`.
