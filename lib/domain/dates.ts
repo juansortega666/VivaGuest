@@ -76,6 +76,29 @@ export function hoyBog(): string {
 }
 
 /**
+ * El dia de negocio de BOGOTA al que pertenece un instante, como `'YYYY-MM-DD'`.
+ *
+ * Es `hoyBog()` con el instante por parametro en vez de leido del reloj, y usa el
+ * MISMO formateador, que es justo la razon por la que vive aqui y no en quien la
+ * llama: la unica constante de zona del repo es `TZ_BOGOTA` y este archivo es el
+ * unico sitio donde se convierte un instante en un dia calendario.
+ *
+ * La necesita el historial del apartamento (DASH-06): `damages.created_at` es un
+ * `timestamptz` y hay que mezclarlo cronologicamente con `cleanings.scheduled_date`,
+ * que es un `date`. El error obvio ahi es `created_at.slice(0, 10)`, que devuelve
+ * el dia de UTC: un dano reportado a las 21:00 de Bogota se pintaria en el dia
+ * SIGUIENTE, y ademas saltaria por encima del aseo con el que se reporto.
+ *
+ * Devuelve `null` si la marca es nula o ilegible, misma regla que `tiempoRelativo`:
+ * inventar un 1970 pondria la entrada al final de la lista sin que nada lo diga.
+ */
+export function diaBog(instante: number | string | null | undefined): string | null {
+  const ms = aMilisegundos(instante);
+  if (ms === null) return null;
+  return HOY_BOGOTA.format(new Date(ms));
+}
+
+/**
  * `DTSTAMP` de un `VCALENDAR` en su forma UTC basica: `20260901T120000Z`.
  * Airbnb lo emite siempre asi. Cualquier otra forma se ignora.
  */

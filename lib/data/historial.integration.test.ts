@@ -246,7 +246,10 @@ describe('leerHistorial contra PostgREST real', () => {
         nombre: `Int Historial Vacio ${SUFIJO}`,
         cluster: 'Int Cluster Historial',
         gestion_vivaguest: true,
-        is_active: true,
+        // Borrador, no activo: `props_active_requires_owner` exige responsable
+        // para activar, y a este apartamento no le hace falta uno. Un borrador
+        // recién creado es además el caso REAL del historial vacío.
+        is_active: false,
       })
       .select('id')
       .single();

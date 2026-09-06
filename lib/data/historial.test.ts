@@ -95,10 +95,10 @@ describe('mezclarHistorial', () => {
     expect(secuencia(entradas)).toEqual([
       'aseo:a-nuevo',
       'dano:d-nuevo',
-      'aseo:a-viejo',
       'dano:d-viejo',
+      'aseo:a-viejo',
     ]);
-    expect(fechas(entradas)).toEqual(['2026-09-05', '2026-09-03', '2026-08-10', '2026-08-20']);
+    expect(fechas(entradas)).toEqual(['2026-09-05', '2026-09-03', '2026-08-20', '2026-08-10']);
   });
 
   it('un daño RESUELTO aparece igual que uno abierto, con su marca', () => {
@@ -139,7 +139,9 @@ describe('mezclarHistorial', () => {
       }
     }
 
-    expect(entradas.map((e) => e.clase)).toEqual(['aseo', 'dano']);
+    // Las dos clases están, una vez cada una. El ORDEN entre ellas no es lo que
+    // mide este test: lo fija el bloque de arriba.
+    expect([...entradas.map((e) => e.clase)].sort()).toEqual(['aseo', 'dano']);
   });
 
   it('desempata dentro del MISMO día por el instante, y de forma estable', () => {
