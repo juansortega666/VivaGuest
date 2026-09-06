@@ -2,8 +2,10 @@ import { Plus } from 'lucide-react';
 import type { Metadata } from 'next';
 
 import { Button } from '@/components/ui/button';
+import { listarApartamentos } from '@/lib/data/apartamentos';
 import {
   agruparPorDia,
+  bandejaSinConfirmar,
   cargaPorAseador,
   leerAseadoresActivos,
   leerOperacion,
@@ -11,6 +13,7 @@ import {
 import { formatFechaBog } from '@/lib/domain/dates';
 import { createClient } from '@/lib/supabase/server';
 
+import { BandejaSinConfirmar } from './_components/BandejaSinConfirmar';
 import { BloqueDia } from './_components/BloqueDia';
 import { LeyendaDeAseos } from './_components/EstadoAseo';
 import { FranjaCarga } from './_components/FranjaCarga';
@@ -62,19 +65,43 @@ export const metadata: Metadata = {
  * PURAS sobre ese mismo conjunto. Asi la pantalla tiene UNA marca de tiempo que
  * mostrar y no tres, que es lo que D-14 pide. La lista de aseadores activos si es
  * un segundo viaje: vive en `profiles` y no hay forma de traerla en el mismo.
+ *
+ * ── Y POR QUE HAY UN TERCER VIAJE, AL CATALOGO ─────────────────────────────
+ * `listarApartamentos()` alimenta DOS cosas que la consulta de aseos no puede
+ * dar, y por eso no se duplica el embed de `leerOperacion`:
+ *
+ *   1. El RESPONSABLE FIJO de cada apartamento, que es la linea
+ *      `Queda asignado a {nombre}` del Sheet de confirmacion (§10). No sale de
+ *      `cleanings.aseador_id`: un aseo sin confirmar todavia no tiene aseador,
+ *      porque es `confirm_cleaning` quien lo asigna al responsable. El dato vive
+ *      en `properties.responsable_id`.
+ *   2. Las unidades GESTIONADAS Y ACTIVAS del combobox de `Crear aseo` (§12.3).
+ *      El catalogo trae las 39; la operacion solo las que tienen aseo en la
+ *      ventana, que no es lo mismo.
+ *
+ * Son 39 filas y ~8 perfiles, en la misma sesion y en paralelo con las otras dos.
  */
 export default async function OperacionPage() {
   const supabase = await createClient();
 
-  // En paralelo: son dos consultas independientes contra la misma sesion, y
-  // encadenarlas con dos `await` seguidos sumaria las dos latencias por nada.
-  const [operacion, aseadores] = await Promise.all([
+  // En paralelo: son tres consultas independientes contra la misma sesion, y
+  // encadenarlas con tres `await` seguidos sumaria las tres latencias por nada.
+  const [operacion, aseadores, apartamentos] = await Promise.all([
     leerOperacion(supabase),
     leerAseadoresActivos(supabase),
+    listarApartamentos(supabase),
   ]);
 
   const bloques = agruparPorDia(operacion.filas, operacion.hoy);
   const chips = cargaPorAseador(operacion.filas, operacion.hoy, aseadores);
+  const sinConfirmar = bandejaSinConfirmar(operacion.filas);
+
+  // `property_id` → nombre del responsable fijo. `null` cuando no tiene, que es
+  // la carencia que el Sheet levanta ANTES de que `confirm_cleaning` lance su
+  // `P0001 sin_responsable`.
+  const responsables = Object.fromEntries(
+    apartamentos.map((a) => [a.id, a.responsableNombre]),
+  );
 
   // `Siguientes` cuenta lo de sus cinco dias juntos en su cabecera, y cada dia
   // vuelve a contar lo suyo en la propia. No es duplicar: la de fuera es la que se
@@ -200,7 +227,11 @@ export default async function OperacionPage() {
         <aside
           aria-label="Pendientes y alertas"
           className="flex flex-col gap-lg max-xl:order-first xl:sticky xl:top-barra xl:h-[calc(100svh-var(--spacing-barra)-var(--spacing-xl))]"
-        ></aside>
+        >
+          {/* Bloque superior. El inferior queda para el panel de alertas del
+              plan 04-13, que se lleva el `flex-1` que sobra. */}
+          <BandejaSinConfirmar filas={sinConfirmar} responsables={responsables} />
+        </aside>
       </div>
     </div>
   );
