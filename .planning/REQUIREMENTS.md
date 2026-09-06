@@ -53,12 +53,12 @@
 ### Ciclo de vida del aseo
 
 - [ ] **ASEO-01**: Todo aseo nace en Pendiente sin confirmar y aparece en la bandeja "Sin confirmar"
-- [ ] **ASEO-02**: Admin confirma el aseo en un solo paso escribiendo número de huéspedes e instrucciones
-- [ ] **ASEO-03**: Al confirmar, el aseo queda asignado en firme al responsable del apartamento
+- [x] **ASEO-02**: Admin confirma el aseo en un solo paso escribiendo número de huéspedes e instrucciones
+- [x] **ASEO-03**: Al confirmar, el aseo queda asignado en firme al responsable del apartamento
 - [x] **ASEO-04**: Admin reasigna un aseo puntual sin modificar el responsable ni el suplente del apartamento
 - [x] **ASEO-05**: Admin crea aseos manuales tipo `repaso` y `emergencia`
 - [x] **ASEO-06**: Admin reprograma la fecha de un aseo
-- [ ] **ASEO-07**: El sistema impide crear un segundo aseo activo para el mismo apartamento y fecha, con mensaje de error explícito
+- [x] **ASEO-07**: El sistema impide crear un segundo aseo activo para el mismo apartamento y fecha, con mensaje de error explícito
 - [x] **ASEO-08**: Admin cierra manualmente un aseo que la realidad ya resolvió
 - [x] **ASEO-09**: Admin cancela un aseo
 
@@ -101,7 +101,7 @@
 - [x] **DASH-01**: Admin ve los servicios organizados por día (hoy, mañana y siguientes)
 - [ ] **DASH-02**: Admin ve una bandeja persistente con los aseos sin confirmar
 - [x] **DASH-03**: Admin ve la carga diaria por aseador para decidir si activa un suplente
-- [ ] **DASH-04**: Admin ve un panel de alertas con la misma jerarquía visual para: urgentes, extensión mal creada, "no puedo", daños, faltantes y calendario caído
+- [x] **DASH-04**: Admin ve un panel de alertas con la misma jerarquía visual para: urgentes, extensión mal creada, "no puedo", daños, faltantes y calendario caído
 - [ ] **DASH-05**: Admin ve alertados los aseos cuya hora límite venció sin terminarse
 - [ ] **DASH-06**: Admin ve el historial cronológico de un apartamento
 - [x] **DASH-07**: Los aseos de apartamentos con `gestion_vivaguest = false` se muestran con su fecha y a cargo de quién, sin estado ni acciones
@@ -207,12 +207,12 @@
 | SYNC-10 | Fase 3 | Complete |
 | SYNC-11 | Fase 3 | Complete |
 | ASEO-01 | Fase 4 | Pending |
-| ASEO-02 | Fase 4 | Pending |
-| ASEO-03 | Fase 4 | Pending |
+| ASEO-02 | Fase 4 | Complete |
+| ASEO-03 | Fase 4 | Complete |
 | ASEO-04 | Fase 4 | Complete |
 | ASEO-05 | Fase 4 | Complete |
 | ASEO-06 | Fase 4 | Complete |
-| ASEO-07 | Fase 1 | Pending |
+| ASEO-07 | Fase 1 | Complete |
 | ASEO-08 | Fase 4 | Complete |
 | ASEO-09 | Fase 4 | Complete |
 | PWA-01 | Fase 6 | Pending |
@@ -240,7 +240,7 @@
 | DASH-01 | Fase 4 | Complete |
 | DASH-02 | Fase 4 | Pending |
 | DASH-03 | Fase 4 | Complete |
-| DASH-04 | Fase 4 | Pending |
+| DASH-04 | Fase 4 | Complete |
 | DASH-05 | Fase 4 | Pending |
 | DASH-06 | Fase 4 | Pending |
 | DASH-07 | Fase 4 | Complete |

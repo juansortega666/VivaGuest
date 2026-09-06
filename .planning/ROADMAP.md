@@ -140,7 +140,7 @@ Plans:
 - [x] 04-05-PLAN.md — Migración 15: seis RPC `SECURITY DEFINER` + publicación de Realtime
 - [x] 04-06-PLAN.md — `lib/data/operacion.ts`: la consulta única y sus tres proyecciones
 - [x] 04-07-PLAN.md — Reprogramar contra el reconcile, y los diez señuelos de la capa de base
-- [ ] 04-08-PLAN.md — Las ocho Server Actions de la pantalla de operación
+- [x] 04-08-PLAN.md — Las ocho Server Actions de la pantalla de operación
 - [x] 04-09-PLAN.md — La pantalla `/operacion`: dos carriles, días, fila y franja de carga
 - [ ] 04-10-PLAN.md — Bandeja `Sin confirmar`, `Sheet` encadenado y creación manual
 - [ ] 04-11-PLAN.md — `MenuAseo` y los cuatro diálogos de mutación
@@ -249,7 +249,7 @@ Fases con patrón ya documentado en el research (se puede saltar):
 | 1. Fundación, schema y RLS | 9/9 | Complete (passed_with_gaps) | 2026-09-01 |
 | 2. Acceso y administración del catálogo | 15/15 | Executed — 2 checkpoints humanos abiertos | 2026-09-02 |
 | 3. Motor de sincronización iCal | 10/10 | Complete (passed_with_gaps) | 2026-09-03 |
-| 4. Dashboard operativo del admin | 8/14 | In Progress|  |
+| 4. Dashboard operativo del admin | 9/14 | In Progress|  |
 | 5. Notificaciones push e instalación de la PWA | 0/TBD | Not started | - |
 | 6. PWA del aseador, offline-first | 0/TBD | Not started | - |
 | 7. Financiero | 0/TBD | Not started | - |

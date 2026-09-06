@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Completado 04-09-PLAN.md. Siguiente: wave 6 (04-10, 04-11, 04-12)"
-last_updated: "2026-09-06T17:55:10.765Z"
-last_activity: 2026-09-06 -- 04-09 entregado: /operacion renderiza los tres bloques de dia con datos reales y es la raiz del admin
+stopped_at: "Completado 04-08-PLAN.md. Siguiente: wave 6 (04-10, 04-11, 04-12)"
+last_updated: "2026-09-06T18:34:31.394Z"
+last_activity: 2026-09-06 -- 04-08 entregado: las nueve Server Actions de /operacion, con el guard primero y el error de ASEO-07 legible
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 48
-  completed_plans: 42
-  percent: 88
+  completed_plans: 43
+  percent: 90
 ---
 
 # Project State
@@ -26,9 +26,24 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 ## Current Position
 
 Phase: 04 (dashboard-operativo-del-admin) — EXECUTING
-Plan: 8 of 14 de la Fase 4 (waves 1 a 5 cerradas; 04-08 y 04-09 entregados)
+Plan: 9 of 14 de la Fase 4 (waves 1 a 5 cerradas; 04-08 y 04-09 entregados)
 Status: Phase 04 EJECUTANDO, sin bloqueos. Siguiente: wave 6 (04-10, 04-11, 04-12)
-Last activity: 2026-09-06 -- El plan 04-09 pone en pantalla lo que el motor lleva generando:
+Last activity: 2026-09-06 -- El plan 04-08 pone las nueve Server Actions de `/operacion` en su sitio,
+con `exigirAdmin()` como PRIMERA operacion de las nueve y un test que lo mide por lo que NO llega a
+la base. El error de ASEO-07 sale interpolado con el nombre del apartamento y con `campo: 'fecha'`,
+asi que puede ir inline bajo el input. `marcarAlertaAtendida` escribe UNICAMENTE `read_at`, afirmado
+contra Postgres real leyendo `title`, `body`, `url` y `payload` antes y despues. Se corrio el senuelo
+declarado (cambiar `exigirAdmin()` por `exigirSesion()`) y salieron tres tests rojos: el mensaje que
+llega a la UI pasa del texto del guard al de `mapDbError`, y en la ruta de `notifications` pasa a
+"No se encontro el registro solicitado.", que habla de existencia de recursos donde deberia hablar de
+permisos. Suites: unit 29/548, integration 15/138, pgTAP 7/153 PASS, `ci:arch` OK, `next build` verde.
+
+HALLAZGO QUE AFECTA A TODA LA UI DEL ADMIN: los RPC de este proyecto levantan `P0001` con un TOKEN de
+maquina en el `message` y el español en el `hint`. `mapDbError()` leia el `message`, asi que la
+pantalla habria mostrado `aseo_no_cerrable`. Corregido en `lib/domain/errors.ts`: en `P0001` manda el
+`hint`. Afecta a las siete RPC, no a una.
+
+Del plan 04-09, que sigue vigente:
 `/operacion` renderiza los tres bloques de dia con datos reales sobre la rejilla de dos carriles
 (1000px de carril ancho a 1440, 840 a 1280, contra 532px de columnas fijas), la fila de 40px con su
 variante inerte de gestion externa (sin hover, sin area de clic completa, con "no aplica" en vez de
@@ -58,7 +73,7 @@ serie. Se pierde paralelismo solo en las waves 4 y 6.
 OJO, CAMBIO DE SIGNO: a partir de la migracion 15, un `not ok` en 06_aseos_admin.test.sql YA NO es
 esperado, es una regresion. Mismo caso que 05_sync.test.sql tras la Fase 3.
 
-Progress: [█████████░] 88%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
@@ -86,6 +101,7 @@ Progress: [█████████░] 88%
 | Phase 04 P06 | 158min | 2 tasks | 3 files |
 | Phase 04 P07 | 39min | 2 tasks | 2 files |
 | Phase 04 P09 | 66min | 3 tasks | 10 files |
+| Phase 04 P08 | 47min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -106,6 +122,8 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Fase 4] Un efecto aceptado se AFIRMA en la prueba: reprogramar deja un aseo sin confirmar en la fecha del checkout real, y eso esta en una asercion, no en un comentario
 - [Phase 04]: 04-09: /operacion es la raiz del admin (RAIZ.admin), y TopNav pasa a tres links con Operacion primero y el wordmark apuntando ahi
 - [Phase 04]: 04-09: el carril lateral reserva su presupuesto de altura cerrado ANTES de que existan sus dos cards, porque D-02 no se puede improvisar en 04-13
+- [Phase 04]: 04-08: el español de un P0001 viaja en el hint de Postgres, no en el message; mapDbError lo lee o la UI pinta el token de maquina (medido contra PostgREST)
+- [Phase 04]: 04-08: un UPDATE que afecta a cero filas por RLS no levanta error, asi que devolverlo como exito rompe el estado optimista del panel de alertas
 
 ### Pending Todos
 
@@ -151,12 +169,12 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-06T17:55:10.761Z
-Stopped at: Completado 04-09-PLAN.md. Siguiente: wave 6 (04-10, 04-11, 04-12)
+Last session: 2026-09-06T18:34:25.430Z
+Stopped at: Completado 04-08-PLAN.md. Siguiente: wave 6 (04-10, 04-11, 04-12)
 
 **Sin bloqueos activos.** El stack local de Supabase esta arriba y sano (12 contenedores), la
-migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` 28 archivos / 502 tests,
-`test:integration` **14 archivos / 128 tests**, `db:test` `Files=7, Tests=153, Result: PASS`.
+migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` **29 archivos / 548 tests**,
+`test:integration` **15 archivos / 138 tests**, `db:test` `Files=7, Tests=153, Result: PASS`.
 
 **Lo que hay que saber antes de tocar nada:**
 
@@ -184,5 +202,5 @@ migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` 28 arch
 6. **El resto del reloj YA NO lo domina iCloud** con las caches calientes: en el 04-07, `tsc` tardo
    segundos, `db:test` 2,3 s y la integracion completa 9,7 s.
 
-Siguiente: la wave 5 de la Fase 4.
+Siguiente: la wave 6 de la Fase 4 (04-10, 04-11, 04-12).
 Resume file: None
