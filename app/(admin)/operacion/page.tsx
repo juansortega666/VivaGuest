@@ -1,7 +1,5 @@
-import { Plus } from 'lucide-react';
 import type { Metadata } from 'next';
 
-import { Button } from '@/components/ui/button';
 import { listarApartamentos } from '@/lib/data/apartamentos';
 import {
   agruparPorDia,
@@ -15,6 +13,7 @@ import { createClient } from '@/lib/supabase/server';
 
 import { BandejaSinConfirmar } from './_components/BandejaSinConfirmar';
 import { BloqueDia } from './_components/BloqueDia';
+import { DialogoCrearAseo } from './_components/DialogoCrearAseo';
 import { LeyendaDeAseos } from './_components/EstadoAseo';
 import { FranjaCarga } from './_components/FranjaCarga';
 
@@ -103,6 +102,14 @@ export default async function OperacionPage() {
     apartamentos.map((a) => [a.id, a.responsableNombre]),
   );
 
+  // El combobox de `Crear aseo` no autoriza nada —`create_manual_cleaning`
+  // comprueba gestion y actividad por dentro, y un Server Action es un endpoint
+  // publico (T-04-04)—, asi que este filtro es UX: no ofrecer lo que la base va a
+  // rechazar. Ya vienen ordenadas por nombre desde `listarApartamentos`.
+  const apartamentosParaCrear = apartamentos
+    .filter((a) => a.gestion_vivaguest && a.is_active)
+    .map((a) => ({ id: a.id, nombre: a.nombre }));
+
   // `Siguientes` cuenta lo de sus cinco dias juntos en su cabecera, y cada dia
   // vuelve a contar lo suyo en la propia. No es duplicar: la de fuera es la que se
   // ve con el bloque cerrado, que es como nace.
@@ -127,11 +134,11 @@ export default async function OperacionPage() {
               plan 04-13, que es quien tiene el instante de lectura y el estado de
               sincronizacion. */}
 
-          {/* El dialogo lo cablea el plan 04-10 (`DialogoCrearAseo`). */}
-          <Button type="button" variant="outline">
-            <Plus aria-hidden="true" />
-            Crear aseo
-          </Button>
+          {/* El dialogo trae su propio disparador, igual que
+              `DialogoCrearAseador` de la Fase 2: el patron de "dialogo fuera del
+              menu" existe porque un `DropdownMenu` desmonta lo que tiene dentro
+              al cerrarse, y aqui el padre es esta cabecera, no un menu. */}
+          <DialogoCrearAseo apartamentos={apartamentosParaCrear} hoy={operacion.hoy} />
         </div>
       </div>
 
