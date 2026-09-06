@@ -406,6 +406,17 @@
      de variantes exacta, `data-[side=right]:sm:max-w-sheet`; ver la cabecera de
      components/ui/sheet.tsx. */
   --container-sheet: 480px;
+
+  /* Anchos minimos de los dos botones primarios de /operacion, por la misma
+     razon de §15.2 que los tres de la Fase 2: el boton NO puede saltar de ancho
+     al pasar a su gerundio, y `min-w-[172px]` seria el valor arbitrario que §2
+     prohibe. Los dos labels miden distinto, asi que son dos tokens:
+       `Confirmar y seguir` / `Confirmar y cerrar` -> `Confirmando…`
+       `Crear aseo`                               -> `Creando…`
+     El primero se deriva de --container-boton-activar (168px para `Guardar y
+     activar`, 17 caracteres) sumandole el caracter que tiene de mas. */
+  --container-boton-confirmar: 176px;
+  --container-boton-crear-aseo: 124px;
 }
 
 /* ── Tabla de dia y panel de alertas — 04-UI-SPEC.md §2, §7.1, §8.2 y §11 ─────

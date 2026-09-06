@@ -1,6 +1,8 @@
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { cn } from '@/lib/utils';
+
 /**
  * Estado vacio del admin (UI-SPEC §9.2, 04-UI-SPEC.md §15.1).
  *
@@ -63,6 +65,7 @@ export function EstadoVacio({
   cuerpo,
   accion,
   compacto = false,
+  claseIcono,
 }: {
   icono: LucideIcon;
   encabezado: string;
@@ -70,12 +73,22 @@ export function EstadoVacio({
   accion?: ReactNode;
   /** Variante para cards del carril lateral de 360px. Ver §15.1. */
   compacto?: boolean;
+  /**
+   * Color del icono, cuando el contrato lo fija distinto del gris por defecto.
+   *
+   * Lo pide la bandeja vacia (04-UI-SPEC.md §9): `Check` en `--status-ok`,
+   * porque ahi el vacio es un BUEN resultado —no queda nada por confirmar— y no
+   * la ausencia neutra de datos que representan los otros cuatro vacios. Es
+   * `cn()` sobre las clases de la variante, asi que el TAMANO lo sigue fijando
+   * `compacto` y quien llama no puede pisarlo por accidente.
+   */
+  claseIcono?: string;
 }) {
   const clases = clasesDeEstadoVacio(compacto);
 
   return (
     <div className={clases.contenedor}>
-      <Icono className={clases.icono} strokeWidth={2} aria-hidden="true" />
+      <Icono className={cn(clases.icono, claseIcono)} strokeWidth={2} aria-hidden="true" />
 
       <div className="flex flex-col gap-sm">
         <h2 className={clases.encabezado}>{encabezado}</h2>
