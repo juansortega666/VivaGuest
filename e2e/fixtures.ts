@@ -638,7 +638,21 @@ export async function fijarSaludDeSync(
   servicio: Servicio,
   propiedad: string,
   salud: 'sana' | 'caida',
+  otrasPropiedades: string[] = [],
 ): Promise<void> {
+  // ── SE BORRAN LOS FEEDS DE LAS OTRAS UNIDADES DEL ESCENARIO, Y NO ES CELO ──
+  // El computo mira `max(last_success_at)` sobre TODOS los feeds activos, asi que
+  // un feed sano que dejo un test anterior gana sobre el feed caido que este
+  // acaba de sembrar y la alerta global NO aparece. El sintoma es una fila de
+  // menos en el panel, en el test siguiente, sin nada que apunte a la causa.
+  if (otrasPropiedades.length > 0) {
+    const { error } = await servicio
+      .from('calendar_feeds')
+      .delete()
+      .in('property_id', otrasPropiedades);
+    if (error) throw new Error(`No se pudieron borrar los feeds: ${error.message}`);
+  }
+
   // Cuatro horas es más que el umbral de tres de `UMBRAL_SYNC_CAIDA_MS`, y `now`
   // está holgadamente dentro. No se usa el borde: un test que se apoya en el
   // límite exacto falla el día que la corrida sea lenta.
@@ -659,4 +673,59 @@ export async function fijarSaludDeSync(
     );
 
   if (error) throw new Error(`No se pudo fijar la salud del sync: ${error.message}`);
+}
+
+/** Un daño a sembrar. La tabla está vacía en producción hasta la Fase 6. */
+export interface DanoASembrar {
+  aseo: string;
+  propiedad: string;
+  descripcion: string;
+  /** Quién lo reportó. `damages.reported_by` es NOT NULL. */
+  reportadoPor: string;
+  /** `true` escribe `resolved_at`. Un daño resuelto NO se oculta: lleva sufijo. */
+  resuelto?: boolean;
+  /** El instante del reporte, que es lo que ordena la línea de tiempo. */
+  creadoEnMs: number;
+}
+
+/**
+ * Siembra daños, de uno en uno y en orden.
+ *
+ * ── ESTO NO OCURRE SOLO TODAVÍA, Y HAY QUE DECIRLO ──────────────────────────
+ * `damages` la escribe el aseador desde la PWA, que llega en la Fase 6. Hoy la
+ * tabla está vacía en cualquier entorno, así que el historial mezclado de aseos
+ * y daños (DASH-06, REPORT-04) solo se puede probar sembrando a mano. El nombre
+ * del spec que lo hace tiene que decirlo.
+ *
+ * `resolved_by` no se escribe: la RPC que resuelve un daño es de la Fase 6 y
+ * ponerlo aquí enmascararía un fallo suyo. El sufijo ` · Resuelto` lo decide
+ * `resolved_at`, que es lo que la UI lee.
+ */
+export async function sembrarDanos(
+  servicio: Servicio,
+  filas: DanoASembrar[],
+): Promise<string[]> {
+  const ids: string[] = [];
+
+  for (const fila of filas) {
+    const { data, error } = await servicio
+      .from('damages')
+      .insert({
+        cleaning_id: fila.aseo,
+        property_id: fila.propiedad,
+        descripcion: fila.descripcion,
+        reported_by: fila.reportadoPor,
+        created_at: new Date(fila.creadoEnMs).toISOString(),
+        resolved_at: fila.resuelto ? new Date(fila.creadoEnMs + 3_600_000).toISOString() : null,
+      })
+      .select('id')
+      .single();
+
+    if (error || !data) {
+      throw new Error(`No se pudo sembrar el daño «${fila.descripcion}»: ${error?.message}`);
+    }
+    ids.push(data.id);
+  }
+
+  return ids;
 }

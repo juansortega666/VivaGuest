@@ -28,7 +28,7 @@ import { cargarEnvLocal, clienteDeServicio } from './global-setup';
  * un aseo perfectamente y una pantalla que nunca llega a llamarla dan una suite
  * verde y un producto roto. Lo que este archivo mide, y ninguna de las otras dos
  * capas puede medir, es la cadena completa: clic → Server Action → RPC →
- * `revalidatePath` → la fila repintada.
+ * `router.refresh()` → la fila repintada.
  * ════════════════════════════════════════════════════════════════════════════
  *
  * ── LA SIEMBRA ES POR TEST Y NO POR ARCHIVO, Y ESO NO ES DERROCHE ───────────
@@ -43,12 +43,14 @@ import { cargarEnvLocal, clienteDeServicio } from './global-setup';
  * guarda, una corrida sobre una base con restos daría números que no cuadran y
  * el diagnóstico costaría una hora; con ella, el mensaje dice qué pasó.
  *
- * ── LOS TOASTS SE AFIRMAN LITERALES Y SE ESPERA A QUE SE VAYAN ──────────────
+ * ── LOS TOASTS SE AFIRMAN LITERALES, Y SU COPY ES EL CONTRATO ───────────────
  *
- * El flujo del criterio 3 encadena cinco mutaciones sobre EL MISMO aseo. Los
- * toasts duran cuatro segundos, así que sin esperar a que el anterior
- * desaparezca la aserción del siguiente podría cumplirse con el que sigue en
- * pantalla. `esperarToast()` afirma que apareció Y que se fue.
+ * El flujo del criterio 3 encadena cinco mutaciones sobre EL MISMO aseo, y cada
+ * paso afirma el texto EXACTO del contrato de copy. Ninguno de los cinco puede
+ * decir ni sugerir que se le avisó al aseador: nadie drena `notifications` hasta
+ * la Fase 5, así que `Queda asignado a María` es cierto y `Se le notificó a
+ * María` sería mentira (UI-SPEC §18.1). Los detalles de por qué no se espera al
+ * desvanecido están en `esperarToast()`.
  */
 
 /** El nombre accesible del menú de una fila, tal como lo compone `MenuAseo`. */
@@ -639,7 +641,7 @@ test('pulsar una alerta de un aseo de mañana ABRE el bloque Mañana y lleva a s
 
   // La sincronización SANA, para que la alerta global de calendario caído no meta
   // una segunda fila en el panel y la de urgente sea inequívoca.
-  await fijarSaludDeSync(servicio, gestionada.id, 'sana');
+  await fijarSaludDeSync(servicio, gestionada.id, 'sana', [escenario.segunda.id, escenario.tercera.id]);
 
   await paginaAdmin.goto('/operacion');
 
