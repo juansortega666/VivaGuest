@@ -154,3 +154,61 @@ Test Files  14 passed (14)
 dos: `supabase/migrations/20260903120000_15_rpc_admin_y_realtime.sql` y
 `supabase/migrations/20260902235500_14_sync_jobs.sql`, ambos restaurados con
 `git checkout -- supabase/` y verificados contra el índice.
+
+---
+
+# Señuelos de la Fase 4 — capa de interfaz (plan 04-14)
+
+**Corridos el 2026-09-06 por el ejecutor del plan 04-14, sobre el checkout principal.**
+
+Seis mutaciones sobre código de UI y de dominio, cada una rompiendo **una sola cosa**. El ciclo fue
+el mismo de la capa de base de datos, con un paso más porque el sujeto es un navegador:
+
+1. aplicar la mutación,
+2. `npm run build` (el señuelo tiene que viajar por el bundle de producción, no por `next dev`),
+3. reiniciar `next start` y correr el spec que corresponde,
+4. anotar la aserción roja **con su mensaje exacto**,
+5. `git checkout --` del archivo y reconstruir.
+
+Los seis salieron rojos. Ninguno se quedó verde, así que ninguna aserción tuvo que reescribirse.
+
+## Resumen
+
+| # | Mutación (archivo) | Suite | Prueba que se puso roja | Mensaje | Resultado |
+|---|---|---|---|---|---|
+| **11** | `FilaAseo.tsx` — renderizar `MenuAseo` también en la fila inerte (quitar el `!inerte &&`) | `test:e2e` | `operacion.spec.ts` → «una unidad de gestión externa aparece en el día, con su contacto, y SIN menú de acciones» | `expect(locator).toHaveCount(expected)` / `Expected: 0` / `Received: 1` | **atrapado** |
+| **12** | `SheetConfirmar.tsx` — acumular la tanda en memoria y llamar a la action solo en el último (`if (!esElUltimo) { avanzar(); return; }`) | `test:e2e` | `operacion.spec.ts` → «confirmar tres de quince y cerrar a mitad NO pierde lo confirmado» | `waiting for getByRole('button', { name: 'Confirmar 12 aseos' })` / `element(s) not found` — la bandeja seguía con quince porque no se escribió nada | **atrapado** |
+| **13** | `FilaAlerta.tsx` — codificar el tipo por color: `text-destructive` para `urgente` en vez del `--status-warn` uniforme | `test:e2e` | `operacion-alertas.spec.ts` → «los siete tipos … comparten color, tamaño y tratamiento» | `expect(new Set(iconos).size).toBe(1)` → `Expected: 1` / `Received: 2` | **atrapado** |
+| **14** | `PanelAlertas.tsx` — poner el contador sobre las filas renderizadas (`visibles.slice(0, 7)` y `total = visibles.length`) | `test:e2e` | `operacion-alertas.spec.ts` → «con treinta alertas la cabecera dice 30 aunque en pantalla quepan siete» | `waiting for … getByText('30', { exact: true })` / `element(s) not found` | **atrapado** |
+| **15** | `lib/domain/alertas.ts` — ordenar `mezclarAlertas()` por tipo antes que por instante | `test:unit` + `test:e2e` | 2 unitarios de `alertas.test.ts` y `operacion-alertas.spec.ts` → «las primeras cinco filas salen en orden cronológico y no agrupadas por tipo» | la secuencia sale alfabética: `CALENDARIO CAÍDO, DAÑO, EXTENSIÓN MAL CREADA, FALTANTES, HORA LÍMITE VENCIDA, NO PUEDO, URGENTE` | **atrapado** |
+| **16** | `lib/data/historial.ts` — añadir `.is('resolved_at', null)` a la consulta de daños | `test:integration` + `test:e2e` | 4 de integración y `historial.spec.ts` → «un daño resuelto SIGUE en el historial, con el sufijo · Resuelto» | `expect(locator).toHaveCount(expected)` / `Expected: 3` / `Received: 2` | **atrapado** |
+
+**Seis mutaciones, seis filas, cero escapes.**
+
+## Lo que dejó algo aprendido
+
+### 12 — El señuelo que se ve en la bandeja y no en el Sheet
+
+La mutación es la implementación "eficiente" que cualquiera escribiría: juntar los quince y mandar
+una sola vez al cerrar. Lo interesante es **dónde** se pone roja. Dentro del `Sheet` todo sigue
+siendo cierto: el progreso avanza, el `3 de 15` es correcto y el toast final dice
+`Confirmaste 3 de 15`. Lo que miente es la bandeja de detrás, que sigue diciendo
+`Confirmar 15 aseos` porque no se escribió una sola fila. Por eso la aserción que lo atrapa es la de
+la bandeja y la de la base, no ninguna de las del panel.
+
+### 15 y 16 — Los dos que rompen DOS capas a la vez
+
+Son los únicos dos que tocan `lib/`, y los dos ponen en rojo la capa de abajo **además** del e2e:
+el 15 saca 2 unitarios y el 16, 4 de integración. Es la señal de que la aserción de navegador no
+está midiendo algo que ya estaba medido más barato, sino la misma regla desde la otra punta: en el
+16, la capa de datos afirma que la fila viene y el e2e afirma que la fila se ve, con su sufijo.
+
+## Recuento de la fase
+
+| Capa | Señuelos corridos | Atrapados |
+|---|---|---|
+| Base de datos (plan 04-07) | 11 | 11 |
+| Interfaz y dominio (plan 04-14) | 6 | 6 |
+| **Total Fase 4** | **17** | **17** |
+
+**17 de 17.** Con las fases 1 a 3 (48 de 49), el acumulado del proyecto va en **65 de 66**.
