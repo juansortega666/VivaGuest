@@ -212,7 +212,7 @@ lo escribe**, y por eso es obligatoriamente computado.
 
 ---
 
-## ⚠️ ALTA — `AlertDialog` y `Tooltip` se renderizan con 4 y 8 píxeles de ancho (04-14)
+## ~~⚠️ ALTA — `AlertDialog` y `Tooltip` se renderizan con 4 y 8 píxeles de ancho (04-14)~~ RESUELTO 2026-09-07
 
 **Hallado durante:** la tarea 1 del plan 04-14, midiendo por qué el `Sheet` de confirmación era
 inusable en el navegador. **Es un defecto de la Fase 2 y afecta a toda la aplicación, no solo a
@@ -262,6 +262,27 @@ después de la del usuario dentro de la misma regla.
 
 **A quién le toca:** decisión del dueño del `UI-SPEC`. Es lo primero que hay que mirar de la
 Fase 5, porque toda la PWA del aseador se construye sobre las mismas primitivas.
+
+**Cerrado el 2026-09-07 por el quick `260907-703`**, commits `b6dbc4c` y `10e6ed7`. Se eligió la
+**opción 3**: editar las dos primitivas, siguiendo el patrón que el propio repo ya usa en `Sheet` y
+`Dialog` — un token `--container-<nombre-propio>` usado como `max-w-<nombre-propio>`. Un nombre
+propio no colisiona con la escala de espaciado, que es lo que rompía a `max-w-xs|sm|md|lg`.
+
+Se descartó la 1 (renombrar `--spacing-*`) porque toca cientos de usos en todo el repo, y la 2
+(override en cada sitio de uso) porque es dispersa y cada nuevo `AlertDialog` volvería a nacer roto.
+
+Tres tokens nuevos en `app/globals.css` — `--container-alerta` (320px), `--container-alerta-ancha`
+(384px) y `--container-tooltip` (320px) — registrados también en el grupo `max-w` de `cn()`, como
+exige la cabecera de `lib/utils.ts`. Las dos primitivas llevan ahora cabecera propia avisando de
+que una regeneración con el CLI de shadcn las devuelve a `max-w-xs`.
+
+**Medido en el CSS del build de producción**, que es la única verificación que ve este defecto:
+
+```
+max-w-alerta{max-width:var(--container-alerta)}              ->  320px
+max-w-alerta-ancha{max-width:var(--container-alerta-ancha)}  ->  384px
+max-w-tooltip{max-width:var(--container-tooltip)}            ->  320px
+```
 
 ---
 
