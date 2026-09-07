@@ -38,9 +38,11 @@ import { extendTailwindMerge } from "tailwind-merge"
  * `max-w-sm` de la primitiva. Con esto el `Sheet` mide sus 480px de D-09 y los
  * `Dialog` con `sm:max-w-dialogo` los suyos.
  *
- * LO QUE **NO** ARREGLA, Y ESTÁ REPORTADO: las primitivas que NO llevan override
- * en su sitio de uso siguen colapsadas — `alert-dialog` (`max-w-xs` / `sm:max-w-sm`)
- * y `tooltip` (`max-w-xs`). Ver el resumen del plan 04-14.
+ * LO QUE FALTABA, CERRADO EL 2026-09-07 (quick 260907-703): las primitivas que
+ * NO llevan override en su sitio de uso —`alert-dialog` y `tooltip`— ya no usan
+ * `max-w-xs` / `sm:max-w-sm`, sino los tokens con nombre propio
+ * `--container-alerta`, `--container-alerta-ancha` y `--container-tooltip`.
+ * Un nombre propio no colisiona con la escala de espaciado.
  * ════════════════════════════════════════════════════════════════════════════
  */
 const twMerge = extendTailwindMerge({
@@ -52,6 +54,8 @@ const twMerge = extendTailwindMerge({
       // CSS.
       "max-w": [
         "max-w-admin",
+        "max-w-alerta",
+        "max-w-alerta-ancha",
         "max-w-aseador",
         "max-w-col-acargo",
         "max-w-col-responsable-apto",
@@ -59,6 +63,7 @@ const twMerge = extendTailwindMerge({
         "max-w-formulario",
         "max-w-login",
         "max-w-sheet",
+        "max-w-tooltip",
         "max-w-vacio",
       ],
     },

@@ -407,6 +407,26 @@
      components/ui/sheet.tsx. */
   --container-sheet: 480px;
 
+  /* Anchos de las dos primitivas que NO llevan override en su sitio de uso:
+     `AlertDialog` y `Tooltip`. Los nombres son PROPIOS a proposito, y esto no
+     es cosmetico: Tailwind v4.3 resuelve `max-w-<nombre>` contra `--spacing-*`
+     ANTES que contra `--container-*`, y §2 declara la escala de espaciado con
+     nombres de talla (`--spacing-xs` = 4px, `--spacing-sm` = 8px). Por eso el
+     `max-w-xs` que traen las primitivas de shadcn emitia
+     `max-width:var(--spacing-xs)` = 4px, y el texto se salia de la caja.
+     Medido en el CSS de produccion por el plan 04-14.
+
+     Declarar `--container-xs/sm/md/lg` a mano NO lo corrige: el espaciado gana
+     igual. `@utility max-w-sm { ... }` tampoco: Tailwind emite su declaracion
+     despues de la del usuario dentro de la misma regla. Las dos se probaron y
+     se descartaron con medicion.
+
+     Regla derivada: ningun token de `--container-*` puede llamarse con un
+     nombre de talla mientras exista un `--spacing-*` homonimo. */
+  --container-alerta:       320px;  /* AlertDialog en movil y en tamano `sm` */
+  --container-alerta-ancha: 384px;  /* AlertDialog `default` a partir de sm: */
+  --container-tooltip:      320px;  /* tope del globo de ayuda */
+
   /* Anchos minimos de los dos botones primarios de /operacion, por la misma
      razon de §15.2 que los tres de la Fase 2: el boton NO puede saltar de ancho
      al pasar a su gerundio, y `min-w-[172px]` seria el valor arbitrario que §2
