@@ -1,5 +1,21 @@
 "use client"
 
+/**
+ * AlertDialog — generado por el CLI de shadcn y editado a proposito en UNA cosa:
+ * los tres `max-w-*` de `AlertDialogContent`.
+ *
+ * La salida del CLI trae `max-w-xs` y `sm:max-w-sm`, que en ESTE repo emiten
+ * `max-width:var(--spacing-xs)` = 4px y `var(--spacing-sm)` = 8px, porque
+ * Tailwind v4.3 resuelve `max-w-<nombre>` contra `--spacing-*` antes que contra
+ * `--container-*` y 02-UI-SPEC.md §2 nombra la escala de espaciado por tallas.
+ * Medido: el dialogo se renderizaba con ~32px de ancho y el texto se salia.
+ *
+ * Por eso van `max-w-alerta` y `max-w-alerta-ancha`, tokens con nombre PROPIO
+ * declarados en app/globals.css. Si algun dia se regenera este archivo con el
+ * CLI, hay que volver a poner los tres: el CLI no conoce estos tokens y su
+ * salida vuelve a nacer rota. Contexto completo en la cabecera de lib/utils.ts.
+ */
+
 import * as React from "react"
 import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog"
 
@@ -52,7 +68,7 @@ function AlertDialogContent({
         data-slot="alert-dialog-content"
         data-size={size}
         className={cn(
-          "group/alert-dialog-content fixed top-1/2 left-1/2 z-50 grid w-full -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "group/alert-dialog-content fixed top-1/2 left-1/2 z-50 grid w-full -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none data-[size=default]:max-w-alerta data-[size=sm]:max-w-alerta data-[size=default]:sm:max-w-alerta-ancha data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}
