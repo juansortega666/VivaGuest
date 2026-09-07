@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completado 04-14-PLAN.md; pendiente el checkpoint humano de las tres verificaciones perceptuales
-last_updated: "2026-09-06T22:00:00.000Z"
-last_activity: 2026-09-06
+stopped_at: Completado el quick 260907-703; sigue pendiente el checkpoint humano de las tres verificaciones perceptuales del 04-14
+last_updated: "2026-09-07T06:30:00.000Z"
+last_activity: 2026-09-07
 progress:
   total_phases: 9
   completed_phases: 4
@@ -28,7 +28,7 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 Phase: 04 (dashboard-operativo-del-admin) — CHECKPOINT HUMANO
 Plan: 14 of 14 de la Fase 4, todos entregados
 Status: Automatico en verde; esperando el visto bueno del usuario
-Last activity: 2026-09-06
+Last activity: 2026-09-07 - Completado el quick 260907-703: max-w de AlertDialog y Tooltip
 
 Del plan 04-14, que cierra la fase:
 
@@ -48,8 +48,12 @@ medidos:
    `tailwind-merge` no reconocia `max-w-sheet`, asi que el override del sitio de uso no desplazaba al
    de la primitiva. Corregido en `cn()`; el Sheet mide sus 480px y el spec lo MIDE.
 
-SIGUE ROTO Y ES LO PRIMERO A MIRAR: `AlertDialog` (~32px) y `Tooltip` (4px), que no llevan override.
-Es una decision de sistema de diseno y afecta a toda la app, incluida la PWA de la Fase 6.
+CERRADO EL 2026-09-07 por el quick `260907-703`: `AlertDialog` y `Tooltip` ya no llevan `max-w-xs`
+ni `sm:max-w-sm`, sino `--container-alerta` (320px), `--container-alerta-ancha` (384px) y
+`--container-tooltip` (320px), tokens con nombre propio que no colisionan con la escala de
+espaciado. Medido en el CSS del build de produccion, que es la unica capa donde ese defecto se ve.
+Lo que NO se cerro es la colision de fondo: `max-w-xs|sm|md|lg` siguen valiendo 4, 8, 12 y 16 px, y
+una primitiva nueva que los use nace rota. La regla derivada esta escrita en `app/globals.css`.
 
 NO SE CERRO, Y TOCA EL CORE VALUE: `hora_limite_vencida` sigue sin computarse para aseos anteriores a
 hoy, porque la ventana de `leerOperacion()` arranca en `hoyBog()`. Un aseo de ayer vencido y sin
@@ -135,6 +139,7 @@ Progress: [██████████] 100%
 | Phase 04 P12 | 20min | 2 tasks | 8 files |
 | Phase 04 P13 | 35min | 3 tasks | 8 files |
 | Phase 04 P14 | 3h 40m | 3 tasks | 14 files |
+| Quick 260907-703 | 1h 25m | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -173,6 +178,7 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Phase 04]: 04-13: el estado optimista de Marcar como atendida usa useOptimistic con base vacia, no useState. Revierte solo al terminar la transicion, y eso cubre el ok:false por CERO FILAS AFECTADAS sin restaurar el id a mano en la rama de fallo.
 - [Phase ?]: 04-14: las nueve Server Actions de /operacion NO llaman revalidatePath; colgaba el navegador y el refresco lo pide router.refresh() en el cliente
 - [Phase ?]: 04-14: cn() usa extendTailwindMerge con los max-w-* del proyecto; sin eso el Sheet de confirmacion medía 8px
+- [Quick 260907-703]: los anchos de las primitivas de shadcn van en tokens `--container-<nombre-propio>`, nunca con nombre de talla: `max-w-<nombre>` resuelve contra `--spacing-*` antes que contra `--container-*`, y todo token nuevo se registra ademas en el grupo `max-w` de cn()
 
 ### Pending Todos
 
@@ -184,7 +190,13 @@ Ninguno.
 - **[Fase 3, resuelto por diseño]** La contradiccion sobre la estabilidad del `UID` de Airbnb dejo de ser bloqueante: la identidad del aseo es `(property_id, scheduled_date)`, no la reserva. La instrumentacion (`feed_sync_runs.uid_rotations` y `min_ends_on`) quedo escrita y se lee al tercer dia de sync en produccion, ver `deferred-items.md` de la Fase 3
 - **[Fase 1] Abierto de producto:** la lista definitiva de tareas del checklist bloquea el seed del catálogo, no el schema. Se arranca con el catálogo provisional (máximo 3 tareas por tipo de cuarto), editable sin migración
 - **[Fase 5] Riesgo aceptado:** push como único canal, sin semáforo de entregabilidad. Si en el piloto de Bogotá un aseo confirmado nunca llega al aseador, entra el semáforo (NOTIF-V2-01)
-- ALTA (04-14): AlertDialog (~32px) y Tooltip (4px) colapsados. max-w-<nombre> resuelve contra --spacing-* antes que --container-* en Tailwind v4.3. Decision de sistema de diseno, afecta a toda la app, mirar antes de la Fase 5
+- ~~ALTA (04-14): AlertDialog (~32px) y Tooltip (4px) colapsados~~ **RESUELTO 2026-09-07** por el quick `260907-703`. Tokens `--container-alerta` (320px), `--container-alerta-ancha` (384px) y `--container-tooltip` (320px) dentro de las dos primitivas, medidos en el CSS de produccion. La colision de fondo `--spacing-*` vs `--container-*` SIGUE viva: cualquier primitiva nueva con `max-w-md`/`max-w-lg` nace rota, y la regla queda escrita en `app/globals.css`
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260907-703 | `AlertDialog` y `Tooltip` median 4 y 32 px: tokens `--container-*` con nombre propio en las dos primitivas | 2026-09-07 | dbf8a98 | [260907-703-max-w-primitivas-rotas](./quick/260907-703-max-w-primitivas-rotas/) |
 
 ## Consecuencias de la Fase 1 para fases posteriores
 
