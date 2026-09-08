@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completado el quick 260907-703; sigue pendiente el checkpoint humano de las tres verificaciones perceptuales del 04-14
-last_updated: "2026-09-07T06:30:00.000Z"
-last_activity: 2026-09-07
+stopped_at: Completado el quick 260908-7w0; la Fase 5 puede instalar primitivas de shadcn sin que nazcan rotas. Sigue pendiente el checkpoint humano de las tres verificaciones perceptuales del 04-14
+last_updated: "2026-09-08T11:20:00.000Z"
+last_activity: 2026-09-08
 progress:
   total_phases: 9
   completed_phases: 4
@@ -28,7 +28,7 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 Phase: 04 (dashboard-operativo-del-admin) — CHECKPOINT HUMANO
 Plan: 14 of 14 de la Fase 4, todos entregados
 Status: Automatico en verde; esperando el visto bueno del usuario
-Last activity: 2026-09-07 - Completado el quick 260907-703: max-w de AlertDialog y Tooltip
+Last activity: 2026-09-08 - Completado el quick 260908-7w0: Dialog y Sheet fuera de la colision max-w, y guardarrail en ci:arch
 
 Del plan 04-14, que cierra la fase:
 
@@ -197,6 +197,7 @@ Ninguno.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260907-703 | `AlertDialog` y `Tooltip` median 4 y 32 px: tokens `--container-*` con nombre propio en las dos primitivas | 2026-09-07 | dbf8a98 | [260907-703-max-w-primitivas-rotas](./quick/260907-703-max-w-primitivas-rotas/) |
+| 260908-7w0 | `Dialog` y `Sheet` dejaban de nacer con caja de 8px; `ci:arch` ahora atrapa las clases de ancho con nombre de talla | 2026-09-08 | 628720d | [260908-7w0-purgar-los-max-w-con-nombre-de-talla-de-](./quick/260908-7w0-purgar-los-max-w-con-nombre-de-talla-de-/) |
 
 ## Consecuencias de la Fase 1 para fases posteriores
 

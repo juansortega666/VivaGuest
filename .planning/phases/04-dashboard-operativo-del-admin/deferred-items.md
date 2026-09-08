@@ -347,3 +347,39 @@ del usuario en su máquina.
 
 **A quién le toca:** al usuario, `rm '.env 2.example'`. Recurrente mientras el proyecto viva en una
 carpeta sincronizada.
+
+---
+
+## Tailwind escanea `.planning/**/*.md` y emite CSS muerto desde la prosa (quick 260908-7w0)
+
+**Hallado durante:** la tarea 3 del quick 260908-7w0, al medir la puerta negativa sobre el CSS de
+producción.
+
+El detector de fuentes de Tailwind v4 es un extractor de cadenas por regex sobre los bytes del
+archivo, sin noción de comentario ni de lenguaje, y escanea todo el proyecto que no esté en
+`.gitignore`. Consecuencia medida: `.next/static/css/*.css` contiene **11 reglas**
+`max-width:var(--spacing-<talla>)` que **ningún elemento usa**. Salen de la prosa que documenta
+este mismo defecto:
+
+- `.data-[size=default]:max-w-xs` sale **solo** de cuatro archivos `.md` de `.planning/`
+  (el `alert-dialog.tsx` real ya no la tiene desde el quick 260907-703);
+- `.max-w-sm`, `.max-w-xs`, `.max-w-md` y `.max-w-lg` salen de las cabeceras de `lib/utils.ts`,
+  `components/ui/*.tsx`, el bloque explicativo de `app/globals.css` y `scripts/ci/check-max-w-tallas.sh`.
+
+**Por qué NO se arregla:** llegar a cero exige borrar la documentación que explica la trampa, que
+vale mucho más que los ~500 bytes de CSS muerto. Y el riesgo real ya está cerrado por otra vía:
+`npm run ci:arch` impide que esas clases lleguen a un `className`, y está medido que **cero** de
+ellas aparecen en `.next/static/chunks` ni en `.next/server`, o sea que ningún elemento las recibe.
+
+**Consecuencia práctica, y es lo importante:** la puerta "cero ocurrencias de
+`max-width:var(--spacing-<talla>)` en el CSS" **no es un criterio válido** y no hay que volver a
+escribirla en un plan. El criterio correcto es el de dos partes que usó este quick: (a) cero usos en
+cadena de clases, que mide `ci:arch`; (b) cero apariciones en el bundle compilado, que mide un grep
+sobre `.next/static/chunks` y `.next/server`.
+
+**Opción parcial si algún día molesta el peso:** `@source not "../.planning";` en `app/globals.css`
+quita las 5 reglas que salen solo de los `.md`. No quita las otras 6, que salen de comentarios
+dentro de archivos que Tailwind sí tiene que escanear.
+
+**A quién le toca:** a nadie con urgencia. Es un apunte para que la Fase 5 no persiga un cero
+inalcanzable.
