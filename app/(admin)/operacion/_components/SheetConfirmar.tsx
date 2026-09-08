@@ -274,7 +274,8 @@ export function SheetConfirmar({
         // El override tiene que repetir la cadena de variantes EXACTA. Ver la
         // cabecera de `components/ui/sheet.tsx`: `tailwind-merge` solo considera
         // en conflicto dos clases del mismo grupo con la misma cadena, así que un
-        // `sm:max-w-sheet` suelto no desplazaría a `data-[side=right]:sm:max-w-sm`.
+        // `sm:max-w-sheet` suelto no desplazaría a la clase base de la primitiva,
+        // hoy `data-[side=right]:sm:max-w-sheet-base` (384px, quick 260908-7w0).
         className="gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-sheet"
       >
         {/* `gap-sm` corrige el `gap-0.5` (2px) del registry, fuera de la escala. */}

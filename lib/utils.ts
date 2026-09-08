@@ -38,11 +38,28 @@ import { extendTailwindMerge } from "tailwind-merge"
  * `max-w-sm` de la primitiva. Con esto el `Sheet` mide sus 480px de D-09 y los
  * `Dialog` con `sm:max-w-dialogo` los suyos.
  *
- * LO QUE FALTABA, CERRADO EL 2026-09-07 (quick 260907-703): las primitivas que
- * NO llevan override en su sitio de uso —`alert-dialog` y `tooltip`— ya no usan
- * `max-w-xs` / `sm:max-w-sm`, sino los tokens con nombre propio
+ * CERRADO EL 2026-09-07 (quick 260907-703): las primitivas que NO llevan
+ * override en su sitio de uso —`alert-dialog` y `tooltip`— dejaron de usar
+ * `max-w-xs` / `sm:max-w-sm` y pasaron a los tokens con nombre propio
  * `--container-alerta`, `--container-alerta-ancha` y `--container-tooltip`.
  * Un nombre propio no colisiona con la escala de espaciado.
+ *
+ * CERRADO EL 2026-09-08 (quick 260908-7w0): las otras dos, `dialog` y `sheet`.
+ * Su clase base seguía emitiendo 8px y el defecto estaba tapado, no cerrado: se
+ * veían bien solo porque los cuatro `DialogContent` y el único `SheetContent` de
+ * la app repiten un override en su sitio de uso. El `Sheet` con `side="left"`,
+ * que nadie pisa, medía 8px de verdad. Ahora la base son `--container-dialogo-base`
+ * y `--container-sheet-base`, los 384px del registry con nombre propio. Los
+ * overrides de 480px siguen siendo necesarios y no cambian.
+ *
+ * Con eso las CUATRO primitivas afectadas quedan cerradas y no queda deuda de
+ * este defecto en el código. Lo que sigue vivo es la colisión de fondo entre la
+ * escala `--spacing-*` con nombres de talla y el namespace `--container-*`: no se
+ * arregla, se vigila. `scripts/ci/check-max-w-tallas.sh`, encadenado en
+ * `npm run ci:arch`, falla si vuelve a aparecer una clase de ancho con nombre de
+ * talla en `app/`, `components/` o `lib/`. Cuando la Fase 5 instale primitivas
+ * nuevas con el CLI, ese check es lo que las atrapa: cada una nace con
+ * `max-w-xs` / `sm:max-w-sm` en su clase base.
  * ════════════════════════════════════════════════════════════════════════════
  */
 const twMerge = extendTailwindMerge({
@@ -60,9 +77,11 @@ const twMerge = extendTailwindMerge({
         "max-w-col-acargo",
         "max-w-col-responsable-apto",
         "max-w-dialogo",
+        "max-w-dialogo-base",
         "max-w-formulario",
         "max-w-login",
         "max-w-sheet",
+        "max-w-sheet-base",
         "max-w-tooltip",
         "max-w-vacio",
       ],

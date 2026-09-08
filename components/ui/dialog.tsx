@@ -1,5 +1,28 @@
 "use client"
 
+/**
+ * Dialog — generado por el CLI de shadcn y editado a proposito en UNA cosa: el
+ * `sm:max-w-*` de `DialogContent`.
+ *
+ * La salida del CLI trae `sm:max-w-sm`, que en ESTE repo emite
+ * `max-width:var(--spacing-sm)` = 8px, porque Tailwind v4.3 resuelve
+ * `max-w-<nombre>` contra `--spacing-*` antes que contra `--container-*` y
+ * 02-UI-SPEC.md §2 nombra la escala de espaciado por tallas. Por eso va
+ * `sm:max-w-dialogo-base`, token con nombre PROPIO de 384px declarado en
+ * app/globals.css: los mismos 384px que el registry queria decir.
+ *
+ * El defecto estaba TAPADO, no cerrado, y por eso se toco aqui y no solo en el
+ * sitio de uso: los cuatro `DialogContent` de la app repiten
+ * `sm:max-w-dialogo` (480px, UI-SPEC §11.2) y se veian bien, pero cualquier
+ * `Dialog` nuevo que no repitiera el override nacia midiendo 8px a partir de
+ * `sm:`. Ningun dialogo actual cambia de ancho con este cambio: los cuatro
+ * siguen ganando con su override.
+ *
+ * Si algun dia se regenera este archivo con el CLI, hay que volver a ponerlo:
+ * el CLI no conoce estos tokens y su salida vuelve a nacer rota.
+ * `npm run ci:arch` lo atrapa. Contexto completo en la cabecera de lib/utils.ts.
+ */
+
 import * as React from "react"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 
@@ -53,7 +76,7 @@ function DialogContent({
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-dialogo-base data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}

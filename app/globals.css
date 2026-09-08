@@ -427,6 +427,28 @@
   --container-alerta-ancha: 384px;  /* AlertDialog `default` a partir de sm: */
   --container-tooltip:      320px;  /* tope del globo de ayuda */
 
+  /* Anchos BASE de las otras dos primitivas afectadas por lo mismo, `Dialog` y
+     `Sheet`. Los 384px NO son un numero inventado: son el default del registry
+     de shadcn restaurado, exactamente lo que `sm:max-w-sm` queria decir antes de
+     que el namespace de espaciado se lo comiera. Van con nombre propio por la
+     regla derivada que esta escrita unas lineas arriba: ningun token de
+     `--container-*` puede llamarse con un nombre de talla mientras exista un
+     `--spacing-*` homonimo.
+
+     NO se fusionan con --container-dialogo ni con --container-sheet, y esa
+     separacion es deliberada: esos dos valen 480px porque son la DESVIACION que
+     pide el contrato (UI-SPEC §11.2 y D-09), y viven en el sitio de uso. Estos
+     dos son lo que trae el registry. Fusionarlos borraria la frontera entre
+     "default de shadcn" y "decision de VivaGuest", que es justo la distincion
+     que hace legible por que hay un override en cuatro DialogContent y un
+     SheetContent.
+
+     Efecto medible del cambio: el `Sheet` con `side="left"` pasa de 8px a 384px
+     (nadie lo pisaba); el de `side="right"` sigue en 480px por su override, y
+     ningun Dialog de la app cambia de ancho. */
+  --container-dialogo-base: 384px;  /* DialogContent a partir de sm: */
+  --container-sheet-base:   384px;  /* SheetContent, los dos lados, desde sm: */
+
   /* Anchos minimos de los dos botones primarios de /operacion, por la misma
      razon de §15.2 que los tres de la Fase 2: el boton NO puede saltar de ancho
      al pasar a su gerundio, y `min-w-[172px]` seria el valor arbitrario que §2

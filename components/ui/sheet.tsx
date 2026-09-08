@@ -3,13 +3,13 @@
 /**
  * Sheet — generado por `npx shadcn@4.19.1 add sheet` (04-UI-SPEC.md §1.1).
  *
- * El archivo se deja REGENERABLE a proposito: lo unico que se toco respecto a
- * la salida del CLI es traducir el `sr-only` del boton de cierre a `Cerrar`,
- * porque la interfaz es en espanol y el CLI no traduce.
+ * Del CLI se tocaron DOS cosas: traducir el `sr-only` del boton de cierre a
+ * `Cerrar`, porque la interfaz es en espanol y el CLI no traduce, y los dos
+ * `sm:max-w-*` de `SheetContent` (punto 2, quick 260908-7w0).
  *
- * Las otras tres desviaciones del contrato de la fase NO se arreglan aqui, se
- * arreglan en el sitio de uso. La razon esta medida y va escrita para que en
- * tres meses nadie lo lea como un olvido:
+ * De las tres desviaciones del contrato de la fase, la 1 y la 3 NO se arreglan
+ * aqui sino en el sitio de uso, y la 2 si. La razon de cada una esta medida y va
+ * escrita para que en tres meses nadie lo lea como un olvido:
  *
  * 1. `SheetTitle` trae `font-medium` (peso 500) y el contrato de tipografia
  *    declara exactamente dos pesos, 400 y 600 (02-UI-SPEC.md §3). No se corrige
@@ -23,15 +23,32 @@
  *    Funciona porque `cn()` (tailwind-merge) resuelve `font-medium` contra
  *    `font-semibold`: mismo grupo y sin prefijo de variante.
  *
- * 2. `SheetContent` trae `data-[side=right]:w-3/4` y
- *    `data-[side=right]:sm:max-w-sm` (384px), y D-09 pide 480px.
+ * 2. LOS ANCHOS. Esta es la unica desviacion que SI se corrigio en la primitiva,
+ *    porque no era una diferencia de criterio sino una clase rota. La salida del
+ *    CLI trae `data-[side=left]:sm:max-w-sm` y `data-[side=right]:sm:max-w-sm`,
+ *    que en ESTE repo emiten `max-width:var(--spacing-sm)` = 8px: Tailwind v4.3
+ *    resuelve `max-w-<nombre>` contra `--spacing-*` antes que contra
+ *    `--container-*`, y 02-UI-SPEC.md §2 nombra la escala de espaciado por
+ *    tallas. Los dos lados pasaron a `sm:max-w-sheet-base`, token con nombre
+ *    PROPIO de 384px en app/globals.css, que son los 384px que el registry
+ *    queria decir.
+ *    Medido: el lado IZQUIERDO media 8px de verdad, porque no hay ningun
+ *    `SheetContent` con `side="left"` que lo pisara. El derecho se veia bien solo
+ *    porque `SheetConfirmar` lo pisa.
+ *    Si se regenera el archivo con el CLI hay que volver a ponerlos: el CLI no
+ *    conoce estos tokens. `npm run ci:arch` lo atrapa.
+ *
+ *    El override del sitio de uso SIGUE HACIENDO FALTA y no queda redundante:
+ *    la base son 384px y D-09 pide 480px.
  *    Uso correcto:  <SheetContent className="data-[side=right]:sm:max-w-sheet
  *                                            data-[side=right]:w-full">
  *    El prefijo de variante tiene que repetirse EXACTO. `tailwind-merge` solo
  *    considera en conflicto dos clases del mismo grupo con la MISMA cadena de
  *    variantes: un `sm:max-w-sheet` suelto no desplaza a
- *    `data-[side=right]:sm:max-w-sm`, las dos sobreviven y gana la de mayor
- *    especificidad en un orden de CSS que no esta garantizado.
+ *    `data-[side=right]:sm:max-w-sheet-base`, las dos sobreviven y gana la de
+ *    mayor especificidad en un orden de CSS que no esta garantizado.
+ *    Y las dos tienen que estar declaradas en el grupo `max-w` de `cn()`
+ *    (lib/utils.ts) o el merge no las ve como del mismo grupo.
  *
  * 3. `SheetHeader` trae `gap-0.5` (2px), fuera de la escala de espaciado, cuyo
  *    minimo declarado es `xs` = 4px; el `DialogHeader` instalado usa `gap-2`.
@@ -92,7 +109,7 @@ function SheetContent({
         data-slot="sheet-content"
         data-side={side}
         className={cn(
-          "fixed z-50 flex flex-col gap-4 bg-popover bg-clip-padding text-sm text-popover-foreground shadow-lg transition duration-200 ease-in-out data-ending-style:opacity-0 data-starting-style:opacity-0 data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:border-t data-[side=bottom]:data-ending-style:translate-y-[2.5rem] data-[side=bottom]:data-starting-style:translate-y-[2.5rem] data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-3/4 data-[side=left]:border-r data-[side=left]:data-ending-style:translate-x-[-2.5rem] data-[side=left]:data-starting-style:translate-x-[-2.5rem] data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-3/4 data-[side=right]:border-l data-[side=right]:data-ending-style:translate-x-[2.5rem] data-[side=right]:data-starting-style:translate-x-[2.5rem] data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b data-[side=top]:data-ending-style:translate-y-[-2.5rem] data-[side=top]:data-starting-style:translate-y-[-2.5rem] data-[side=left]:sm:max-w-sm data-[side=right]:sm:max-w-sm",
+          "fixed z-50 flex flex-col gap-4 bg-popover bg-clip-padding text-sm text-popover-foreground shadow-lg transition duration-200 ease-in-out data-ending-style:opacity-0 data-starting-style:opacity-0 data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:border-t data-[side=bottom]:data-ending-style:translate-y-[2.5rem] data-[side=bottom]:data-starting-style:translate-y-[2.5rem] data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-3/4 data-[side=left]:border-r data-[side=left]:data-ending-style:translate-x-[-2.5rem] data-[side=left]:data-starting-style:translate-x-[-2.5rem] data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-3/4 data-[side=right]:border-l data-[side=right]:data-ending-style:translate-x-[2.5rem] data-[side=right]:data-starting-style:translate-x-[2.5rem] data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b data-[side=top]:data-ending-style:translate-y-[-2.5rem] data-[side=top]:data-starting-style:translate-y-[-2.5rem] data-[side=left]:sm:max-w-sheet-base data-[side=right]:sm:max-w-sheet-base",
           className
         )}
         {...props}
