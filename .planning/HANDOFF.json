@@ -1,0 +1,117 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-09-08T15:30:28.198Z",
+  "phase": "05",
+  "phase_name": "notificaciones-push-e-instalacion-de-la-pwa",
+  "phase_dir": ".planning/phases/05-notificaciones-push-e-instalaci-n-de-la-pwa",
+  "plan": 0,
+  "task": 0,
+  "total_tasks": 0,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": 1,
+      "name": "Quick 260908-7w0: Dialog y Sheet fuera de la colision max-w, guardarrail en ci:arch",
+      "status": "done",
+      "commit": "628720d"
+    },
+    {
+      "id": 2,
+      "name": "Cerrar por lectura de codigo los 7 puntos ciegos del 05-RESEARCH.md",
+      "status": "done",
+      "commit": "sin commit, hallazgos en este handoff"
+    },
+    {
+      "id": 3,
+      "name": "discuss-phase 5: presentar areas grises al usuario",
+      "status": "in_progress",
+      "progress": "Las 4 areas grises quedaron redactadas y presentadas; el usuario interrumpio antes de escoger para cambiar de computador"
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": 3,
+      "name": "discuss-phase 5: que el usuario escoja areas y discutirlas hasta cerrar CONTEXT.md",
+      "status": "in_progress"
+    },
+    {
+      "id": 4,
+      "name": "ui-phase 5: contrato visual del banner de permiso y de las instrucciones de instalacion",
+      "status": "not_started"
+    },
+    {
+      "id": 5,
+      "name": "plan-phase 5",
+      "status": "not_started"
+    },
+    {
+      "id": 6,
+      "name": "execute-phase 5",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [
+    {
+      "description": "Cinco checkpoints humanos acumulados que solo puede hacer el usuario: dos abiertos desde la Fase 2 y tres de la Fase 4, detallados con URL, siembra y criterio de fallo en 04-14-SUMMARY.md",
+      "type": "human_action",
+      "workaround": "No bloquean la Fase 5. Son verificaciones perceptuales del dashboard del admin."
+    },
+    {
+      "description": "El stack de Supabase estaba abajo, asi que no se corrio el spec e2e que mide el ancho del Sheet (e2e/operacion.spec.ts:472). Su globalSetup siembra con cliente de servicio y necesita Auth, no solo Postgres.",
+      "type": "technical",
+      "workaround": "npx supabase stop && npx supabase start. Evidencia sustituta declarada en 260908-7w0-SUMMARY.md."
+    },
+    {
+      "description": "No se sabe que telefonos usan los 8 aseadores. Un iPhone con iOS < 16.4 no puede recibir push por ninguna via y el canal no tiene respaldo.",
+      "type": "external",
+      "workaround": "Ninguno. Es decision de negocio y hay que tomarla antes de construir la Fase 5."
+    },
+    {
+      "description": "No esta confirmado que haya un iPhone fisico para pruebas. Sin el, la Fase 5 se puede escribir pero no validar.",
+      "type": "external",
+      "workaround": "Ninguno."
+    }
+  ],
+  "human_actions_pending": [
+    {
+      "action": "Escoger cuales de las 4 areas grises de la Fase 5 discutir",
+      "context": "discuss-phase 5 quedo parado justo en esa pregunta",
+      "blocking": true
+    },
+    {
+      "action": "Levantar inventario de telefonos y versiones de iOS de los 8 aseadores",
+      "context": "Riesgo ALTO. Decide si algun aseador queda fuera del sistema.",
+      "blocking": true
+    },
+    {
+      "action": "Confirmar si hay un iPhone fisico disponible para probar push",
+      "context": "Sin hardware la fase no se valida, solo se escribe.",
+      "blocking": true
+    },
+    {
+      "action": "Las tres verificaciones perceptuales del plan 04-14",
+      "context": "Detalladas en 04-14-SUMMARY.md con URL, siembra y criterio de fallo.",
+      "blocking": false
+    }
+  ],
+  "decisions": [
+    {
+      "decision": "La Fase 5 NO crea tabla nueva de entregas de push",
+      "rationale": "El 05-RESEARCH.md la recomienda, pero se escribio sin poder leer el repo. Medido: notifications ya es bandeja y outbox a la vez, con push_status, push_attempts, push_last_error, next_attempt_at y dedupe_key, mas indice de outbox parcial y unico de deduplicacion. La migracion 06 lo documenta como decision explicita.",
+      "phase": "05"
+    },
+    {
+      "decision": "Tokens --container-* con nombre propio, jamas con nombre de talla",
+      "rationale": "Tailwind v4.3 resuelve max-w-<nombre> contra --spacing-* antes que contra --container-*, y la escala de espaciado de 02-UI-SPEC seccion 2 usa nombres de talla. Declarar --container-xs/sm/md/lg a mano NO lo corrige y @utility tampoco: las dos se midieron y se descartaron.",
+      "phase": "quick-260907-703 y quick-260908-7w0"
+    },
+    {
+      "decision": "El guardarrail de ci:arch vive en scripts/ci/check-max-w-tallas.sh, aparte de check-service-role.sh",
+      "rationale": "check-service-role.sh tiene una regla que prohibe citar en comentarios los tokens que el mismo veta, y este check necesita nombrar max-w-sm para explicar la causa. En un .sh aparte no hay auto-trampa.",
+      "phase": "quick-260908-7w0"
+    }
+  ],
+  "uncommitted_files": [],
+  "next_action": "Retomar discuss-phase 5 desde la pregunta de areas grises: inventario de telefonos, instalacion y permiso, latencia del drenaje, rafaga y agrupacion.",
+  "context_notes": "La Fase 4 quedo cerrada en disco con 48/48 planes. La Fase 5 tiene research pero sin CONTEXT ni planes. Antes de entrar a la fase se corrio un quick que saco a Dialog y Sheet de la colision max-w y dejo un check de CI probado con senuelo, para que las primitivas nuevas que la Fase 5 va a instalar no nazcan rotas. Los 7 puntos ciegos del research se cerraron leyendo codigo y estan escritos en .continue-here.md: no hay que volver a levantarlos."
+}
