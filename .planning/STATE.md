@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completado el quick 260908-7w0; la Fase 5 puede instalar primitivas de shadcn sin que nazcan rotas. Sigue pendiente el checkpoint humano de las tres verificaciones perceptuales del 04-14
-last_updated: "2026-09-08T11:20:00.000Z"
+stopped_at: "PAUSA 2026-09-08. Palabra para retomar: RETOMAR-05. discuss-phase 5 quedo parado en la seleccion de areas grises; el handoff completo esta en .planning/HANDOFF.json y en .planning/phases/05-notificaciones-push-e-instalaci-n-de-la-pwa/.continue-here.md"
+last_updated: "2026-09-08T15:30:28.198Z"
 last_activity: 2026-09-08
 progress:
   total_phases: 9
@@ -28,7 +28,7 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 Phase: 04 (dashboard-operativo-del-admin) — CHECKPOINT HUMANO
 Plan: 14 of 14 de la Fase 4, todos entregados
 Status: Automatico en verde; esperando el visto bueno del usuario
-Last activity: 2026-09-08 - Completado el quick 260908-7w0: Dialog y Sheet fuera de la colision max-w, y guardarrail en ci:arch
+Last activity: 2026-09-08 - Pausa por cambio de computador. Escribe RETOMAR-05 para continuar la Fase 5
 
 Del plan 04-14, que cierra la fase:
 
