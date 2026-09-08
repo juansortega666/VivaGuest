@@ -13,8 +13,8 @@ El equipo son dos personas, así que **las fases corren en secuencia estricta**.
 - Fases decimales (2.1, 2.2): inserciones urgentes (marcadas con INSERTED)
 
 - [x] **Fase 1: Fundación, schema y RLS** - La base de datos impone las reglas del negocio y aísla a cada aseador antes de que exista una sola pantalla
-- [~] **Fase 2: Acceso y administración del catálogo** - Login por rol y CRUD de apartamentos y aseadores para montar la operación real
-- [ ] **Fase 3: Motor de sincronización iCal** - Todo checkout publicado en Airbnb se convierte en un aseo pendiente, sin duplicados ni cancelaciones falsas
+- [x] **Fase 2: Acceso y administración del catálogo** - Login por rol y CRUD de apartamentos y aseadores para montar la operación real
+- [x] **Fase 3: Motor de sincronización iCal** - Todo checkout publicado en Airbnb se convierte en un aseo pendiente, sin duplicados ni cancelaciones falsas
 - [ ] **Fase 4: Dashboard operativo del admin** - Toda la operación del día en una pantalla, con confirmación en un paso y alertas de una sola jerarquía
 - [ ] **Fase 5: Notificaciones push e instalación de la PWA** - El aseador instala la PWA y recibe cada asignación en el teléfono; el admin recibe cada evento de campo
 - [ ] **Fase 6: PWA del aseador, offline-first** - El aseador ejecuta el aseo completo con o sin señal y nada del trabajo de campo se pierde
@@ -56,7 +56,7 @@ Plans:
 - Catálogo provisional de cuartos y tareas (máximo 3 por tipo), editable sin migración
 
 ### Phase 2: Acceso y administración del catálogo
-**Status**: Planned — 15 planes en 13 waves, contrato de UI y planes verificados sin bloqueantes (2026-09-01)
+**Status**: Executed 2026-09-02 — 15/15 planes. 285 unit, 52 integración, 76 E2E, 47 pgTAP, las 11 puertas en verde. Criterios 1, 2, 4 y 5 verificados; el 3 con hueco declarado (puerta solo de UI); el 6 pendiente de verificación humana contra un `.ics` real
 **Goal**: El admin monta toda la operación real en el sistema y cada usuario entra a la superficie que le corresponde
 **Depends on**: Fase 1
 **Requirements**: PLAT-01, PLAT-02, PLAT-04, PLAT-07, APTO-01, APTO-02, APTO-03, APTO-04, APTO-05, APTO-06, APTO-07, APTO-08, APTO-09, APTO-10, APTO-11, APTO-12, ASEADOR-01, ASEADOR-02, ASEADOR-03
@@ -88,18 +88,38 @@ Plans:
 **UI hint**: yes
 
 ### Phase 3: Motor de sincronización iCal
+**Status**: Complete 2026-09-03 (`passed_with_gaps`) — 10/10 planes en 9 waves, 105 tests de integración, 112 aserciones pgTAP, 49 señuelos corridos y 48 atrapados. Gaps declarados con dueño: la clasificación reserva-vs-bloqueo en confianza MEDIA (sin `.ics` real de bloqueos, diferido por decisión), el dead man's switch externo, y la lectura de la instrumentación atada a que exista producción
 **Goal**: Todo checkout publicado en los calendarios se convierte en un aseo pendiente, sin duplicados y sin cancelaciones falsas
 **Depends on**: Fases 1 y 2
 **Requirements**: SYNC-01, SYNC-02, SYNC-03, SYNC-04, SYNC-05, SYNC-06, SYNC-07, SYNC-08, SYNC-09, SYNC-10, SYNC-11
 **Success Criteria** (qué debe ser VERDAD):
   1. Cada feed configurado se lee cada 30 minutos en una invocación aislada, y un feed caído no impide que los demás corran
-  2. Un fin de bloqueo genera exactamente un aseo `normal` en la fecha correcta, corridas sucesivas sobre el mismo feed no crean duplicados, y los apartamentos con `gestion_vivaguest = false` generan un aseo informativo sin estado ni asignación
-  3. Los bloqueos del propietario no generan aseos, y un feed vacío, inválido o truncado no cancela ningún aseo existente y queda registrado como intento fallido
+  2. El fin de una **reserva** genera exactamente un aseo `normal` en la fecha correcta (su `DTEND`), corridas sucesivas sobre el mismo feed no crean duplicados, y los apartamentos con `gestion_vivaguest = false` generan un aseo informativo sin estado ni asignación
+  3. Los **bloqueos del propietario** (fechas que el anfitrión cierra a mano, distintas de una reserva) no generan aseos, y un feed vacío, inválido o truncado no cancela ningún aseo existente y queda registrado como intento fallido
   4. Cuando la reserva se mueve o desaparece, el aseo viejo se cancela y aparece uno nuevo sin confirmar, salvo que el aseo ya tenga `started_at`
   5. El admin queda alertado cuando un link deja de responder, cuando el propio job de sincronización deja de correr, cuando checkout y checkin caen el mismo día, y cuando una reserva parece una extensión creada como reserva nueva
 
-**Prerequisito humano (bloqueante, no es una tarea de la fase):** hay que capturar y versionar un `.ics` real de Airbnb de la cuenta propia de VivaGuest antes de planear esta fase. Las muestras públicas están desactualizadas y la más citada en GitHub es falsa. Sin esos archivos no hay fixtures de test ni forma de resolver empíricamente la estabilidad del `UID`.
-**Plans**: TBD
+**Aclaración de vocabulario (fijada 2026-09-02):** los criterios 2 y 3 usaban la palabra
+"bloqueo" con dos sentidos y se leían como contradictorios. Lectura correcta: el criterio 2
+habla del **fin de una reserva**, que es lo que libera el apartamento y genera el aseo. El
+criterio 3 habla de los **bloqueos del propietario**, fechas que el anfitrión cierra a mano y
+que no traen huésped ni generan aseo. Son cosas distintas.
+
+**Prerequisito humano:** RESUELTO el 2026-09-02. `lib/domain/__fixtures__/ical/airbnb-real-anonimizado.ics` es un feed real de un anuncio propio, con 15 eventos. Queda una laguna: **cero bloqueos del propietario** en esa captura, así que la distinción reserva/bloqueo está en confianza MEDIA y la cierra el checkpoint humano del plan 03-10.
+
+**Plans**: 10 plans
+
+Plans:
+- [x] 03-01-PLAN.md — Wave 0: guardarraíles de CI, las nueve fixtures que faltaban y el pgTAP de la fase en rojo
+- [x] 03-02-PLAN.md — Dominio puro del iCal: parser sin dependencias, clasificador de tres valores y normalizador donde muere el teléfono
+- [x] 03-03-PLAN.md — Migración 11: `pg_cron` y `pg_net`, `feed_sync_runs` como instrumento, y el CHECK de privacidad
+- [x] 03-04-PLAN.md — Migración 12: `sync_feed_apply()` en su mitad aditiva, con la urgencia recalculada y la salud dentro de la transacción
+- [x] 03-05-PLAN.md — Migración 13: el reconcile destructivo con sus cuatro candados, la extensión sospechosa y las notificaciones
+- [x] 03-06-PLAN.md — El worker: secreto compartido en tiempo constante, guardas de transporte y la guarda de colapso sobre reservas clasificadas
+- [x] 03-07-PLAN.md — Migración 14: dispatcher con fan-out, watchdog anti-tormenta, poda del historial y el lazo local
+- [x] 03-08-PLAN.md — Integración de los criterios 1, 2 y 3 contra el feed real
+- [x] 03-09-PLAN.md — Integración de los criterios 4 y 5: el diff entre corridas y las cinco alertas
+- [x] 03-10-PLAN.md — Privacidad transversal, los dos checkpoints humanos y el cierre de la fase
 
 ### Phase 4: Dashboard operativo del admin
 **Goal**: El admin ve toda la operación del día en una pantalla y confirma, reasigna o cierra cualquier aseo sin salir de ahí
@@ -111,7 +131,22 @@ Plans:
   3. El admin reasigna un aseo puntual sin tocar responsable ni suplente permanentes, crea aseos `repaso` y `emergencia`, reprograma fechas, cierra manualmente un aseo que la realidad ya resolvió y cancela
   4. Un solo panel de alertas muestra con la misma jerarquía visual: urgentes, extensión mal creada, "no puedo", daños, faltantes, calendario caído y hora límite vencida sin terminar
   5. El admin abre cualquier apartamento y ve su historial cronológico con los daños reportados; los aseos de unidades con `gestion_vivaguest = false` se muestran con fecha y a cargo de quién, sin estado ni acciones
-**Plans**: TBD
+**Plans**: 14 plans en 6 waves
+Plans:
+- [x] 04-01-PLAN.md — Wave 0: guarda de duplicados, pgTAP de las seis RPC en rojo, helper de siembra
+- [x] 04-02-PLAN.md — Fundamentos de UI: `sheet`, tokens de `@theme` y `EstadoVacio compacto`
+- [x] 04-03-PLAN.md — `estadoDeAseo()`, fecha corta, tiempo relativo y el campo del error de ASEO-07
+- [x] 04-04-PLAN.md — `lib/domain/alertas.ts`: mapa de once tipos, computadas, mezcla y orden
+- [x] 04-05-PLAN.md — Migración 15: seis RPC `SECURITY DEFINER` + publicación de Realtime
+- [x] 04-06-PLAN.md — `lib/data/operacion.ts`: la consulta única y sus tres proyecciones
+- [x] 04-07-PLAN.md — Reprogramar contra el reconcile, y los diez señuelos de la capa de base
+- [x] 04-08-PLAN.md — Las ocho Server Actions de la pantalla de operación
+- [x] 04-09-PLAN.md — La pantalla `/operacion`: dos carriles, días, fila y franja de carga
+- [x] 04-10-PLAN.md — Bandeja `Sin confirmar`, `Sheet` encadenado y creación manual
+- [x] 04-11-PLAN.md — `MenuAseo` y los cuatro diálogos de mutación
+- [x] 04-12-PLAN.md — Historial del apartamento con los daños (DASH-06, REPORT-04)
+- [x] 04-13-PLAN.md — Panel de alertas, marca de frescura y Realtime con degradación
+- [x] 04-14-PLAN.md — E2E, prueba de escala de grises y puerta de fase
 **UI hint**: yes
 
 **Costura conocida:** al confirmar, el aseo queda asignado pero **no se notifica a nadie** hasta que exista la Fase 5. El evento se escribe en la cola de notificaciones y se drena cuando el worker exista. Es intencional, no un olvido.
@@ -212,9 +247,9 @@ Fases con patrón ya documentado en el research (se puede saltar):
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Fundación, schema y RLS | 9/9 | Complete (passed_with_gaps) | 2026-09-01 |
-| 2. Acceso y administración del catálogo | 0/15 | Planned | - |
-| 3. Motor de sincronización iCal | 0/TBD | Not started | - |
-| 4. Dashboard operativo del admin | 0/TBD | Not started | - |
+| 2. Acceso y administración del catálogo | 15/15 | Executed — 2 checkpoints humanos abiertos | 2026-09-02 |
+| 3. Motor de sincronización iCal | 10/10 | Complete (passed_with_gaps) | 2026-09-03 |
+| 4. Dashboard operativo del admin | 14/14 | Complete   | 2026-09-06 |
 | 5. Notificaciones push e instalación de la PWA | 0/TBD | Not started | - |
 | 6. PWA del aseador, offline-first | 0/TBD | Not started | - |
 | 7. Financiero | 0/TBD | Not started | - |

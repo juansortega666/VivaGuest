@@ -92,6 +92,7 @@ export type Database = {
           last_etag: string | null
           last_event_count: number | null
           last_http_status: number | null
+          last_min_ends_on: string | null
           last_payload_hash: string | null
           last_success_at: string | null
           next_sync_at: string
@@ -110,6 +111,7 @@ export type Database = {
           last_etag?: string | null
           last_event_count?: number | null
           last_http_status?: number | null
+          last_min_ends_on?: string | null
           last_payload_hash?: string | null
           last_success_at?: string | null
           next_sync_at?: string
@@ -128,6 +130,7 @@ export type Database = {
           last_etag?: string | null
           last_event_count?: number | null
           last_http_status?: number | null
+          last_min_ends_on?: string | null
           last_payload_hash?: string | null
           last_success_at?: string | null
           next_sync_at?: string
@@ -148,6 +151,7 @@ export type Database = {
         Row: {
           disappeared_at: string | null
           ends_on: string
+          ends_on_anterior: string | null
           feed_id: string
           first_seen_at: string
           id: string
@@ -163,6 +167,7 @@ export type Database = {
         Insert: {
           disappeared_at?: string | null
           ends_on: string
+          ends_on_anterior?: string | null
           feed_id: string
           first_seen_at?: string
           id?: string
@@ -178,6 +183,7 @@ export type Database = {
         Update: {
           disappeared_at?: string | null
           ends_on?: string
+          ends_on_anterior?: string | null
           feed_id?: string
           first_seen_at?: string
           id?: string
@@ -706,6 +712,71 @@ export type Database = {
           },
         ]
       }
+      feed_sync_runs: {
+        Row: {
+          block_count: number | null
+          cleanings_cancelled: number
+          cleanings_created: number
+          event_count: number | null
+          feed_id: string
+          finished_at: string | null
+          http_status: number | null
+          id: number
+          max_ends_on: string | null
+          min_ends_on: string | null
+          outcome: string
+          reservation_count: number | null
+          reviews_flagged: number
+          started_at: string
+          uid_rotations: number
+          unknown_count: number | null
+        }
+        Insert: {
+          block_count?: number | null
+          cleanings_cancelled?: number
+          cleanings_created?: number
+          event_count?: number | null
+          feed_id: string
+          finished_at?: string | null
+          http_status?: number | null
+          id?: number
+          max_ends_on?: string | null
+          min_ends_on?: string | null
+          outcome: string
+          reservation_count?: number | null
+          reviews_flagged?: number
+          started_at?: string
+          uid_rotations?: number
+          unknown_count?: number | null
+        }
+        Update: {
+          block_count?: number | null
+          cleanings_cancelled?: number
+          cleanings_created?: number
+          event_count?: number | null
+          feed_id?: string
+          finished_at?: string | null
+          http_status?: number | null
+          id?: number
+          max_ends_on?: string | null
+          min_ends_on?: string | null
+          outcome?: string
+          reservation_count?: number | null
+          reviews_flagged?: number
+          started_at?: string
+          uid_rotations?: number
+          unknown_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feed_sync_runs_feed_id_fkey"
+            columns: ["feed_id"]
+            isOneToOne: false
+            referencedRelation: "calendar_feeds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       missing_item_catalog: {
         Row: {
           id: string
@@ -1212,6 +1283,9 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cancel_cleaning: { Args: { p_cleaning: string }; Returns: undefined }
+      clear_review_flag: { Args: { p_cleaning: string }; Returns: undefined }
+      close_cleaning: { Args: { p_cleaning: string }; Returns: undefined }
       confirm_cleaning: {
         Args: {
           p_cleaning: string
@@ -1220,11 +1294,29 @@ export type Database = {
         }
         Returns: undefined
       }
+      create_manual_cleaning: {
+        Args: {
+          p_fecha: string
+          p_property: string
+          p_tipo: Database["public"]["Enums"]["cleaning_type"]
+        }
+        Returns: string
+      }
       decline_cleaning: {
         Args: { p_cleaning: string; p_motivo: string }
         Returns: undefined
       }
+      dispatch_feed_syncs: { Args: never; Returns: number }
+      feed_health_watchdog: { Args: never; Returns: undefined }
       finish_cleaning: { Args: { p_cleaning: string }; Returns: undefined }
+      reassign_cleaning: {
+        Args: { p_aseador: string; p_cleaning: string }
+        Returns: undefined
+      }
+      reschedule_cleaning: {
+        Args: { p_cleaning: string; p_fecha: string }
+        Returns: undefined
+      }
       reveal_access_code: {
         Args: { p_cleaning: string }
         Returns: {
@@ -1234,6 +1326,17 @@ export type Database = {
         }[]
       }
       start_cleaning: { Args: { p_cleaning: string }; Returns: undefined }
+      sync_feed_apply: {
+        Args: {
+          p_etag: string
+          p_events: Json
+          p_feed_id: string
+          p_fetched_at: string
+          p_http_status?: number
+          p_payload_hash: string
+        }
+        Returns: Json
+      }
       today_bog: { Args: never; Returns: string }
       toggle_checklist_item: {
         Args: { p_done: boolean; p_item: string; p_nota: string }

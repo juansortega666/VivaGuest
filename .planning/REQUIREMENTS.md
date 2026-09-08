@@ -38,29 +38,29 @@
 
 ### Sincronización de calendario
 
-- [ ] **SYNC-01**: El sistema lee cada feed configurado cada 30 minutos, de forma aislada, sin que un feed caído afecte a los demás
-- [ ] **SYNC-02**: El sistema genera un aseo tipo `normal` en la fecha en que el calendario libera el apartamento, sin crear duplicados en corridas sucesivas
-- [ ] **SYNC-03**: El sistema distingue reservas reales de bloqueos del propietario y no genera aseos para los bloqueos
-- [ ] **SYNC-04**: El sistema cancela automáticamente el aseo cuando la reserva desaparece o cambia de fecha, salvo que el aseo ya tenga `started_at`
-- [ ] **SYNC-05**: Cuando la reserva se mueve y genera un checkout distinto, el sistema crea el aseo nuevo sin confirmar
-- [ ] **SYNC-06**: El sistema no cancela aseos cuando el feed responde vacío o con contenido inválido, y registra el intento fallido
-- [ ] **SYNC-07**: El sistema marca urgente el aseo cuando el checkout y el checkin siguiente caen el mismo día
-- [ ] **SYNC-08**: El sistema detecta reservas que parecen una extensión creada como reserva nueva y alerta al admin para doble chequeo antes de crear el aseo
-- [ ] **SYNC-09**: El sistema alerta al admin cuando un link de calendario deja de responder
-- [ ] **SYNC-10**: El sistema alerta al admin cuando el propio job de sincronización deja de correr
-- [ ] **SYNC-11**: El sistema genera un aseo informativo, sin estado ni asignación, para apartamentos con `gestion_vivaguest = false`
+- [x] **SYNC-01**: El sistema lee cada feed configurado cada 30 minutos, de forma aislada, sin que un feed caído afecte a los demás
+- [x] **SYNC-02**: El sistema genera un aseo tipo `normal` en la fecha en que el calendario libera el apartamento, sin crear duplicados en corridas sucesivas
+- [x] **SYNC-03**: El sistema distingue reservas reales de bloqueos del propietario y no genera aseos para los bloqueos
+- [x] **SYNC-04**: El sistema cancela automáticamente el aseo cuando la reserva desaparece o cambia de fecha, salvo que el aseo ya tenga `started_at`
+- [x] **SYNC-05**: Cuando la reserva se mueve y genera un checkout distinto, el sistema crea el aseo nuevo sin confirmar
+- [x] **SYNC-06**: El sistema no cancela aseos cuando el feed responde vacío o con contenido inválido, y registra el intento fallido
+- [x] **SYNC-07**: El sistema marca urgente el aseo cuando el checkout y el checkin siguiente caen el mismo día
+- [x] **SYNC-08**: El sistema detecta reservas que parecen una extensión creada como reserva nueva y alerta al admin para doble chequeo antes de crear el aseo
+- [x] **SYNC-09**: El sistema alerta al admin cuando un link de calendario deja de responder
+- [x] **SYNC-10**: El sistema alerta al admin cuando el propio job de sincronización deja de correr
+- [x] **SYNC-11**: El sistema genera un aseo informativo, sin estado ni asignación, para apartamentos con `gestion_vivaguest = false`
 
 ### Ciclo de vida del aseo
 
-- [ ] **ASEO-01**: Todo aseo nace en Pendiente sin confirmar y aparece en la bandeja "Sin confirmar"
-- [ ] **ASEO-02**: Admin confirma el aseo en un solo paso escribiendo número de huéspedes e instrucciones
-- [ ] **ASEO-03**: Al confirmar, el aseo queda asignado en firme al responsable del apartamento
-- [ ] **ASEO-04**: Admin reasigna un aseo puntual sin modificar el responsable ni el suplente del apartamento
-- [ ] **ASEO-05**: Admin crea aseos manuales tipo `repaso` y `emergencia`
-- [ ] **ASEO-06**: Admin reprograma la fecha de un aseo
-- [ ] **ASEO-07**: El sistema impide crear un segundo aseo activo para el mismo apartamento y fecha, con mensaje de error explícito
-- [ ] **ASEO-08**: Admin cierra manualmente un aseo que la realidad ya resolvió
-- [ ] **ASEO-09**: Admin cancela un aseo
+- [x] **ASEO-01**: Todo aseo nace en Pendiente sin confirmar y aparece en la bandeja "Sin confirmar"
+- [x] **ASEO-02**: Admin confirma el aseo en un solo paso escribiendo número de huéspedes e instrucciones
+- [x] **ASEO-03**: Al confirmar, el aseo queda asignado en firme al responsable del apartamento
+- [x] **ASEO-04**: Admin reasigna un aseo puntual sin modificar el responsable ni el suplente del apartamento
+- [x] **ASEO-05**: Admin crea aseos manuales tipo `repaso` y `emergencia`
+- [x] **ASEO-06**: Admin reprograma la fecha de un aseo
+- [x] **ASEO-07**: El sistema impide crear un segundo aseo activo para el mismo apartamento y fecha, con mensaje de error explícito
+- [x] **ASEO-08**: Admin cierra manualmente un aseo que la realidad ya resolvió
+- [x] **ASEO-09**: Admin cancela un aseo
 
 ### PWA del aseador
 
@@ -87,7 +87,7 @@
 - [ ] **REPORT-01**: Aseador reporta un daño con foto y descripción libre, y el admin recibe notificación inmediata
 - [ ] **REPORT-02**: Aseador reporta un gasto con foto del recibo
 - [ ] **REPORT-03**: Aseador reporta faltantes desde la lista base del apartamento más un campo "Otros", y el admin recibe notificación
-- [ ] **REPORT-04**: Los daños reportados quedan en el historial del apartamento
+- [x] **REPORT-04**: Los daños reportados quedan en el historial del apartamento
 
 ### Notificaciones
 
@@ -98,13 +98,13 @@
 
 ### Dashboard del admin
 
-- [ ] **DASH-01**: Admin ve los servicios organizados por día (hoy, mañana y siguientes)
-- [ ] **DASH-02**: Admin ve una bandeja persistente con los aseos sin confirmar
-- [ ] **DASH-03**: Admin ve la carga diaria por aseador para decidir si activa un suplente
-- [ ] **DASH-04**: Admin ve un panel de alertas con la misma jerarquía visual para: urgentes, extensión mal creada, "no puedo", daños, faltantes y calendario caído
-- [ ] **DASH-05**: Admin ve alertados los aseos cuya hora límite venció sin terminarse
-- [ ] **DASH-06**: Admin ve el historial cronológico de un apartamento
-- [ ] **DASH-07**: Los aseos de apartamentos con `gestion_vivaguest = false` se muestran con su fecha y a cargo de quién, sin estado ni acciones
+- [x] **DASH-01**: Admin ve los servicios organizados por día (hoy, mañana y siguientes)
+- [x] **DASH-02**: Admin ve una bandeja persistente con los aseos sin confirmar
+- [x] **DASH-03**: Admin ve la carga diaria por aseador para decidir si activa un suplente
+- [x] **DASH-04**: Admin ve un panel de alertas con la misma jerarquía visual para: urgentes, extensión mal creada, "no puedo", daños, faltantes y calendario caído
+- [x] **DASH-05**: Admin ve alertados los aseos cuya hora límite venció sin terminarse
+- [x] **DASH-06**: Admin ve el historial cronológico de un apartamento
+- [x] **DASH-07**: Los aseos de apartamentos con `gestion_vivaguest = false` se muestran con su fecha y a cargo de quién, sin estado ni acciones
 
 ### Financiero
 
@@ -195,26 +195,26 @@
 | ASEADOR-01 | Fase 2 | Pending |
 | ASEADOR-02 | Fase 2 | Pending |
 | ASEADOR-03 | Fase 2 | Pending |
-| SYNC-01 | Fase 3 | Pending |
-| SYNC-02 | Fase 3 | Pending |
-| SYNC-03 | Fase 3 | Pending |
-| SYNC-04 | Fase 3 | Pending |
-| SYNC-05 | Fase 3 | Pending |
-| SYNC-06 | Fase 3 | Pending |
-| SYNC-07 | Fase 3 | Pending |
-| SYNC-08 | Fase 3 | Pending |
-| SYNC-09 | Fase 3 | Pending |
-| SYNC-10 | Fase 3 | Pending |
-| SYNC-11 | Fase 3 | Pending |
-| ASEO-01 | Fase 4 | Pending |
-| ASEO-02 | Fase 4 | Pending |
-| ASEO-03 | Fase 4 | Pending |
-| ASEO-04 | Fase 4 | Pending |
-| ASEO-05 | Fase 4 | Pending |
-| ASEO-06 | Fase 4 | Pending |
-| ASEO-07 | Fase 1 | Pending |
-| ASEO-08 | Fase 4 | Pending |
-| ASEO-09 | Fase 4 | Pending |
+| SYNC-01 | Fase 3 | Complete |
+| SYNC-02 | Fase 3 | Complete |
+| SYNC-03 | Fase 3 | Complete |
+| SYNC-04 | Fase 3 | Complete |
+| SYNC-05 | Fase 3 | Complete |
+| SYNC-06 | Fase 3 | Complete |
+| SYNC-07 | Fase 3 | Complete |
+| SYNC-08 | Fase 3 | Complete |
+| SYNC-09 | Fase 3 | Complete |
+| SYNC-10 | Fase 3 | Complete |
+| SYNC-11 | Fase 3 | Complete |
+| ASEO-01 | Fase 4 | Complete |
+| ASEO-02 | Fase 4 | Complete |
+| ASEO-03 | Fase 4 | Complete |
+| ASEO-04 | Fase 4 | Complete |
+| ASEO-05 | Fase 4 | Complete |
+| ASEO-06 | Fase 4 | Complete |
+| ASEO-07 | Fase 1 | Complete |
+| ASEO-08 | Fase 4 | Complete |
+| ASEO-09 | Fase 4 | Complete |
 | PWA-01 | Fase 6 | Pending |
 | PWA-02 | Fase 5 | Pending |
 | PWA-03 | Fase 5 | Pending |
@@ -232,18 +232,18 @@
 | REPORT-01 | Fase 6 | Pending |
 | REPORT-02 | Fase 6 | Pending |
 | REPORT-03 | Fase 6 | Pending |
-| REPORT-04 | Fase 4 | Pending |
+| REPORT-04 | Fase 4 | Complete |
 | NOTIF-01 | Fase 5 | Pending |
 | NOTIF-02 | Fase 5 | Pending |
 | NOTIF-03 | Fase 5 | Pending |
 | NOTIF-04 | Fase 5 | Pending |
-| DASH-01 | Fase 4 | Pending |
-| DASH-02 | Fase 4 | Pending |
-| DASH-03 | Fase 4 | Pending |
-| DASH-04 | Fase 4 | Pending |
-| DASH-05 | Fase 4 | Pending |
-| DASH-06 | Fase 4 | Pending |
-| DASH-07 | Fase 4 | Pending |
+| DASH-01 | Fase 4 | Complete |
+| DASH-02 | Fase 4 | Complete |
+| DASH-03 | Fase 4 | Complete |
+| DASH-04 | Fase 4 | Complete |
+| DASH-05 | Fase 4 | Complete |
+| DASH-06 | Fase 4 | Complete |
+| DASH-07 | Fase 4 | Complete |
 | FIN-01 | Fase 1 | Pending |
 | FIN-02 | Fase 7 | Pending |
 | FIN-03 | Fase 7 | Pending |

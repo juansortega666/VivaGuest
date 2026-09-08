@@ -1,26 +1,547 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  /* El init escribe `--font-sans: var(--font-sans)`, que es una referencia
+     circular invalida: el `html { @apply font-sans }` de abajo cae al fallback
+     del navegador y Geist no se renderiza nunca. `app/layout.tsx` declara la
+     fuente como `variable: "--font-geist-sans"`, que es a lo que hay que
+     apuntar. `--font-mono` ya venia correcto. */
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  /* Poppins es la tipografia de marca (sitio VivaGuest 2018). Solo en
+     momentos de marca: logotipo, login y titulos. Los datos densos se
+     quedan en --font-sans (Geist), que trae numerales tabulares y alinea
+     las columnas de dinero. Poppins es geometrica y ancha: en una tabla
+     de 39 filas cuesta ancho y legibilidad a 12-14px. */
+  --font-brand: var(--font-poppins);
+  --font-heading: var(--font-brand);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  html {
+    @apply font-sans;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ═══════════════════════════════════════════════════════════════════════════
+   CAPA DE TOKENS DE VIVAGUEST — 02-UI-SPEC.md §4.3
+
+   Todo lo que sigue va DESPUES de lo que genero `shadcn init` y lo pisa por
+   orden de cascada. Este es el unico archivo del repo autorizado a nombrar un
+   valor de color literal; el guardarrail 6 de scripts/ci/check-service-role.sh
+   lo excluye a proposito y atrapa cualquier hex o clase arbitraria que se
+   escape a app/ o components/.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ─────────────────────────────────────────────────────────────
+     MARCA — identidad real de VivaGuest, recuperada del sitio de 2018
+     (web.archive.org, snapshot 2018-08-22).
+
+     El coral de marca es #ff7469, hue 4.4. Da 2.64:1 contra blanco, muy
+     por debajo del 4.5:1 que WCAG exige para texto, así que NO se usa
+     para texto ni para rellenos de control. Vive en --brand-identity y
+     solo aplica a logo y áreas grandes, donde la regla de texto no rige.
+
+     --brand es ese mismo tono oscurecido a 4.87:1 conservando hue 4.4.
+     Nota: el coral de VivaGuest (hue 4.4) y el de Airbnb (hue 358.2) son
+     casi el mismo tono, pero VivaGuest llegó ahí por su cuenta en 2018.
+     No hay problema de marca ajena; el único límite es el contraste.
+
+     Un rebrand cambia ESTAS TRES LÍNEAS y nada más. Ningún componente
+     conoce el valor literal.
+     ───────────────────────────────────────────────────────────── */
+  --brand:          oklch(0.5718 0.1917 29.01);  /* #d1382c  4.87:1 */
+  --brand-hover:    oklch(0.5290 0.1764 28.73);  /* #bc3228  5.79:1 */
+  --brand-identity: oklch(0.7231 0.1718 26.75);  /* #ff7469  2.64:1 — logo y áreas grandes, NUNCA texto */
+  --brand-foreground: oklch(1 0 0);
+
+  /* Acento dorado de la identidad 2018. 1.69:1 contra blanco: decorativo
+     y fondos, nunca texto sobre blanco. */
+  --brand-gold: oklch(0.8311 0.1400 86.81);  /* #efc14e */
+
+  /* Todo lo que es "de marca" deriva. Nunca al revés. */
+  --primary:            var(--brand);
+  --primary-foreground: var(--brand-foreground);
+  --ring:               var(--brand);
+  --sidebar-primary:    var(--brand);
+  --sidebar-ring:       var(--brand);
+
+  /* Estados operativos: NO son de marca y NO cambian con el rebrand. */
+  --status-ok:   oklch(0.5273 0.1371 150.07);
+  --status-warn: oklch(0.5553 0.1455 49.00);
+  --status-idle: oklch(0.4455 0.0374 257.28);
+  --status-info: oklch(0.5510 0.0234 264.36);
+  /* Quinto estado, anadido en la Fase 4 (04-UI-SPEC.md §4.1). Los cuatro de
+     arriba se reparten cuatro estados del aseo y "En curso" se quedaba sin uno;
+     los dos grises (`idle` #475569 e `info` #6B7280) estan demasiado cerca para
+     separar dos estados distintos. Contrastes medidos con la formula WCAG 2.1 el
+     2026-09-03: 6.70:1 sobre --background y 6.25:1 sobre --canvas, AA de texto en
+     las dos superficies donde se usa (fila normal y fila en hover). Es azul, asi
+     que no colisiona con --primary (hue 29) ni con --destructive (hue 13.7), que
+     es el choque declarado en 02-UI-SPEC.md §4.6. */
+  --status-progress: oklch(0.4882 0.2172 264.38);
+  --surface-ok:   oklch(0.9788 0.0221 160.24);
+  --surface-warn: oklch(0.9810 0.0187 83.06);
+  --surface-destructive: oklch(0.9708 0.0130 11.54);
+
+  --input: oklch(0.6411 0.0216 260.16);
+  --radius: 0.375rem;
+}
+
+@theme inline {
+  --color-status-ok:   var(--status-ok);
+  --color-status-warn: var(--status-warn);
+  --color-status-idle: var(--status-idle);
+  --color-status-info: var(--status-info);
+  --color-status-progress: var(--status-progress);
+  --color-surface-ok:   var(--surface-ok);
+  --color-surface-warn: var(--surface-warn);
+  --color-surface-destructive: var(--surface-destructive);
+}
+
+/* ── Resto de la paleta medida de §4.2 ────────────────────────────────────────
+   El preset `nova` trae una escala de grises neutra; estos son los valores que
+   el UI-SPEC midio con la formula WCAG 2.1 contra la superficie donde cada
+   token se usa. No son de marca y no cambian con el rebrand.
+
+   `--input` (arriba, en el bloque de §4.3) es mas oscuro que `--border` A
+   PROPOSITO: WCAG 1.4.11 exige 3:1 para el limite de un control y `--border`
+   da 1.25:1. No unificarlos.
+
+   `--destructive` es un rojo distinto del coral. Su contraste con `--primary`
+   es 1.72:1, asi que la distincion NO puede quedar en el color: §4.6 obliga a
+   que todo destructivo lleve icono y a que nunca haya un primario relleno
+   adyacente a un destructivo relleno.                                        */
+:root {
+  --background: oklch(1 0 0);                    /* #FFFFFF */
+  --foreground: oklch(0.2101 0.0318 264.66);     /* #111827 */
+  --canvas: oklch(0.9757 0.0017 247.84);         /* #F6F7F8 — secundario 30% */
+  --muted: oklch(0.9632 0.0034 247.86);          /* #F1F3F5 */
+  --muted-foreground: oklch(0.5006 0.0216 258.37); /* #5C6470 */
+  --border: oklch(0.9235 0.0052 247.88);         /* #E3E6E9 */
+  --destructive: oklch(0.4546 0.1713 13.70);     /* #9F1239 */
+
+  --card: var(--background);
+  --card-foreground: var(--foreground);
+  --popover: var(--background);
+  --popover-foreground: var(--foreground);
+  --secondary: var(--canvas);
+  --secondary-foreground: var(--foreground);
+  --accent: var(--canvas);
+  --accent-foreground: var(--foreground);
+  --sidebar: var(--canvas);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-accent: var(--muted);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-primary-foreground: var(--brand-foreground);
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+}
+
+/* ── Escala de espaciado — 02-UI-SPEC.md §2 ───────────────────────────────────
+   Todos multiplos de 4. Se usan POR TOKEN. Prohibido `p-[13px]`, `gap-[7px]` y
+   cualquier valor arbitrario de espaciado en un componente: si hace falta un
+   valor nuevo, se anade aqui.                                                */
+@theme {
+  --spacing-xs:  4px;   /* icono↔texto, padding inline de badges */
+  --spacing-sm:  8px;   /* padding vertical de celda, gap en grupo de botones */
+  --spacing-md:  12px;  /* padding horizontal de celda, gap de la toolbar */
+  --spacing-lg:  16px;  /* entre campos de formulario, padding de card */
+  --spacing-xl:  24px;  /* padding de pagina, entre secciones del formulario */
+  --spacing-2xl: 32px;  /* entre bloques mayores de una pantalla */
+  --spacing-3xl: 48px;  /* nivel de pagina (cabecera ↔ contenido vacio) */
+
+  /* Excepciones declaradas de §2. Existen como token justamente para que nadie
+     tenga que escribirlas como valor arbitrario. */
+  --spacing-fila:            40px;  /* alto de fila de tabla; 39 filas sin scroll en 1080p */
+  --spacing-fila-encabezado: 32px;  /* menos peso visual que las filas de datos */
+  --spacing-barra:           56px;  /* alto de la barra superior */
+  --spacing-barra-acciones:  64px;  /* barra fija del formulario: 2 botones de 36px + aire */
+  --spacing-toque:           44px;  /* minimo de Apple HIG; SOLO dentro de app/(cleaner)/ */
+}
+
+/* ── Anchos de contenedor ─────────────────────────────────────────────────────
+   Tailwind v4 resuelve las utilidades `max-w-*` con nombre desde el namespace
+   `--container-*`, no desde `--spacing-*`. Van aqui por la misma razon que las
+   excepciones de espaciado: existen como token para que nadie escriba
+   `max-w-[400px]`, que es el valor arbitrario que §2 prohibe.                 */
+@theme {
+  --container-login:   400px;  /* card de /login (UI-SPEC §12.1) */
+  --container-aseador: 480px;  /* columna de app/(cleaner)/ (UI-SPEC §12.2) */
+}
+
+/* ── Tipografia — 02-UI-SPEC.md §3 ────────────────────────────────────────────
+   Exactamente 4 tamanos y 2 pesos (400 y 600). Nada de 500, 700 ni 800.
+   `micro` no fija peso porque se usa en 400 (ayuda, contadores) y en 600
+   (encabezados de columna, etiqueta de estado).                              */
+@theme {
+  --text-display: 1.5rem;                /* 24px — titulo de pagina */
+  --text-display--line-height: 1.2;
+  --text-display--font-weight: 600;
+
+  --text-heading: 1rem;                  /* 16px — titulos de seccion y de dialogo */
+  --text-heading--line-height: 1.3;
+  --text-heading--font-weight: 600;
+
+  --text-body: 0.875rem;                 /* 14px — todo el texto corriente */
+  --text-body--line-height: 1.5;
+  --text-body--font-weight: 400;
+
+  --text-micro: 0.75rem;                 /* 12px — ayuda, contadores, encabezados */
+  --text-micro--line-height: 1.4;
+}
+/* ── Anchos de columna y contenedor del admin — 02-UI-SPEC.md §6.2 y §11.1 ────
+   Mismo motivo que las excepciones de espaciado de arriba: existen como token
+   para que ningun componente escriba el valor entre corchetes, que es lo que §2
+   prohibe. Tailwind v4 resuelve `w-*`, `h-*` y `top-*` desde el namespace
+   `--spacing-*`, y `max-w-*` desde `--container-*` (medido en el plan 02-06). */
+@theme {
+  --spacing-col-estado:       96px;  /* ESTADO en la lista de aseadores */
+  --spacing-col-telefono:    140px;  /* TELEFONO */
+  --spacing-col-responsable: 200px;  /* RESPONSABLE DE */
+  --spacing-col-suplente:    160px;  /* SUPLENTE EN */
+  --spacing-col-menu:         48px;  /* columna del menu de acciones */
+  --spacing-col-nombre:      200px;  /* minimo de NOMBRE, que es la columna flexible */
+  --spacing-avatar:           28px;  /* circulo de iniciales del menu de usuario */
+}
+
+/* ── Anchos de la tabla de apartamentos — 02-UI-SPEC.md §7.1 ──────────────────
+   SON OTROS que los de la lista de aseadores, y por eso llevan sufijo en vez de
+   reutilizar los de arriba: ESTADO mide 96px alli y 112px aqui (cabe la etiqueta
+   `Informativa`, la mas larga de las cuatro), y RESPONSABLE mide 200px alli y
+   168px aqui. Compartir el token haria que tocar una tabla moviera la otra.
+
+   `--spacing-col-dinero` sirve a TARIFA y a PAGO: §7.1 les da 120px a las dos y
+   son la misma clase de dato, asi que un unico token evita que se separen por
+   descuido y dejen de alinearse.                                              */
+@theme {
+  --spacing-col-estado-apto:      112px;  /* ESTADO: icono 14px + etiqueta 12/600 */
+  --spacing-col-cluster:          140px;  /* CLUSTER, texto plano sin badge */
+  --spacing-col-dinero:           120px;  /* TARIFA y PAGO, alineadas a la derecha */
+  --spacing-col-responsable-apto: 168px;  /* RESPONSABLE, o contacto externo */
+  --spacing-col-calendario:        96px;  /* CALENDARIO, icono centrado */
+
+  /* Toolbar de §6.2. Van como token por lo mismo que los anchos de columna:
+     `w-[320px]` seria el valor arbitrario que §2 prohibe. */
+  --spacing-buscador:             320px;
+  --spacing-filtro-cluster:       200px;
+
+  /* Columna del `Select` de tipo en cada fila del editor de cuartos
+     (UI-SPEC §8.1 seccion 5). Va como token porque §2 prohibe el valor
+     arbitrario, y como ancho fijo porque una columna elastica haria que las
+     ocho filas de un apartamento no alineen sus etiquetas entre si. 180px
+     alojan el nombre mas largo del catalogo (`Balcon / terraza`) sin recortar. */
+  --spacing-col-tipo-cuarto:      180px;
+}
+
+/* Encabezados de columna: 12px/600 uppercase con 0.04em de letter-spacing
+   (UI-SPEC §3). Va como token por lo mismo que los anchos: para que ninguna
+   celda escriba el valor entre corchetes. */
+@theme {
+  --tracking-columna: 0.04em;
+}
+
+@theme {
+  --container-admin: 1440px;  /* contenedor de contenido de (admin) */
+  --container-vacio: 44ch;    /* cuerpo del estado vacio (UI-SPEC §9.2) */
+
+  /* Diálogo de alta de aseador (UI-SPEC §11.2). El default de `DialogContent`
+     de shadcn es `sm:max-w-sm` (384px) y el contrato pide 480px. */
+  --container-dialogo: 480px;
+
+  /* Ancho minimo del boton primario del dialogo. §9.3 exige que el boton NO
+     salte de ancho al pasar a `Creando…`, y ahi si hace falta el `min-width`
+     que el boton de /login no necesitaba: este no es de ancho completo, asi que
+     su ancho SI depende del label. Va como token porque `min-w-[148px]` seria
+     exactamente el valor arbitrario que §2 prohibe.
+     Tailwind v4 resuelve `min-w-*` con nombre desde `--container-*`, igual que
+     `max-w-*` (medido en el plan 02-06). */
+  --container-boton-alta: 148px;
+
+  /* Los dos botones de la barra de acciones del formulario (UI-SPEC §8.2), por
+     la misma razon de §9.3: `Guardar y activar` pasa a `Activando…` y `Guardar`
+     pasa a `Guardando…`, y sin `min-width` los dos encogen a mitad de operacion.
+     Son dos tokens y no uno porque los labels miden distinto: compartirlos
+     dejaria al secundario con 60px de aire muerto a la izquierda del primario. */
+  --container-boton-activar: 168px;
+  --container-boton-guardar: 116px;
+
+  /* Ancho del formulario de apartamento. Mas estrecho que el contenedor de
+     pagina de 1440px a proposito: una linea de input de 1400px obliga al ojo a
+     recorrer la pantalla entera entre la etiqueta y el final del campo. */
+  --container-formulario: 720px;
+
+  /* Carriles de la pantalla de operacion (04-UI-SPEC.md §2 y §6). La rejilla es
+     `minmax(0, 1fr) var(--container-rail)`, asi que el carril lateral es el unico
+     de los dos con ancho declarado. */
+  --container-rail:  360px;  /* carril lateral sticky: bandeja + alertas */
+
+  /* Ancho del Sheet de confirmacion encadenada (§10). Misma situacion que
+     --container-dialogo: el `SheetContent` generado trae `sm:max-w-sm` (384px) y
+     D-09 pide 480px. El override en el sitio de uso tiene que repetir la cadena
+     de variantes exacta, `data-[side=right]:sm:max-w-sheet`; ver la cabecera de
+     components/ui/sheet.tsx. */
+  --container-sheet: 480px;
+
+  /* Anchos de las dos primitivas que NO llevan override en su sitio de uso:
+     `AlertDialog` y `Tooltip`. Los nombres son PROPIOS a proposito, y esto no
+     es cosmetico: Tailwind v4.3 resuelve `max-w-<nombre>` contra `--spacing-*`
+     ANTES que contra `--container-*`, y §2 declara la escala de espaciado con
+     nombres de talla (`--spacing-xs` = 4px, `--spacing-sm` = 8px). Por eso el
+     `max-w-xs` que traen las primitivas de shadcn emitia
+     `max-width:var(--spacing-xs)` = 4px, y el texto se salia de la caja.
+     Medido en el CSS de produccion por el plan 04-14.
+
+     Declarar `--container-xs/sm/md/lg` a mano NO lo corrige: el espaciado gana
+     igual. `@utility max-w-sm { ... }` tampoco: Tailwind emite su declaracion
+     despues de la del usuario dentro de la misma regla. Las dos se probaron y
+     se descartaron con medicion.
+
+     Regla derivada: ningun token de `--container-*` puede llamarse con un
+     nombre de talla mientras exista un `--spacing-*` homonimo. */
+  --container-alerta:       320px;  /* AlertDialog en movil y en tamano `sm` */
+  --container-alerta-ancha: 384px;  /* AlertDialog `default` a partir de sm: */
+  --container-tooltip:      320px;  /* tope del globo de ayuda */
+
+  /* Anchos BASE de las otras dos primitivas afectadas por lo mismo, `Dialog` y
+     `Sheet`. Los 384px NO son un numero inventado: son el default del registry
+     de shadcn restaurado, exactamente lo que `sm:max-w-sm` queria decir antes de
+     que el namespace de espaciado se lo comiera. Van con nombre propio por la
+     regla derivada que esta escrita unas lineas arriba: ningun token de
+     `--container-*` puede llamarse con un nombre de talla mientras exista un
+     `--spacing-*` homonimo.
+
+     NO se fusionan con --container-dialogo ni con --container-sheet, y esa
+     separacion es deliberada: esos dos valen 480px porque son la DESVIACION que
+     pide el contrato (UI-SPEC §11.2 y D-09), y viven en el sitio de uso. Estos
+     dos son lo que trae el registry. Fusionarlos borraria la frontera entre
+     "default de shadcn" y "decision de VivaGuest", que es justo la distincion
+     que hace legible por que hay un override en cuatro DialogContent y un
+     SheetContent.
+
+     Efecto medible del cambio: el `Sheet` con `side="left"` pasa de 8px a 384px
+     (nadie lo pisaba); el de `side="right"` sigue en 480px por su override, y
+     ningun Dialog de la app cambia de ancho. */
+  --container-dialogo-base: 384px;  /* DialogContent a partir de sm: */
+  --container-sheet-base:   384px;  /* SheetContent, los dos lados, desde sm: */
+
+  /* Anchos minimos de los dos botones primarios de /operacion, por la misma
+     razon de §15.2 que los tres de la Fase 2: el boton NO puede saltar de ancho
+     al pasar a su gerundio, y `min-w-[172px]` seria el valor arbitrario que §2
+     prohibe. Los dos labels miden distinto, asi que son dos tokens:
+       `Confirmar y seguir` / `Confirmar y cerrar` -> `Confirmando…`
+       `Crear aseo`                               -> `Creando…`
+     El primero se deriva de --container-boton-activar (168px para `Guardar y
+     activar`, 17 caracteres) sumandole el caracter que tiene de mas. */
+  --container-boton-confirmar: 176px;
+  --container-boton-crear-aseo: 124px;
+
+  /* Los cuatro botones primarios de los dialogos de mutacion por fila (§12.1,
+     §12.2, §12.4 y §12.5), por la misma razon de §15.2: el boton NO puede
+     saltar de ancho al pasar a su gerundio, y `min-w-[148px]` seria el valor
+     arbitrario que §2 prohibe. Son cuatro tokens y no uno porque los labels
+     miden distinto, y compartirlos dejaria al mas corto con aire muerto.
+
+     Se dimensionan sobre el estado MAS ANCHO de cada boton, que no siempre es
+     el de reposo: los dos primeros ensanchan en vuelo (el gerundio es mas largo
+     que el label) y los dos ultimos ensanchan en reposo (llevan icono y su
+     gerundio es mas corto).
+
+       `Reasignar`                -> `Reasignando…`        (ensancha en vuelo)
+       `Reprogramar`              -> `Reprogramando…`      (ensancha en vuelo)
+       CircleCheck + `Cerrar aseo`   -> `Cerrando…`        (ensancha en reposo)
+       CircleSlash + `Cancelar aseo` -> `Cancelando…`      (ensancha en reposo)
+
+     Derivados de --container-boton-guardar (116px para `Guardando…`, 10
+     caracteres con `px-2.5` a cada lado) a ~8.7px por caracter, mas 22px cuando
+     hay icono de 16px con su `gap-1.5`. */
+  --container-boton-reasignar:     148px;
+  --container-boton-reprogramar:   164px;
+  --container-boton-cerrar-aseo:   140px;
+  --container-boton-cancelar-aseo: 156px;
+}
+
+/* ── Tabla de dia y panel de alertas — 04-UI-SPEC.md §2, §7.1, §8.2 y §11 ─────
+   Las cuatro columnas llevan sufijo propio en vez de reutilizar las de la tabla
+   de apartamentos, por la misma razon que la Fase 2 separo
+   --spacing-col-estado-apto de --spacing-col-estado: compartir el token haria
+   que tocar la tabla de aseos moviera la de apartamentos.
+
+   --spacing-fila (40px), --spacing-fila-encabezado (32px), --spacing-barra
+   (56px), --spacing-col-menu (48px) y --spacing-col-nombre (200px) YA existen y
+   esta fase los reutiliza tal cual.
+
+   No se declara ningun token de toque de 44px: esta fase es solo (admin),
+   escritorio con mouse, y --spacing-toque sigue siendo exclusivo de
+   app/(cleaner)/.                                                             */
+@theme {
+  --spacing-col-estado-aseo: 132px;  /* ESTADO: icono 14px + `Gestion externa`, la etiqueta mas larga */
+  --spacing-col-hora:         88px;  /* HORA LIMITE, alineada a la derecha */
+  --spacing-col-acargo:      176px;  /* A CARGO: aseador, o contacto externo */
+  --spacing-col-huespedes:    88px;  /* HUESPEDES, alineada a la derecha */
+
+  /* Altos declarados, todos multiplo de 4. Existen como token por lo mismo que
+     los anchos: para que ninguna fila escriba el valor entre corchetes. */
+  --spacing-fila-alerta:  64px;  /* fila del panel de alertas: 12·1.4 + 14·1.5 + 24 de padding = 61.8 */
+  --spacing-dia-cabecera: 48px;  /* cabecera colapsable de cada dia */
+  --spacing-chip:         32px;  /* chip de carga por aseador */
+}
+
+/* ── Movimiento — 02-UI-SPEC.md §6.4 ──────────────────────────────────────────
+   Transiciones SOLO de color, background-color, border-color y opacity, 120ms
+   ease-out. Nada de `transition: all` ni animaciones de layout: en una tabla de
+   39 filas una transicion de layout es un salto visible en cada hover.
+
+   Se declara como utilidad y no como clase suelta para que el valor de 120ms
+   viva en un unico sitio; `transition-colors` de Tailwind trae 150ms y no
+   coincide con el contrato.                                                   */
+@utility transicion {
+  transition-property: color, background-color, border-color, opacity;
+  transition-timing-function: ease-out;
+  transition-duration: 120ms;
+}
+
+@layer base {
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0s !important;
+      animation-duration: 0s !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+    }
+
+    /* La UNICA excepcion del contrato: el giro del spinner de carga es
+       informacion de estado, no decoracion. Congelarlo deja al usuario mirando
+       un icono quieto sin saber si la operacion sigue viva. */
+    .animate-spin {
+      animation-duration: 1s !important;
+      animation-iteration-count: infinite !important;
+    }
+  }
 }

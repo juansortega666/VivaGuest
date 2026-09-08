@@ -1,0 +1,16 @@
+BEGIN:VCALENDAR
+PRODID:-//Airbnb Inc//Hosting Calendar 0.8.8//EN
+VERSION:2.0
+CALSCALE:GREGORIAN
+DTSTAMP:20260901T120000Z
+BEGIN:VEVENT
+DTSTAMP:20260901T120000Z
+DTSTART;VALUE=DATE:20260903
+DTEND;VALUE=DATE:20260904
+UID:folded0001@airbnb.com
+SUMMARY:Reserved
+DESCRIPTION:Phone Number (Last 4 Digits): 4821\nEmail: guest@example.com\nR
+ eservation URL: https://www.airbnb.com/hosting/reservations/details/HMYXB8
+ 25YD
+END:VEVENT
+END:VCALENDAR
