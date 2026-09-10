@@ -2,10 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
+current_phase: 05
+current_phase_name: notificaciones-push-e-instalacion-de-la-pwa
 status: executing
-stopped_at: "2026-09-10. discuss-phase 5 CERRADO: 05-CONTEXT.md escrito con 8 decisiones (D-01 a D-08) y ROADMAP actualizado con los criterios 6 y 7. Siguiente: ui-phase 5. Palabra para retomar: RETOMAR-05."
-last_updated: "2026-09-10T00:00:00.000Z"
+stopped_at: "Phase 05 UI-SPEC approved (6/6 dimensiones, 2 FLAG aceptados). Siguiente: plan-phase 5"
+last_updated: "2026-09-10T19:47:36.419Z"
 last_activity: 2026-09-10
+last_activity_desc: discuss-phase 5 cerrado; ROADMAP §Phase 5 actualizado con los criterios 6 y 7
 progress:
   total_phases: 9
   completed_phases: 4
@@ -34,18 +37,25 @@ Las 8 decisiones de la Fase 5, en una linea cada una (el detalle y el porque est
 
 - D-01 Android es SUPUESTO, no inventario. iOS se construye y se valida (hay iPhone fisico). Levantar
   los 8 equipos reales es tarea previa al piloto de la Fase 8.
+
 - D-02 Instalacion asistida presencial, una vez. NO termina cuando la app aparece en la pantalla de
   inicio: termina cuando llego una notificacion de prueba a ese telefono.
+
 - D-03 El admin ve quien no tiene push activo, y recibe advertencia al confirmar un aseo para uno de
   ellos. No es el semaforo de entregabilidad (ese sigue diferido a v2).
+
 - D-04 Drenaje: trigger AFTER INSERT en `notifications` con `net.http_post` fire-and-forget, MAS
   `pg_cron` cada 60s de red y reintentos. NO se toca ninguno de los 6+ RPC que ya escriben.
+
 - D-05 Colapso de rafagas con `Topic` + `tag` a la misma clave, por destinatario + aseo + CLASE de
   evento. `dedupe_key` (~80 chars) no cabe en `Topic` (32 base64url): hay que derivar un hash corto.
+
 - D-06 El codigo de acceso NO viaja en el payload de push. Desviacion deliberada de la letra del
   criterio 2; el codigo solo sale por `reveal_access_code()` con su auditoria (T-01-48).
+
 - D-07 Dos formatos de envio: declarativo para iOS 18.4+ (el sistema pinta la notificacion y el
   codigo no puede fallar) y clasico para el resto. Mitiga la revocacion silenciosa de Safari.
+
 - D-08 ALCANCE AMPLIADO por decision del usuario: `hora_limite_vencida` para aseos anteriores a hoy
   entra en esta fase, no en un quick aparte. Ya reflejado en el ROADMAP como criterio 7.
 
@@ -64,6 +74,7 @@ medidos:
    siempre, sin toast y sin cerrar el dialogo. Se quito la llamada de las nueve; el refresco lo pide
    `router.refresh()` en el cliente, que los cinco dialogos ya llamaban. La causa raiz NO esta
    identificada y el disparador es de TAMANO del arbol de cliente, no de contenido.
+
 2. El `Sheet` de confirmacion encadenada media OCHO PIXELES de ancho. `max-w-<nombre>` en Tailwind
    v4.3 resuelve contra `--spacing-*` antes que contra `--container-*`, y la escala de espaciado de
    02-UI-SPEC §2 usa nombres de talla: `max-w-sm` compilaba a `var(--spacing-sm)` = 8px. Ademas
@@ -254,8 +265,8 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-06T21:49:40.726Z
-Stopped at: Completado 04-13-PLAN.md
+Last session: 2026-09-10T19:47:36.411Z
+Stopped at: Phase 05 UI-SPEC approved (6/6 dimensiones, 2 FLAG aceptados). Siguiente: plan-phase 5
 
 **Sin bloqueos activos.** El stack local de Supabase esta arriba y sano (12 contenedores), la
 migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` **29 archivos / 548 tests**,
@@ -288,4 +299,4 @@ migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` **29 ar
    segundos, `db:test` 2,3 s y la integracion completa 9,7 s.
 
 Siguiente: la wave 6 de la Fase 4 (04-10, 04-11, 04-12).
-Resume file: None
+Resume file: .planning/phases/05-notificaciones-push-e-instalaci-n-de-la-pwa/05-UI-SPEC.md
