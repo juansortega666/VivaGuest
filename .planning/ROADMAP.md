@@ -157,10 +157,12 @@ Plans:
 **Requirements**: NOTIF-01, NOTIF-02, NOTIF-03, NOTIF-04, PWA-02, PWA-03
 **Success Criteria** (qué debe ser VERDAD):
   1. La PWA se instala en la pantalla de inicio en Android y en iOS y desde ahí recibe notificaciones push en dispositivos físicos reales
-  2. Al asignarse un aseo, el aseador recibe push con los detalles y el código de acceso, y al tocarla aterriza en ese aseo
+  2. Al asignarse un aseo, el aseador recibe push con los detalles del aseo (apartamento, fecha y hora límite) y al tocarla aterriza en ese aseo, donde revela el código de acceso con la auditoría y la ventana temporal intactas. **Corregido 2026-09-10:** el código de acceso NO viaja dentro del payload de push. Desviación deliberada de la redacción original, justificada en `05-CONTEXT.md` D-06: el código solo sale por `reveal_access_code()`, que exige rastro en `access_code_reads` (T-01-48); meterlo en el payload lo pondría en la pantalla de bloqueo, sin auditoría y posiblemente días antes del aseo
   3. El admin recibe push por daño reportado, faltante reportado, "no puedo" y aseo completado
   4. Si el aseador no tiene push activo, ve un banner persistente con instrucciones distintas según si nunca dio el permiso o si ya lo negó
   5. Cada envío queda registrado, los fallidos se reintentan, y las suscripciones que el navegador reporta como expiradas o revocadas se eliminan solas
+  6. El admin ve qué aseadores no tienen push activo, y al confirmar un aseo para uno de ellos recibe una advertencia antes de asignar (`05-CONTEXT.md` D-03)
+  7. Un aseo de fecha anterior a hoy, vivo y con la hora límite vencida, genera alerta. **Añadido 2026-09-10** por decisión explícita del usuario (`05-CONTEXT.md` D-08): hoy no la genera, porque `leerOperacion()` filtra con `.gte('scheduled_date', hoy)` en `lib/data/operacion.ts:243`. Toca el Core Value: un aseo se puede perder en silencio
 **Plans**: TBD
 **UI hint**: yes
 

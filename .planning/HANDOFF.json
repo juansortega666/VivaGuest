@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-09-08T15:30:28.198Z",
+  "timestamp": "2026-09-10T00:00:00.000Z",
   "phase": "05",
   "phase_name": "notificaciones-push-e-instalacion-de-la-pwa",
   "phase_dir": ".planning/phases/05-notificaciones-push-e-instalaci-n-de-la-pwa",
@@ -24,20 +24,15 @@
     {
       "id": 3,
       "name": "discuss-phase 5: presentar areas grises al usuario",
-      "status": "in_progress",
-      "progress": "Las 4 areas grises quedaron redactadas y presentadas; el usuario interrumpio antes de escoger para cambiar de computador"
+      "status": "done",
+      "progress": "discuss-phase 5 CERRADO. Las 4 areas grises decididas mas una quinta que salio al anclar el schema (el codigo de acceso en el payload de push). 05-CONTEXT.md escrito con D-01..D-08; ROADMAP §Phase 5 actualizado con los criterios 6 y 7."
     }
   ],
   "remaining_tasks": [
     {
-      "id": 3,
-      "name": "discuss-phase 5: que el usuario escoja areas y discutirlas hasta cerrar CONTEXT.md",
-      "status": "in_progress"
-    },
-    {
       "id": 4,
       "name": "ui-phase 5: contrato visual del banner de permiso y de las instrucciones de instalacion",
-      "status": "not_started"
+      "status": "next"
     },
     {
       "id": 5,
