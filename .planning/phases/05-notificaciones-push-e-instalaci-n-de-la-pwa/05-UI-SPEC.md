@@ -1285,11 +1285,35 @@ Para que `gsd-ui-auditor` no la reporte como hallazgo nuevo.
 
 ## Checker Sign-Off
 
-- [ ] Dimensión 1 Copywriting: PASS
-- [ ] Dimensión 2 Visuals: PASS
-- [ ] Dimensión 3 Color: PASS
-- [ ] Dimensión 4 Typography: PASS
-- [ ] Dimensión 5 Spacing: PASS
-- [ ] Dimensión 6 Registry Safety: PASS
+- [x] Dimensión 1 Copywriting: PASS
+- [x] Dimensión 2 Visuals: PASS
+- [x] Dimensión 3 Color: PASS
+- [x] Dimensión 4 Typography: PASS
+- [x] Dimensión 5 Spacing: PASS
+- [x] Dimensión 6 Registry Safety: PASS
 
-**Aprobación:** pending
+**Aprobación:** APPROVED — `gsd-ui-checker`, 2026-09-10, 6/6 dimensiones, cero BLOCK.
+
+El checker verificó los seis puntos de riesgo contra el texto del spec, no contra el resumen:
+
+1. `/aseos/[id]` — confirmado que `notifications.url` ya resuelve ahí desde la migración 09 y la
+   ruta no existe, y que §9.1 la acota a solo lectura excluyendo checklist, cámara y fotos como
+   trabajo de la Fase 6.
+2. Las dos supersesiones están marcadas y justificadas, no son deriva silenciosa. La de tipografía
+   se sostiene en el zoom automático de iOS Safari bajo 16px; la del test de copy trae la regex de
+   reemplazo.
+3. `--container-captura` (280px) y `--container-codigo` (240px) verificados nombre por nombre contra
+   la escala de espaciado: sin colisión. §17.3 exige registrarlos en el grupo `max-w` de
+   `extendTailwindMerge`, que es el mecanismo real y no una mención.
+4. El hueco de §20.10 está declarado como compuerta de decisión del planner, con la consecuencia
+   escrita en términos falsables: si la columna no cabe, §5.2 y §8.6 se reabren, no se implementan
+   a medias.
+5. Los 44px son piso incondicional bajo `app/(cleaner)/`, aplicados en el banner, el asistente y la
+   pantalla de aterrizaje, no aseverados una sola vez.
+6. D-06 sostenido en todas las superficies: la tabla de payload de §10.1 no tiene campo de código.
+
+**Recomendaciones no bloqueantes (FLAG), aceptadas:**
+- CTAs de una sola palabra sin sustantivo: `Activar` (§13.2) y `Copiar` (§9.3). Riesgo bajo porque el
+  icono y el contexto hacen la acción inequívoca.
+- La proporción de color 60/30/10 no se reafirma aquí; se hereda de `02-UI-SPEC`. Aceptable porque
+  esta fase añade cero tokens de color (§4.1).
