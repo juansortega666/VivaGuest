@@ -1186,8 +1186,17 @@ export type Database = {
           p256dh: string
           revoked_at: string | null
           revoked_reason: string | null
+          soporta_declarativo: boolean
           user_agent: string | null
           user_id: string
+          verificacion_enviada_at: string | null
+          verificacion_grado:
+            | Database["public"]["Enums"]["grado_verificacion_aviso"]
+            | null
+          verificacion_intentos: number
+          verificacion_token: string | null
+          verificado_at: string | null
+          visto_at: string | null
         }
         Insert: {
           auth: string
@@ -1200,8 +1209,17 @@ export type Database = {
           p256dh: string
           revoked_at?: string | null
           revoked_reason?: string | null
+          soporta_declarativo?: boolean
           user_agent?: string | null
           user_id: string
+          verificacion_enviada_at?: string | null
+          verificacion_grado?:
+            | Database["public"]["Enums"]["grado_verificacion_aviso"]
+            | null
+          verificacion_intentos?: number
+          verificacion_token?: string | null
+          verificado_at?: string | null
+          visto_at?: string | null
         }
         Update: {
           auth?: string
@@ -1214,8 +1232,17 @@ export type Database = {
           p256dh?: string
           revoked_at?: string | null
           revoked_reason?: string | null
+          soporta_declarativo?: boolean
           user_agent?: string | null
           user_id?: string
+          verificacion_enviada_at?: string | null
+          verificacion_grado?:
+            | Database["public"]["Enums"]["grado_verificacion_aviso"]
+            | null
+          verificacion_intentos?: number
+          verificacion_token?: string | null
+          verificado_at?: string | null
+          visto_at?: string | null
         }
         Relationships: [
           {
@@ -1294,6 +1321,14 @@ export type Database = {
         }
         Returns: undefined
       }
+      confirmar_prueba_a_mano: {
+        Args: { p_endpoint: string }
+        Returns: undefined
+      }
+      confirmar_prueba_por_toque: {
+        Args: { p_token: string }
+        Returns: undefined
+      }
       create_manual_cleaning: {
         Args: {
           p_fecha: string
@@ -1307,11 +1342,27 @@ export type Database = {
         Returns: undefined
       }
       dispatch_feed_syncs: { Args: never; Returns: number }
+      estado_avisos_aseadores: {
+        Args: never
+        Returns: {
+          aseador_id: string
+          primera_suscripcion_at: string
+          suscripciones_vivas: number
+          ultima_verificacion: string
+          ultimo_exito: string
+          ultimo_visto: string
+          verificado_por_toque: boolean
+        }[]
+      }
       feed_health_watchdog: { Args: never; Returns: undefined }
       finish_cleaning: { Args: { p_cleaning: string }; Returns: undefined }
       reassign_cleaning: {
         Args: { p_aseador: string; p_cleaning: string }
         Returns: undefined
+      }
+      registrar_prueba_de_aviso: {
+        Args: { p_endpoint: string }
+        Returns: string
       }
       reschedule_cleaning: {
         Args: { p_cleaning: string; p_fecha: string }
@@ -1347,6 +1398,7 @@ export type Database = {
       cleaning_state: "pendiente" | "en_curso" | "completada" | "cancelada"
       cleaning_type: "normal" | "repaso" | "emergencia"
       feed_provider: "airbnb" | "booking" | "otro"
+      grado_verificacion_aviso: "toque" | "manual"
       notification_type:
         | "asignacion"
         | "no_puedo"
@@ -1491,6 +1543,7 @@ export const Constants = {
       cleaning_state: ["pendiente", "en_curso", "completada", "cancelada"],
       cleaning_type: ["normal", "repaso", "emergencia"],
       feed_provider: ["airbnb", "booking", "otro"],
+      grado_verificacion_aviso: ["toque", "manual"],
       notification_type: [
         "asignacion",
         "no_puedo",
