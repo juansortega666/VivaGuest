@@ -13,11 +13,11 @@ import {
   revocarSuscripcion,
   type CodigoDePush,
 } from '@/lib/data/push';
-import { readServerSecret } from '@/lib/env';
 import { claveDeColapso, esClaveDeTopicValida } from '@/lib/push/colapso';
 import { decidir, ESPERAS_MS, TOPE_DE_INTENTOS } from '@/lib/push/errores';
 import { construirPayload, TTL_SEGUNDOS, urgenciaDe } from '@/lib/push/payload';
 import { enviar, TIMEOUT_MS, type RespuestaDePush } from '@/lib/push/envio';
+import { origenDeLaAplicacion } from '@/lib/push/origen';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 import { exigirSecretoCron, SecretoCronInvalido } from './_guard';
@@ -97,51 +97,17 @@ const HEADER_SECRETO = 'x-cron-secret';
  *
  * `construirPayload()` necesita un origen absoluto para el destino de navegacion
  * del aviso, y lo recibe POR PARAMETRO a proposito (es lo que lo mantiene puro).
- * Quien lo decide es este archivo, y la decision tiene consecuencias visibles:
- * UN ORIGEN EQUIVOCADO MANDA A TODAS LAS ASEADORAS A OTRO DESPLIEGUE DESDE SU
- * PANTALLA DE BLOQUEO, sin barra de direcciones que delate el salto.
  *
- * Por eso NO se deriva de `req.url` ni del header `Host`, que es exactamente la
- * fuente que la intuicion sugiere: ese header lo escribe quien llama, y aunque
- * aqui haya que traer el secreto compartido para llegar, apoyar el destino de un
- * aviso en un dato del atacante es gratis de evitar.
+ * La resolucion vive en `lib/push/origen.ts` DESDE EL PLAN 05-11, y no aqui,
+ * porque desde ese plan hay DOS emisores de avisos: este drenaje y el aviso de
+ * prueba del asistente de instalacion. Dos copias de una decision de seguridad
+ * son dos copias que se desincronizan. El razonamiento completo —por que no se
+ * deriva de `req.url` ni del header `Host`, y por que devolver `null` es
+ * preferible a inventarse un origen— esta en la cabecera de aquel modulo.
  *
- * Sale de la CONFIGURACION DEL SERVIDOR, en este orden:
- *
- *   1. `APP_BASE_URL`, que tiene que valer lo MISMO que el secreto `app_base_url`
- *      de Vault con el que el dispatcher de la migracion 17 construye la URL de
- *      esta misma ruta. Documentado en `.env.example`.
- *   2. El dominio de produccion que inyecta la plataforma. Es el dominio
- *      ESTABLE, no la URL del despliegue concreto: asi un despliegue de vista
- *      previa que drene una notificacion sigue mandando a la aseadora a la
- *      aplicacion de verdad y no a una vista previa que manana no existe.
- *
- * Si no hay ninguno, no se envia nada y la notificacion se reintenta con
- * `configuracion_rota`. NO se inventa un origen: mandar a alguien a un sitio
- * equivocado es peor que no mandarlo.
+ * Aqui solo queda la consecuencia local: si devuelve `null`, no se envia nada y
+ * la notificacion se reintenta con `configuracion_rota`.
  */
-const VAR_ORIGEN = 'APP_BASE_URL';
-
-function origenDeLaAplicacion(): string | null {
-  let crudo: string | null = null;
-  try {
-    crudo = readServerSecret(VAR_ORIGEN);
-  } catch {
-    const dominio = process.env.VERCEL_PROJECT_PRODUCTION_URL;
-    crudo = dominio ? `https://${dominio}` : null;
-  }
-  if (!crudo) return null;
-
-  try {
-    const u = new URL(crudo);
-    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
-    // `.origin` normaliza y descarta cualquier ruta: `https://host/app/` y
-    // `https://host` tienen que producir el mismo destino.
-    return u.origin;
-  } catch {
-    return null;
-  }
-}
 
 /** Lo unico que entra por el cuerpo de la peticion. Nada mas. */
 const esquemaPeticion = z.object({ notification_id: z.uuid() });
