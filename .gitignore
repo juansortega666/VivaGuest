@@ -50,3 +50,12 @@ next-env.d.ts
 /e2e/.auth/
 /playwright-report/
 /test-results/
+
+# service worker generado por Serwist
+# `public/sw.js` y sus chunks los EMITE `next build` desde `app/sw.ts`. Son
+# artefactos de build, no assets: versionarlos garantiza un conflicto en cada
+# merge y, peor, un service worker obsoleto desplegado sobre el que nadie
+# reparo. La fuente versionada es `app/sw.ts` y solo esa.
+# Los cinco PNG de `public/` SI se versionan: esos son assets de marca.
+public/sw*
+public/swe-worker*

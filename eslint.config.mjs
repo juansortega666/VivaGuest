@@ -18,6 +18,16 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      // ── EL SERVICE WORKER GENERADO NO SE LINTA ───────────────────────────
+      // `public/sw.js` lo EMITE Serwist desde `app/sw.ts` en cada build, y es
+      // un bundle minificado. No estaba aquí porque hasta ahora `public/` no
+      // existía; en cuanto existió, `npm run lint` pasó de 0 errores y 2 avisos
+      // (la línea base de la Fase 4) a 1 error y 87 avisos, TODOS sobre una
+      // sola línea de 46 KB de código que nadie escribió. El error era
+      // `@typescript-eslint/no-this-alias` en la columna 4133.
+      // La fuente que sí se linta es `app/sw.ts`.
+      "public/sw*.js",
+      "public/swe-worker*.js",
     ],
   },
   {

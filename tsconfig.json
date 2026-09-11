@@ -1,7 +1,37 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    // `webworker` entra por `app/sw.ts`, que necesita `ServiceWorkerGlobalScope`.
+    // Medido, no supuesto: sin esta entrada `tsc` da exactamente un error,
+    // `app/sw.ts(20,21): TS2552: Cannot find name 'ServiceWorkerGlobalScope'.
+    // Did you mean 'WorkerGlobalScope'?`. `WorkerGlobalScope` sí está en
+    // `lib.dom`; el de service worker no.
+    //
+    // ── EL CONFLICTO dom↔webworker ES REAL Y ESTÁ MEDIDO ────────────────────
+    // `lib.dom.d.ts` y `lib.webworker.d.ts` declaran ~90 identificadores en
+    // común. Con `--skipLibCheck false` este proyecto produce 36 errores
+    // (TS6200, TS2374, TS2403), TODOS dentro de
+    // `node_modules/typescript/lib/lib.webworker.d.ts`. Con el `skipLibCheck`
+    // de abajo, que venía de create-next-app y NO se tocó, salen 0.
+    //
+    // Consecuencia que hay que saber: **el verde de `tsc` en este repo depende
+    // de `skipLibCheck: true`.** Quitarlo no descubre un bug del código; hace
+    // aflorar el choque de las dos librerías estándar. Si alguien necesita
+    // quitarlo, el camino es sacar `webworker` de aquí y darle a `app/sw.ts` un
+    // `tsconfig.sw.json` propio, excluyéndolo de este.
+    //
+    // Y el precio que se paga por tenerlas juntas: los globales de worker
+    // (`self.registration`, `clients`, …) también tipan dentro de código de
+    // navegador. No los usa nadie fuera de `app/sw.ts` y el revisor lo vería,
+    // pero `tsc` no lo va a atajar.
+    "lib": ["dom", "dom.iterable", "esnext", "webworker"],
+    // Acota la inclusión AUTOMÁTICA de paquetes de `@types/*`. Parece que
+    // debería dejar fuera a `@types/node` y romper `Buffer` en
+    // `lib/push/payload.ts`, y no lo hace: `next-env.d.ts` referencia
+    // `next`, cuyo `types/global.d.ts` abre con `/// <reference types="node" />`.
+    // Una referencia triple-barra explícita NO la filtra esta clave. Verificado
+    // corriendo `tsc` con la clave puesta: 0 errores.
+    "types": ["@serwist/next/typings"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -23,5 +53,8 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  // `public/sw.js` es el artefacto que Serwist emite desde `app/sw.ts`. Está en
+  // `.gitignore`, pero existe en disco tras cada build y `allowJs` es `true`:
+  // sin esta exclusión, `tsc` analizaría el bundle generado.
+  "exclude": ["node_modules", "public/sw.js"]
 }
