@@ -32,11 +32,17 @@ type RespuestaFalsa = { data?: unknown; error: { code?: string; message?: string
 
 let respuesta: RespuestaFalsa = { data: null, error: null };
 
-const eq = vi.fn(async (_columna: string, _valor: string) => respuesta);
-const update = vi.fn((_valores: Record<string, unknown>) => ({ eq }));
-const upsert = vi.fn(
-  async (_valores: Record<string, unknown>, _opciones: { onConflict?: string }) => respuesta,
+// Los tres van tipados con el generico de `vi.fn` y NO declarando parametros que
+// el cuerpo no usa: es lo que hace que `.mock.calls[0][0]` sea una tupla con
+// forma —sin eso, la asercion de la unica columna no compila— sin dejar cinco
+// avisos de `no-unused-vars` detras.
+const eq = vi.fn<(columna: string, valor: string) => Promise<RespuestaFalsa>>(
+  async () => respuesta,
 );
+const update = vi.fn<(valores: Record<string, unknown>) => { eq: typeof eq }>(() => ({ eq }));
+const upsert = vi.fn<
+  (valores: Record<string, unknown>, opciones: { onConflict?: string }) => Promise<RespuestaFalsa>
+>(async () => respuesta);
 const from = vi.fn(() => ({ update, upsert }));
 const rpc = vi.fn();
 

@@ -57,6 +57,14 @@ export type ClienteDePush = SupabaseClient<Database>;
  *   · `payload_excede_limite`  — el constructor del cuerpo se paso de tamano.
  *   · `configuracion_rota`     — falta configuracion de servidor; no sale NADA.
  *   · `topico_invalido`        — la clave de colapso no cabe en la cabecera.
+ *
+ * Y uno que no nace en el worker sino EN EL TELEFONO, anadido en el plan 05-10:
+ *
+ *   · `baja_desde_el_telefono` — el propio navegador hizo `unsubscribe()`, y
+ *     `revocarSuscripcionPropia()` de `app/(cleaner)/_actions.ts` lo escribe.
+ *     Vive en esta union y no como cadena suelta en aquel archivo porque la
+ *     regla 2 de este modulo es que `revoked_reason` solo lleva codigos de una
+ *     lista cerrada: esa columna la puede llegar a ver el admin.
  */
 export type CodigoDePush =
   | MotivoDePush
@@ -64,7 +72,8 @@ export type CodigoDePush =
   | 'clave_obsoleta'
   | 'payload_excede_limite'
   | 'configuracion_rota'
-  | 'topico_invalido';
+  | 'topico_invalido'
+  | 'baja_desde_el_telefono';
 
 // ───────────────────────────────────────────────────────────────────────────
 // El reclamo
