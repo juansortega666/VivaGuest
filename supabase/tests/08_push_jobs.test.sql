@@ -265,11 +265,19 @@ select is(
 -- 3  Fija `search_path` VACÍO. El guardarraíl 6 de `02_guardarrailes.test.sql`
 --    ya exige que TODA función definer lo haga; esta lo fija para esta función
 --    en concreto, que es la que lee un secreto y hace HTTP saliente.
+--
+--    LOS DOS LITERALES ACEPTADOS SON LOS MISMOS QUE ACEPTA ESE GUARDARRAÍL, y
+--    hay que conocerlos: Postgres 17 normaliza a `search_path=""` y las
+--    versiones más viejas guardan `search_path=`. MEDIDO aquí: este stack
+--    almacena `search_path=""`. Un `search_path=public` sigue siendo un fallo,
+--    que es exactamente lo que la aserción existe para atrapar.
 select is(
-  (select coalesce(string_agg(array_to_string(p.proconfig, ','), '+'), '<sin funcion>')
+  (select coalesce(string_agg(
+            case when array_to_string(p.proconfig, ',') in ('search_path=', 'search_path=""')
+                 then 'vacio' else array_to_string(p.proconfig, ',') end, '+'), '<sin funcion>')
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.proname = 'dispatch_push_notifications'),
-  'search_path=',
+  'vacio',
   'el dispatcher fija search_path vacío');
 
 -- 4  `authenticated` NO puede ejecutarlo.
@@ -328,10 +336,12 @@ select is(
 --    tres cosas en una cadena, porque son la misma propiedad: puede leer Vault
 --    aunque quien inserta la notificación sea un usuario normal vía RPC.
 select is(
-  (select coalesce(string_agg(p.prosecdef::text || '/' || array_to_string(p.proconfig, ','), '+'), '<sin funcion>')
+  (select coalesce(string_agg(p.prosecdef::text || '/' ||
+            case when array_to_string(p.proconfig, ',') in ('search_path=', 'search_path=""')
+                 then 'vacio' else array_to_string(p.proconfig, ',') end, '+'), '<sin funcion>')
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.proname = 'tg_notifications_disparar_push'),
-  'true/search_path=',
+  'true/vacio',
   'la función del trigger existe, es SECURITY DEFINER y fija search_path vacío');
 
 -- 8  `authenticated` NO puede ejecutar la función del trigger por su cuenta.
