@@ -1342,6 +1342,7 @@ export type Database = {
         Returns: undefined
       }
       dispatch_feed_syncs: { Args: never; Returns: number }
+      dispatch_push_notifications: { Args: never; Returns: number }
       estado_avisos_aseadores: {
         Args: never
         Returns: {

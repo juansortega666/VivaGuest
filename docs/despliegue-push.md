@@ -202,6 +202,116 @@ eso convierte una rotación de una tarde en una visita presencial.
 
 ---
 
+## Puesta en marcha del drenaje
+
+El par VAPID es lo que firma el push hacia afuera. Esta sección es lo otro: **quién
+le dice a la aplicación que hay un aviso que mandar**, y qué pasa cuando ese lado
+está mal puesto.
+
+Lo mueve la migración 17 (`20260911121000_17_push_jobs.sql`) y son tres piezas:
+
+| Pieza | Qué hace | Cuándo |
+|---|---|---|
+| trigger `notifications_disparar_push` | un `POST /api/push/drain` por notificación, en el acto | en el mismo segundo del `insert` |
+| `public.dispatch_push_notifications()` | recoge lo que el disparo inmediato no logró | cada minuto |
+| job `dispatch-push-notifications` | el tick de `pg_cron` que llama al anterior | `* * * * *` |
+
+### Del lado de Vault no hay ningún paso nuevo
+
+`app_base_url` y `cron_shared_secret` **ya existen** desde `docs/despliegue-sync.md`
+(Fase 3) y el drenaje reusa exactamente esos dos. La tabla de la primera sección de
+este documento lo dice y esta sección lo repite porque aquí es donde se nota si no
+es cierto.
+
+Si ya corriste `docs/despliegue-sync.md` en este entorno, **no tienes que hacer
+nada**. La migración 17 no crea secretos: `cron.job.command` es texto plano y
+cualquiera que pueda leer ese catálogo leería el secreto si viajara ahí.
+
+### Si despliegas un proyecto Supabase NUEVO
+
+**Corre el paso operativo de Vault de `docs/despliegue-sync.md` ANTES de que el
+dispatcher tenga su primer tick.** No después. Sin los dos secretos, cada tick del
+minuto deja una fila con `status = 'failed'` en `cron.job_run_details`, y eso
+empieza a pasar en cuanto la migración se aplica.
+
+Comprobación de que los cuatro jobs están donde deben, después de aplicar:
+
+```sql
+select jobname, schedule, active from cron.job order by jobname;
+```
+
+Tienen que salir **cuatro** filas:
+
+```
+dispatch-feed-syncs          | * * * * *   | t
+dispatch-push-notifications  | * * * * *   | t
+feed-health-watchdog         | 0 * * * *   | t
+purge-cron-history           | 17 4 * * *  | t
+```
+
+Si sale una quinta que poda `cron.job_run_details`, alguien añadió una segunda poda
+"por simetría" con el job nuevo. `purge-cron-history` borra de la tabla entera, no
+las filas de un job concreto: ya cubre los jobs nuevos y la segunda sobra.
+
+### El síntoma exacto de que el secreto no coincide
+
+Es el modo de fallo más difícil de diagnosticar de esta fase, porque **no produce
+ninguna señal dentro de la aplicación**.
+
+Si `cron_shared_secret` en Vault y `CRON_SHARED_SECRET` en el entorno de Vercel no
+son el mismo valor (tienen que coincidir **byte a byte**, igual que para el sync):
+
+- cada disparo recibe **401 sin cuerpo**. El guard del endpoint responde así a
+  propósito: un 401 con explicación le dice al atacante qué probar después;
+- `cron.job_run_details` sale **`succeeded`**, porque `pg_net` encoló la petición
+  sin problema. El fallo está al otro lado del cable y Postgres no lo ve;
+- en la aplicación no aparece ningún error, ningún toast, ninguna fila distinta;
+- la única señal es que **las notificaciones envejecen en `pendiente`**:
+
+```sql
+select count(*) as pendientes,
+       min(created_at) as la_mas_vieja
+  from public.notifications
+ where push_status = 'pendiente';
+```
+
+Con el drenaje sano, `la_mas_vieja` nunca pasa de un par de minutos. Si lleva horas,
+el secreto está descasado o el despliegue del worker está caído. Es el mismo tipo de
+comprobación que la de `max(last_success_at)` del sync: el sistema puede estar roto y
+decir que todo va bien.
+
+### El modo de fallo ASIMÉTRICO de esta fase
+
+Conviene conocerlo antes de "arreglar" cualquiera de los dos lados, porque parece
+una inconsistencia y es una decisión:
+
+> **El trigger NUNCA lanza. El dispatcher SÍ.**
+
+- **El trigger no lanza** porque corre dentro de la transacción de negocio que
+  confirma un aseo. Si lanzara porque falta un secreto, **confirmar un aseo fallaría
+  por un problema de infraestructura de avisos**, que es exactamente lo contrario
+  del Core Value del producto. Con el Vault vacío, insertar una notificación deja un
+  `WARNING` en el log de Postgres y sigue adelante.
+- **El dispatcher sí lanza** porque corre bajo `pg_cron`, donde el fallo queda en
+  `cron.job_run_details` con `status = 'failed'` y el mensaje literal en
+  `return_message`. Ahí el silencio sería el desastre: el drenaje muerto sin que
+  nada lo diga.
+
+Las dos direcciones tienen aserción pgTAP dedicada en
+`supabase/tests/08_push_jobs.test.sql` (grupos E y F). Si alguna vez "mejoras" el
+trigger metiéndole un `raise exception`, esas aserciones se ponen rojas antes de que
+llegue a producción.
+
+### Por qué el disparo puede vivir dentro de la transacción
+
+Porque `pg_net` **no arranca la petición hasta que la transacción hace commit**. Si
+el RPC hace rollback, el disparo se revierte con él y no se avisa de un aseo que no
+se confirmó. Esa propiedad no se cita del research: está medida en este repo, con
+`savepoint` / `rollback to savepoint`, en la aserción 12 de
+`08_push_jobs.test.sql`.
+
+---
+
 ## Nota sobre este archivo
 
 No contiene ningún valor real de clave y no debe contenerlo nunca. Los marcadores
