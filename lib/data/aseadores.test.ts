@@ -91,7 +91,8 @@ function clienteFalso(
     profiles: Record<string, unknown>[];
     properties: Record<string, unknown>[];
     /**
-     * Lo que devuelve `public.estado_avisos_aseadores()`. Opcional porque la
+     * Lo que devuelve la funcion agregada de la migracion 16, la que nombra
+     * `RPC_ESTADO_AVISOS` en `./avisos.ts`. Opcional porque la
      * mayoria de los tests de este archivo miden el agrupado y no los avisos, y
      * obligarlos a sembrarlo seria ruido en once casos para servir a cinco.
      */
@@ -283,7 +284,11 @@ describe('listarAseadoresConAsignaciones: el estado de avisos', () => {
 
     const lista = await listarAseadoresConAsignaciones(
       clienteFalso(
-        { profiles: OCHO, properties: APARTAMENTOS, avisos: OCHO.map((a) => avisos({ aseador_id: a.id })) },
+        {
+          profiles: OCHO,
+          properties: APARTAMENTOS,
+          avisos: OCHO.map((a) => avisos({ aseador_id: a.id })),
+        },
         registro,
       ),
     );
@@ -316,9 +321,10 @@ describe('listarAseadoresConAsignaciones: el estado de avisos', () => {
     // color: esa traduccion vive en `estadoDeAvisosDeAseador()` y pintarla aqui
     // seria la segunda copia de la derivacion.
     const valores = Object.values(ana.estadoDeAvisos as Record<string, unknown>);
-    expect(valores.some((v) => typeof v === 'string' && /Activos|Sin probar|Sin avisos|Bell/.test(v))).toBe(
-      false,
-    );
+    const etiqueta = (v: unknown) =>
+      typeof v === 'string' && /Activos|Sin probar|Sin avisos|Bell/.test(v);
+
+    expect(valores.some(etiqueta)).toBe(false);
   });
 
   it('un aseador que NO sale del agregado queda con cero suscripciones, no sin dato', async () => {

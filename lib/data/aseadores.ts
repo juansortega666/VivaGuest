@@ -2,15 +2,34 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '@/lib/database.types';
 
+import {
+  leerEstadoDeAvisosPorAseador,
+  SIN_AVISOS_REGISTRADOS,
+  type EstadoDeAvisosCrudo,
+} from './avisos';
+
 /**
  * Lectura de aseadores con sus apartamentos asignados (ASEADOR-03).
  *
  * ────────────────────────────────────────────────────────────────────────────
- * ESTA FASE NO CREA NINGUNA FUNCION EN `public`, y este modulo es la prueba: el
+ * LA FASE 2 NO CREO NINGUNA FUNCION EN `public`, y este modulo era la prueba: el
  * CRUD del catalogo va por PostgREST con el JWT del usuario, filtrado por RLS.
  *
- * Si algun dia hiciera falta un RPC, cada funcion nueva de `public` necesita su
- * propio par `revoke all ... from public, anon` / `grant execute ... to
+ * LA FASE 5 NO CREA NINGUNA TAMPOCO, PERO ESTE MODULO YA CONSUME UNA: el estado
+ * de avisos de D-03 entra por la funcion agregada de la migracion 16, a traves
+ * de `./avisos.ts`, que es el UNICO sitio de `lib/data/` que escribe su nombre.
+ * Aqui no se repite a proposito: una segunda copia literal del nombre es una
+ * segunda cosa que cambiar el dia que la funcion se renombre.
+ *
+ * SE LLEGA POR RPC Y NO POR UN `select` SOBRE LA TABLA DE SUSCRIPCIONES, y no es
+ * por comodidad: el identificador de destino de una suscripcion es una
+ * credencial portadora, y el admin no necesita ninguna para saber a quien llamar
+ * por telefono. Por eso el admin NO tiene lectura sobre esa tabla, no se le
+ * anade ninguna policy que se la de, y este archivo no la nombra fuera de un
+ * comentario. La razon completa esta en la cabecera de `./avisos.ts` (T-05-07).
+ *
+ * Si algun dia hiciera falta otro RPC, cada funcion nueva de `public` necesita
+ * su propio par `revoke all ... from public, anon` / `grant execute ... to
  * authenticated` pegado a la definicion. La razon esta medida dos veces
  * (hallazgo 5 de `deferred-items.md`): en PG 17.6, `alter default privileges` NO
  * puede quitarle `EXECUTE` a PUBLIC, asi que una funcion nueva nace ejecutable
@@ -50,6 +69,17 @@ export interface AseadorConAsignaciones {
    */
   responsableDe: AsignacionApartamento[];
   suplenteEn: AsignacionApartamento[];
+  /**
+   * El estado de avisos CRUDO: conteo, grado de verificacion y marcas de tiempo
+   * (D-03, criterio 6). No la etiqueta ni el color.
+   *
+   * Quien traduce esto a `Activos` / `Sin probar` / `Sin avisos` es
+   * `estadoDeAvisosDeAseador()` de `lib/domain/avisos.ts`, y quien lo pinta es
+   * `EstadoAvisosAseador`. Devolver ya la etiqueta desde aqui seria la segunda
+   * copia de esa derivacion, que es exactamente como el badge se desincroniza de
+   * la realidad.
+   */
+  estadoDeAvisos: EstadoDeAvisosCrudo;
 }
 
 /**
@@ -73,8 +103,11 @@ export function contarActivos(aseador: AseadorConAsignaciones): number {
  * probar. Construirlo dentro ataria el modulo a `next/headers` y lo volveria
  * inejecutable fuera de una peticion.
  *
- * DOS consultas y no una por aseador: son 39 apartamentos en total, asi que traer
- * la tabla entera y agrupar en memoria es una ida a la base en vez de N.
+ * TRES consultas y no una por aseador: son 8 perfiles y 39 apartamentos en
+ * total, asi que traer las tablas enteras y agrupar en memoria es una ida a la
+ * base en vez de N. La tercera —el agregado de avisos— sigue el mismo
+ * razonamiento y se llama UNA sola vez para todos: meterla en el bucle
+ * convertiria ocho aseadores en ocho viajes.
  */
 export async function listarAseadoresConAsignaciones(
   supabase: SupabaseClient<Database>,
@@ -96,6 +129,10 @@ export async function listarAseadoresConAsignaciones(
     .order('nombre', { ascending: true });
 
   if (errorApartamentos) throw new Error(errorApartamentos.message);
+
+  // La TERCERA lectura, y la unica que no va por PostgREST. Una llamada para los
+  // ocho, despues de las otras dos y no dentro del `map` de abajo.
+  const avisosPorAseador = await leerEstadoDeAvisosPorAseador(supabase);
 
   const responsableDe = new Map<string, AsignacionApartamento[]>();
   const suplenteEn = new Map<string, AsignacionApartamento[]>();
@@ -128,5 +165,10 @@ export async function listarAseadoresConAsignaciones(
     is_active: perfil.is_active,
     responsableDe: responsableDe.get(perfil.id) ?? [],
     suplenteEn: suplenteEn.get(perfil.id) ?? [],
+    // Quien no salga del agregado se resuelve como CERO suscripciones vivas, que
+    // es el estado `Sin avisos`, y no como dato ausente. Un aseador desactivado
+    // cae siempre aqui: la funcion de la base ya lo filtra. Esconderle el estado
+    // es decision del componente (§5.2), no de esta capa.
+    estadoDeAvisos: avisosPorAseador.get(perfil.id) ?? SIN_AVISOS_REGISTRADOS,
   }));
 }

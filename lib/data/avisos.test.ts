@@ -83,7 +83,9 @@ describe('leerEstadoDeAvisosPorAseador', () => {
     const registro: string[] = [];
     const ocho = Array.from({ length: 8 }, (_, i) => fila({ aseador_id: `a${i + 1}` }));
 
-    const indice = await leerEstadoDeAvisosPorAseador(clienteFalso({ data: ocho, error: null }, registro));
+    const indice = await leerEstadoDeAvisosPorAseador(
+      clienteFalso({ data: ocho, error: null }, registro),
+    );
 
     expect(indice.size).toBe(8);
     expect(registro).toEqual([RPC_ESTADO_AVISOS]);
