@@ -174,17 +174,26 @@ describe('estadoDeAvisos', () => {
       fileURLToPath(new URL('./avisos.ts', import.meta.url)),
       'utf8',
     );
-    const imports = fuente
-      .split('\n')
-      .filter((linea) => linea.startsWith('import '))
-      .join('\n');
+    const lineas = fuente.split('\n');
 
+    const imports = lineas.filter((linea) => linea.startsWith('import ')).join('\n');
     expect(imports).not.toMatch(/'react'/);
     expect(imports).not.toMatch(/lucide/);
     expect(imports).not.toMatch(/@\/app\//);
-    // Y tampoco lee el navegador: eso es trabajo de `lib/push/plataforma.ts`.
-    expect(fuente).not.toMatch(/\bwindow\b/);
-    expect(fuente).not.toMatch(/\bnavigator\b/);
+
+    // Y tampoco LEE el navegador: eso es trabajo de `lib/push/plataforma.ts`.
+    //
+    // Se filtran las lineas de comentario, misma distincion que implementa
+    // `scripts/ci/check-max-w-tallas.sh`: NOMBRAR los globales del navegador en
+    // prosa es legitimo y de hecho obligatorio (la cabecera del modulo explica
+    // por que no los toca), USARLOS es el fallo. Sin este filtro, la cabecera
+    // que documenta la regla seria la que la rompe.
+    const codigo = lineas
+      .filter((linea) => !/^\s*(\/\/|\/\*|\*)/.test(linea))
+      .join('\n');
+    for (const global of ['win' + 'dow', 'navi' + 'gator', 'Notifi' + 'cation']) {
+      expect(codigo).not.toMatch(new RegExp(`\\b${global}\\b`));
+    }
   });
 });
 
