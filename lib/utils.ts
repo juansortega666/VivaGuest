@@ -87,6 +87,43 @@ const twMerge = extendTailwindMerge({
         "max-w-tooltip",
         "max-w-vacio",
       ],
+
+      /**
+       * Los ocho roles tipograficos del proyecto: los cuatro de `02-UI-SPEC` §3
+       * y los cuatro moviles de `05-UI-SPEC` §3.1.
+       *
+       * ── ES EL MISMO DEFECTO QUE EL DE ARRIBA, Y AQUI ES PEOR ──────────────
+       *
+       * `tailwind-merge` no reconoce estos nombres como tamanos de fuente, asi
+       * que por defecto los clasifica en el grupo de COLOR DE TEXTO, que es el
+       * comodin de `text-*`. Medido con la libreria instalada, las dos mitades:
+       *
+       *     cn('text-sm', 'text-body-movil')
+       *       -> "text-sm text-body-movil"   las DOS sobreviven, y gana el
+       *          orden del CSS: el override del sitio de uso no desplaza al
+       *          `text-sm` que traen `Alert`, `Button` y compania.
+       *
+       *     cn('text-micro-movil', 'text-muted-foreground')
+       *       -> "text-muted-foreground"     el TAMANO DESAPARECE, porque los
+       *          dos caen en el grupo de color y el ultimo gana.
+       *
+       * La segunda es la grave: la clase se escribe, el codigo se lee bien, y el
+       * tamano simplemente no llega al DOM. Con el grupo declarado aqui, la
+       * primera resuelve a `text-body-movil` y la segunda conserva las dos.
+       *
+       * Igual que con los anchos: cuando aparezca un rol nuevo hay que anadirlo
+       * AQUI TAMBIEN.
+       */
+      "font-size": [
+        "text-display",
+        "text-heading",
+        "text-body",
+        "text-micro",
+        "text-display-movil",
+        "text-heading-movil",
+        "text-body-movil",
+        "text-micro-movil",
+      ],
     },
   },
 })
