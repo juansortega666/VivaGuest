@@ -5,14 +5,14 @@ milestone_name: milestone
 current_phase: 05
 current_phase_name: notificaciones-push-e-instalacion-de-la-pwa
 status: executing
-stopped_at: "Phase 05 UI-SPEC approved (6/6 dimensiones, 2 FLAG aceptados). Siguiente: plan-phase 5"
-last_updated: "2026-09-10T19:47:36.419Z"
+stopped_at: "Phase 05 planeada y verificada: 17 planes en 9 waves, VERIFICATION PASSED sin bloqueos ni warnings. Siguiente: execute-phase 5"
+last_updated: "2026-09-11T18:44:03.523Z"
 last_activity: 2026-09-10
 last_activity_desc: discuss-phase 5 cerrado; ROADMAP §Phase 5 actualizado con los criterios 6 y 7
 progress:
   total_phases: 9
   completed_phases: 4
-  total_plans: 48
+  total_plans: 65
   completed_plans: 48
   percent: 44
 ---
@@ -265,8 +265,8 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-10T19:47:36.411Z
-Stopped at: Phase 05 UI-SPEC approved (6/6 dimensiones, 2 FLAG aceptados). Siguiente: plan-phase 5
+Last session: 2026-09-11T18:44:03.516Z
+Stopped at: Phase 05 planeada y verificada: 17 planes en 9 waves, VERIFICATION PASSED sin bloqueos ni warnings. Siguiente: execute-phase 5
 
 **Sin bloqueos activos.** El stack local de Supabase esta arriba y sano (12 contenedores), la
 migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` **29 archivos / 548 tests**,
@@ -299,4 +299,4 @@ migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` **29 ar
    segundos, `db:test` 2,3 s y la integracion completa 9,7 s.
 
 Siguiente: la wave 6 de la Fase 4 (04-10, 04-11, 04-12).
-Resume file: .planning/phases/05-notificaciones-push-e-instalaci-n-de-la-pwa/05-UI-SPEC.md
+Resume file: .planning/phases/05-notificaciones-push-e-instalaci-n-de-la-pwa/05-01-PLAN.md
