@@ -327,8 +327,12 @@ describe('la frontera del modulo', () => {
   const fuente = readFileSync(fileURLToPath(new URL('./push.ts', import.meta.url)), 'utf8');
 
   it('NO construye la fabrica administrativa: el cliente entra por parametro', () => {
-    expect(fuente).not.toContain('@/lib/supabase/admin');
-    expect(fuente).not.toContain('createAdminClient');
+    // Las dos aserciones van por expresion regular y NO por cadena literal: el
+    // guardarrail 5 de `check-service-role.sh` busca el especificador del import
+    // con un grep de texto fijo sobre todo `lib/`, y escribirlo aqui haria que
+    // este mismo test marcara el archivo como importador de la fabrica.
+    expect(fuente).not.toMatch(/supabase\/admin/);
+    expect(fuente).not.toMatch(/createAdmin[C]lient/);
   });
 
   it('el codigo de falta de destino esta escrito, porque es lo que hace visible I6', () => {
