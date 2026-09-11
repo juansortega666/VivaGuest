@@ -17,7 +17,7 @@
     "test:unit": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
-    "ci:arch": "bash scripts/ci/check-service-role.sh && bash scripts/ci/check-max-w-tallas.sh",
+    "ci:arch": "bash scripts/ci/check-service-role.sh && bash scripts/ci/check-max-w-tallas.sh && bash scripts/ci/check-escala-movil.sh",
     "setup:worktree": "bash scripts/dev/setup-worktree.sh"
   },
   "dependencies": {
