@@ -46,6 +46,36 @@ export function formatFechaBog(iso: string): string {
 }
 
 /**
+ * Igual que `FECHA_CORTA` pero SIN el dia de la semana: `"8 de septiembre"`.
+ *
+ * Existe como formateador aparte y no como parametro de `formatFechaBog()` por la
+ * regla que ya estaba escrita arriba para el ano: cuando hace falta otra forma, se
+ * anade un formateador, no una bandera.
+ *
+ * Y hace falta por una razon concreta, no por gusto: el `title` de la columna
+ * `AVISOS` de `/aseadores` (05-UI-SPEC §5.2) dice literal `Activos desde el
+ * {fecha}.`, y `formatFechaBog()` produce `"mar, 8 de septiembre"`, que detras de
+ * "el" es agramatical. Mismo ancla de UTC que el resto del archivo: entra y sale un
+ * dia calendario, sin conversion de zona.
+ */
+const FECHA_LARGA = new Intl.DateTimeFormat('es-CO', {
+  day: 'numeric',
+  month: 'long',
+  timeZone: 'UTC',
+});
+
+/**
+ * Formatea una fecha de negocio `'YYYY-MM-DD'` sin dia de la semana:
+ * `'2026-09-08'` produce `"8 de septiembre"`.
+ *
+ * Sin ano, por lo mismo que `formatFechaBog()`.
+ */
+export function formatFechaLargaBog(iso: string): string {
+  const [ano, mes, dia] = iso.split('-').map(Number);
+  return FECHA_LARGA.format(new Date(Date.UTC(ano, mes - 1, dia)));
+}
+
+/**
  * Igual que `FECHA_CORTA` pero para leer el dia calendario de Bogota a partir de un
  * instante. `TZ_BOGOTA` es la unica constante de zona del repo y esta es la unica
  * conversion instante -> dia que hace falta en la fase.

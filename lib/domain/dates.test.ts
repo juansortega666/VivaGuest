@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   formatFechaBog,
   formatFechaCortaBog,
+  formatFechaLargaBog,
   formatHoraLimite,
   horasDesdeDtstamp,
   hoyBog,
@@ -20,6 +21,24 @@ const TZ_ORIGINAL = process.env.TZ;
 
 afterEach(() => {
   process.env.TZ = TZ_ORIGINAL;
+});
+
+describe('formatFechaLargaBog', () => {
+  it('formatea una fecha de negocio SIN dia de la semana', () => {
+    // Es la forma que pide el `title` de la columna AVISOS (05-UI-SPEC §5.2):
+    // `Activos desde el 8 de septiembre.`
+    expect(formatFechaLargaBog('2026-09-08')).toBe('8 de septiembre');
+  });
+
+  it('el 1 de enero es el 1 de enero, no el 31 de diciembre', () => {
+    expect(formatFechaLargaBog('2026-01-01')).toBe('1 de enero');
+  });
+
+  it('da el mismo dia corriendo en Bogota que corriendo en UTC', () => {
+    const enUtc = formatFechaLargaBog('2026-01-01');
+    process.env.TZ = 'America/Bogota';
+    expect(formatFechaLargaBog('2026-01-01')).toBe(enUtc);
+  });
 });
 
 describe('formatFechaBog', () => {
