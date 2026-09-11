@@ -15,9 +15,12 @@ export const metadata: Metadata = {
 /**
  * `/aseadores` — ASEADOR-03 (UI-SPEC §11.1).
  *
- * RSC: construye el cliente con el JWT del admin y lee. La lectura va por
- * PostgREST y la filtra la RLS (`profiles_admin_all`, `properties_admin_all`); no
- * hay ninguna ruta de API nueva ni ninguna funcion nueva en `public`.
+ * RSC: construye el cliente con el JWT del admin y lee. El catalogo va por
+ * PostgREST y lo filtra la RLS (`profiles_admin_all`, `properties_admin_all`).
+ * El estado de avisos de la columna `AVISOS` (D-03) NO: entra por la funcion
+ * agregada de la migracion 16, que comprueba el rol por dentro y no devuelve
+ * ninguna credencial de envio. Esta fase tampoco crea ninguna ruta de API ni
+ * ninguna funcion nueva en `public`.
  *
  * El layout de `(admin)` ya declara `force-dynamic`, asi que esta pagina nunca se
  * cachea: son datos por usuario.
@@ -25,6 +28,12 @@ export const metadata: Metadata = {
 export default async function AseadoresPage() {
   const supabase = await createClient();
   const aseadores = await listarAseadoresConAsignaciones(supabase);
+
+  // El reloj se lee UNA vez para toda la pantalla, igual que `leidoEnMs` en
+  // `/operacion`: el `title` de la columna `AVISOS` interpola un relativo
+  // (`Ultima vez que abrio la app: hace 3 h`), y leerlo por fila daria una marca
+  // distinta en cada celda y otra distinta en el servidor y en el cliente.
+  const ahoraMs = Date.now();
 
   return (
     <div className="flex flex-col gap-xl">
@@ -57,7 +66,7 @@ export default async function AseadoresPage() {
           accion={<DialogoCrearAseador />}
         />
       ) : (
-        <TablaAseadores aseadores={aseadores} />
+        <TablaAseadores aseadores={aseadores} ahoraMs={ahoraMs} />
       )}
     </div>
   );
