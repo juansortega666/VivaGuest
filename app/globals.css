@@ -511,6 +511,94 @@
   --spacing-chip:         32px;  /* chip de carga por aseador */
 }
 
+/* ── Fase 5: espaciado, anchos y tracking nuevos — 05-UI-SPEC.md §2.1 ─────────
+   La escala de 02-UI-SPEC §2 sigue igual y sigue prohibido el valor arbitrario.
+   `--spacing-toque` (44px), `--spacing-fila` (40px), `--spacing-barra` (56px),
+   `--container-aseador` (480px), `--container-sheet` (480px),
+   `--container-dialogo` (480px) y `--container-rail` (360px) YA existen y esta
+   fase los reutiliza tal cual.
+
+   LOS DOS ANCHOS NUEVOS LLEVAN NOMBRE PROPIO, Y ESO NO ES COSMETICO. Tailwind
+   v4.3 resuelve las utilidades de ancho con nombre contra el namespace de
+   ESPACIADO antes que contra el de contenedores, y §2 nombra la escala de
+   espaciado por tallas. La regla derivada esta escrita unas lineas mas arriba y
+   la impone `scripts/ci/check-max-w-tallas.sh`, encadenado en `npm run ci:arch`.
+
+   Los dos nombres de esta fase se comprobaron UNO POR UNO contra la escala de
+   espaciado completa del repo —xs, sm, md, lg, xl, 2xl, 3xl, fila,
+   fila-encabezado, barra, barra-acciones, toque, avatar, buscador,
+   filtro-cluster, todos los col-*, chip, dia-cabecera, fila-alerta, mas los dos
+   que este mismo bloque anade— y ninguno colisiona. Esa comprobacion, ESCRITA,
+   es exactamente lo que falto las dos veces que este defecto costo un quick
+   (260907-703 y 260908-7w0).
+
+   Y la otra mitad NO se cierra aqui: los dos estan ademas registrados en el
+   grupo `max-w` de `extendTailwindMerge` en `lib/utils.ts` (05-UI-SPEC §17.3).
+   Sin ese registro, un override en el sitio de uso no desplaza al de la
+   primitiva y el ancho pasa a depender del orden del CSS.
+
+   `--spacing-col-avisos` NO necesita ese registro y por eso vive en este mismo
+   bloque sin ceremonia: las utilidades `w-*` SI salen del namespace de
+   espaciado, que es donde esta declarado.                                     */
+@theme {
+  /* El aseador toca `Activar los avisos` UNA SOLA VEZ EN SU VIDA, y esa vez
+     decide el canal: en iOS una denegacion es irreversible sin reinstalar. 56px
+     es el mismo multiplo de 4 que el piso de 44px y baja el fallo de punteria
+     con guantes o con las manos mojadas. `--spacing-toque` (44px, Apple HIG)
+     sigue siendo el PISO de todo lo demas del arbol del aseador. */
+  --spacing-toque-comodo: 56px;  /* accion primaria del banner y del asistente */
+  --spacing-paso:         32px;  /* circulo del numero de paso: decorativo, no aplica el piso de toque */
+
+  --spacing-col-avisos:  128px;  /* columna AVISOS de /aseadores: icono 14px + `Sin avisos`, la etiqueta mas larga */
+
+  --container-captura:   280px;  /* captura recortada de las instrucciones (§8.4) */
+  --container-codigo:    240px;  /* caja del codigo de acceso (§9.3) */
+
+  /* El codigo de acceso se lee una vez y se teclea en un teclado numerico de
+     puerta, con guantes (§3.2). El tracking separa los glifos lo justo para que
+     `0`/`O` y `1`/`l` no se confundan al copiarlos a mano. */
+  --tracking-codigo:     0.12em;
+}
+
+/* ── Fase 5: la escala tipografica del arbol del aseador — 05-UI-SPEC.md §3.1 ─
+   SUPERSEDE de 02-UI-SPEC §3 DENTRO DE `app/(cleaner)/` Y SOLO AHI. Los roles
+   siguen siendo cuatro y los pesos siguen siendo dos (400 y 600): lo que cambia
+   son los valores. Es un salto de un escalon en los cuatro roles A LA VEZ, asi
+   que la jerarquia relativa es identica y ningun componente cambia de forma,
+   solo de tamano.
+
+   LA RAZON DE MAS PESO NO ES UNA PREFERENCIA: iOS Safari hace ZOOM AUTOMATICO
+   al enfocar un campo cuyo `font-size` es menor a 16px. Es comportamiento del
+   motor. Con el cuerpo a 14px, cualquier campo del arbol del aseador dispara un
+   zoom que descoloca el layout y que el usuario tiene que deshacer a mano. Esta
+   fase todavia no tiene campos en `(cleaner)`, pero la Fase 6 si (checklist y
+   reportes), y la escala se fija AHORA para no reescribirla despues.
+
+   Las otras dos razones: el admin lee a 60cm con el brazo apoyado; el aseador
+   lee a distancia de brazo, de pie, a veces con el sol encima y la pantalla
+   mojada.
+
+   Regla de uso, y es greppable: dentro de `app/(cleaner)/` se usan SOLO las
+   clases con sufijo `-movil`. Una sin sufijo bajo ese arbol es un defecto.    */
+@theme {
+  --text-display-movil: 1.75rem;   /* 28px — titulo de pagina, y el codigo de acceso de §9.3 */
+  --text-display-movil--line-height: 1.2;
+  --text-display-movil--font-weight: 600;
+
+  --text-heading-movil: 1.25rem;   /* 20px — titulo del banner y de cada paso del asistente */
+  --text-heading-movil--line-height: 1.3;
+  --text-heading-movil--font-weight: 600;
+
+  --text-body-movil: 1rem;         /* 16px — texto corriente; por debajo de esto iOS hace zoom */
+  --text-body-movil--line-height: 1.5;
+  --text-body-movil--font-weight: 400;
+
+  /* `micro` no fija peso, misma razon que en §3 de la Fase 2: se usa en 400
+     (ayuda, contadores) y en 600 (etiqueta de estado). */
+  --text-micro-movil: 0.875rem;    /* 14px */
+  --text-micro-movil--line-height: 1.4;
+}
+
 /* ── Movimiento — 02-UI-SPEC.md §6.4 ──────────────────────────────────────────
    Transiciones SOLO de color, background-color, border-color y opacity, 120ms
    ease-out. Nada de `transition: all` ni animaciones de layout: en una tabla de

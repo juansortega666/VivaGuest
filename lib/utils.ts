@@ -74,6 +74,8 @@ const twMerge = extendTailwindMerge({
         "max-w-alerta",
         "max-w-alerta-ancha",
         "max-w-aseador",
+        "max-w-captura",
+        "max-w-codigo",
         "max-w-col-acargo",
         "max-w-col-responsable-apto",
         "max-w-dialogo",
