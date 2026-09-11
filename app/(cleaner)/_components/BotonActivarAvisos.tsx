@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { base64UrlAUint8, soportaDeclarativo } from '@/lib/push/plataforma';
 
 /**
- * EL UNICO SITIO DE TODO EL PROYECTO QUE PIDE EL PERMISO DE AVISOS.
+ * EL UNICO SITIO DEL PROYECTO ENTERO QUE PIDE EL PERMISO DE AVISOS.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * LAS TRES REGLAS DEL `onClick`, EN ESTE ORDEN, Y NO SON NEGOCIABLES.
