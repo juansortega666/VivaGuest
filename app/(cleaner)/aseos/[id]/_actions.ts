@@ -1,0 +1,149 @@
+'use server';
+
+import 'server-only';
+
+import { z } from 'zod';
+
+import { NoAutorizado, exigirSesion } from '@/lib/auth/guards';
+import { mapDbError, type DbErrorLike } from '@/lib/domain/errors';
+
+/**
+ * LA UNICA RUTA DE SALIDA DEL CODIGO DE ACCESO HACIA EL TELEFONO DEL ASEADOR.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * EL ORDEN, IGUAL QUE EN EL RESTO DE ACTIONS DEL ARBOL:
+ *
+ *   1. `exigirSesion()`  — un Server Action es un endpoint HTTP PUBLICO
+ *   2. `safeParse()`     — lo minimo, antes de hablar con la base
+ *   3. el RPC            — SOLO entonces, y con el JWT del usuario
+ *
+ * Aqui el guard es `exigirSesion()` y no el que ademas exige rol de
+ * administrador: esto lo llama un aseador. El nombre de aquel otro guard no se
+ * escribe en este archivo ni en prosa, porque el criterio que lo vigila es un
+ * grep sin filtro de comentarios.
+ *
+ * ── POR QUE UN RPC Y NO UNA LECTURA ────────────────────────────────────────
+ *
+ * `reveal_access_code()` (migracion 09) es la unica puerta, y no por estilo. Un
+ * `select` directo sobre la tabla donde vive el codigo devuelve `42501` incluso
+ * para un admin: esa tabla no tiene NINGUN grant para `authenticated`, asi que
+ * es inalcanzable por construccion y no por una policy. Su nombre no se escribe
+ * en este archivo, ni siquiera dentro de un comentario; el guardarrail 8 de
+ * `scripts/ci/check-service-role.sh` lo vigila por grep.
+ *
+ * Lo que el RPC suma y una policy de lectura no daria:
+ *
+ *   * ventana temporal estrecha: hoy y manana, anclada al aseo y no al
+ *     apartamento
+ *   * rastro de auditoria escrito en la MISMA transaccion, ANTES del return
+ *     (T-01-48): no puede existir lectura de codigo sin rastro
+ *   * un unico sitio donde endurecer la regla
+ *
+ * Y NUNCA la fabrica administrativa: el RPC autoriza contra `auth.uid()`, asi
+ * que llamarlo saltandose la RLS lo convertiria en una funcion que revela el
+ * codigo de cualquier apartamento a cualquiera.
+ *
+ * ── LA CONTRAPARTIDA DE D-06 ───────────────────────────────────────────────
+ *
+ * D-06 saco el codigo del payload de la notificacion push precisamente para que
+ * siguiera saliendo por aqui, con su ventana y su rastro. Lo que esta action
+ * devuelve vive en memoria del componente y no se persiste en ninguna capa del
+ * cliente; la regla esta escrita en `CodigoDeAcceso.tsx`, que es donde se puede
+ * romper.
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+
+/**
+ * O trae el codigo, o trae el error. NUNCA los dos.
+ *
+ * Es una union y no un objeto de campos opcionales para que sea imposible
+ * renderizar un codigo al lado de un mensaje de fallo: ese codigo seria el de un
+ * intento anterior, o sea un secreto mostrado fuera de la unica ruta que lo
+ * audita.
+ *
+ * Y devuelve SOLO el codigo, aunque el RPC entregue tres columnas. El tipo de
+ * cerradura y las notas no los pinta esta pantalla (§9.3), y lo que no viaja no
+ * se puede filtrar.
+ */
+export type ResultadoCodigo =
+  | { ok: true; codigo: string }
+  | { ok: false; error: string };
+
+const esquemaAseo = z.uuid();
+
+/**
+ * El mensaje de los TRES casos indistinguibles.
+ *
+ * `mapDbError()` devuelve un texto que NO nombra el recurso para `42501`, y eso
+ * es exactamente lo que hace falta: la migracion 09 lanza ese codigo —y no
+ * `P0001`— para "no existe", "no es tuyo" y "todavia no es su dia", porque un
+ * error que los discriminara seria un ORACULO DE ENUMERACION DE ASEOS AJENOS.
+ * Escribir aqui tres mensajes distintos, por amabilidad, devolveria el oraculo
+ * por la puerta de atras. Hay un test que compara los tres y afirma que son la
+ * misma cadena.
+ */
+function fallo(error: DbErrorLike): { ok: false; error: string } {
+  return { ok: false, error: mapDbError(error) };
+}
+
+/**
+ * Cuando el RPC autoriza pero no hay nada que entregar.
+ *
+ * Pasa si el apartamento todavia no tiene codigo guardado. El rastro de
+ * auditoria SI queda escrito —el RPC inserta antes de devolver— y eso es
+ * correcto: alguien pidio el codigo. Lo que no es correcto es pintar una caja de
+ * 28px vacia, que el aseador leeria como un fallo de la app estando de pie
+ * frente a la puerta.
+ */
+const MENSAJE_SIN_CODIGO =
+  'Este apartamento todavía no tiene código guardado. Avísale a tu administrador.';
+
+const MENSAJE_DATOS_INVALIDOS = 'Datos invalidos.';
+
+/**
+ * Revela el codigo de acceso de un aseo propio, dejando rastro.
+ *
+ * Cada llamada que autoriza escribe una fila de auditoria. No es un efecto
+ * secundario que se pueda optimizar: es el producto. Por eso la pantalla, una
+ * vez revelado, NO vuelve a llamar y NO se auto-oculta (§9.3): cada re-peticion
+ * seria otra fila.
+ */
+export async function revelarCodigo(
+  _prev: ResultadoCodigo | null,
+  formData: FormData,
+): Promise<ResultadoCodigo> {
+  // ── 1. GUARD, ANTES QUE NADA ────────────────────────────────────────────────
+  let supabase;
+  try {
+    ({ supabase } = await exigirSesion());
+  } catch (e) {
+    // Cualquier error que no sea `NoAutorizado` SE RELANZA: un GoTrue caido no
+    // es "no tienes permiso", y disfrazarlo mandaria al aseador a pedirle al
+    // admin unos permisos que ya tiene.
+    if (e instanceof NoAutorizado) return { ok: false, error: e.message };
+    throw e;
+  }
+
+  // ── 2. VALIDACION ──────────────────────────────────────────────────────────
+  const valor = formData.get('aseo');
+  const parseado = esquemaAseo.safeParse(typeof valor === 'string' ? valor : '');
+  if (!parseado.success) return { ok: false, error: MENSAJE_DATOS_INVALIDOS };
+
+  // ── 3. SOLO AHORA, EL RPC, CON EL JWT DEL USUARIO ──────────────────────────
+  // Un solo argumento y es el ASEO. No se manda ningun dato del apartamento a
+  // proposito: la autorizacion se ancla a un trabajo concreto asignado, no a
+  // "tener algun trabajo en ese apartamento". Es lo que hace que un aseo a cinco
+  // dias NO revele el codigo aunque el apartamento si sea visible.
+  const { data, error } = await supabase.rpc('reveal_access_code', {
+    p_cleaning: parseado.data,
+  });
+
+  if (error) return fallo(error);
+
+  const codigo = data?.[0]?.codigo_acceso ?? null;
+  if (codigo === null || codigo.trim().length === 0) {
+    return { ok: false, error: MENSAJE_SIN_CODIGO };
+  }
+
+  return { ok: true, codigo };
+}
