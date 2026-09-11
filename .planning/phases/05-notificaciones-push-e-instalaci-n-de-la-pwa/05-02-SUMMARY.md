@@ -278,3 +278,11 @@ Ninguna. La migración no introduce superficie de red, ni ruta de auth, ni acces
 ---
 *Phase: 05-notificaciones-push-e-instalaci-n-de-la-pwa*
 *Completed: 2026-09-11*
+
+## Self-Check: PASSED
+
+- `supabase/tests/07_push.test.sql` — existe
+- `supabase/migrations/20260911120000_16_push_avisos.sql` — existe
+- `lib/database.types.ts` — existe y contiene `estado_avisos_aseadores`, `soporta_declarativo` y `grado_verificacion_aviso`
+- Commits `cdb1fb1`, `868122a`, `53619b0`, `ec7da4a` — presentes en el historial
+- `.planning/STATE.md` y `.planning/ROADMAP.md` — sin modificar, como exige el orquestador
