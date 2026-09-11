@@ -315,3 +315,13 @@ Los otros cuatro registros del `<threat_model>` quedan mitigados y con aserción
 ---
 *Phase: 05-notificaciones-push-e-instalaci-n-de-la-pwa*
 *Completed: 2026-09-11*
+
+## Self-Check: PASSED
+
+- `supabase/tests/08_push_jobs.test.sql` — existe (708 líneas, 19 aserciones)
+- `supabase/migrations/20260911121000_17_push_jobs.sql` — existe (447 líneas)
+- `lib/database.types.ts` — existe y contiene `dispatch_push_notifications`
+- `docs/despliegue-push.md` — existe y contiene la sección «Puesta en marcha del drenaje»
+- Commits `b59b08f`, `7df993e`, `75977a1`, `32fb279` — presentes en el historial
+- `.planning/STATE.md` y `.planning/ROADMAP.md` — sin modificar, como exige el orquestador
+- Sin deleciones de archivos en todo el rango del plan
