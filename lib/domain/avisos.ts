@@ -55,7 +55,7 @@ export type PermisoDeAvisos = 'default' | 'granted' | 'denied';
 
 /**
  * El estado real del navegador, recogido por `lib/push/plataforma.ts` y por el hook
- * `hooks/usarEstadoDeAvisos.ts`. TODO entra por aqui.
+ * `hooks/usarEstadoDeAvisos.ts`. ABSOLUTAMENTE TODO entra por aqui.
  */
 export type EntradaEstadoAvisos = {
   /** `display-mode: standalone`, o el indicador heredado de Safari. */
