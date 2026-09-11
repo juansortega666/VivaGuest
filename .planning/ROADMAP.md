@@ -163,8 +163,27 @@ Plans:
   5. Cada envío queda registrado, los fallidos se reintentan, y las suscripciones que el navegador reporta como expiradas o revocadas se eliminan solas
   6. El admin ve qué aseadores no tienen push activo, y al confirmar un aseo para uno de ellos recibe una advertencia antes de asignar (`05-CONTEXT.md` D-03)
   7. Un aseo de fecha anterior a hoy, vivo y con la hora límite vencida, genera alerta. **Añadido 2026-09-10** por decisión explícita del usuario (`05-CONTEXT.md` D-08): hoy no la genera, porque `leerOperacion()` filtra con `.gte('scheduled_date', hoy)` en `lib/data/operacion.ts:243`. Toca el Core Value: un aseo se puede perder en silencio
-**Plans**: TBD
+**Plans:** 17 plans en 9 waves
 **UI hint**: yes
+
+Plans:
+- [ ] 05-01-PLAN.md — Compuerta de legitimidad de paquetes, dependencias, par VAPID y contrato de entorno
+- [ ] 05-02-PLAN.md — Migración 16: columnas de verificación en `push_subscriptions`, grants por columna y la función agregada que ve el admin (cierra la compuerta §20.10 del UI-SPEC)
+- [ ] 05-03-PLAN.md — Migración 17: dispatcher del outbox, trigger `AFTER INSERT` y cron de 60 s, con la aserción pgTAP de que un rollback revierte el disparo
+- [ ] 05-04-PLAN.md — `lib/push/errores.ts` y `lib/push/colapso.ts`: la decisión de error y la clave de colapso, con la auditoría emisor por emisor de D-05
+- [ ] 05-05-PLAN.md — `lib/push/payload.ts` y `lib/push/envio.ts`: las dos envolturas de D-07 y la firma VAPID, sin ranura para el código de acceso (D-06)
+- [ ] 05-06-PLAN.md — `POST /api/push/drain`: el worker que drena `notifications`, idempotente y con una sola puerta de revocación
+- [ ] 05-07-PLAN.md — Integración del drenaje contra un push service falso: las siete propiedades de la capa 3
+- [ ] 05-08-PLAN.md — Serwist, `app/sw.ts`, manifest e iconos. El handler que decide si un aseador conserva su canal, probado fuera del service worker
+- [ ] 05-09-PLAN.md — Tokens de `@theme`, registro en `cn()`, `lib/domain/avisos.ts` y la detección de plataforma
+- [ ] 05-10-PLAN.md — Banner de avisos (PWA-03), Server Actions de suscripción con allowlist anti-SSRF y guardarraíl de la escala móvil
+- [ ] 05-11-PLAN.md — El aviso de prueba: las tres actions del asistente y el paso 4 con sus dos grados (contrato de D-02)
+- [ ] 05-12-PLAN.md — `/instalar`: el asistente de cuatro pasos con capturas reales y los tres modos de entrada
+- [ ] 05-13-PLAN.md — `/aseos/[id]`: la pantalla de aterrizaje y el código de acceso auditado
+- [ ] 05-14-PLAN.md — D-03 en `/aseadores`: columna `AVISOS`, chip de estado y link de instalación
+- [ ] 05-15-PLAN.md — D-03 en `/operacion`: advertencia antes de asignar, franja del admin y la inversión del test de copy
+- [ ] 05-16-PLAN.md — D-08: los dos filtros de fecha, el bloque `Atrasados` y la señal de hora límite vencida
+- [ ] 05-17-PLAN.md — E2E en Chromium, las doce puertas y los procedimientos manuales en iPhone físico
 
 ### Phase 6: PWA del aseador, offline-first
 **Goal**: El aseador ejecuta el aseo completo desde el teléfono, con o sin señal, y nada de lo que hizo en campo se pierde
