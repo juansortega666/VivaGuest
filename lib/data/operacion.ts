@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database, Tables } from '@/lib/database.types';
-import { hoyBog } from '@/lib/domain/dates';
+import { hoyBog, sumarDias } from '@/lib/domain/dates';
 
 /**
  * LA CAPA DE LECTURA DE LA PANTALLA DE OPERACIÓN (DASH-01, DASH-02, DASH-03,
@@ -618,24 +618,15 @@ function nombreDelApartamento(fila: FilaDeOperacion): string {
   return fila.property?.nombre ?? '';
 }
 
-/**
- * Suma días a un día de negocio en forma `'YYYY-MM-DD'`.
+/*
+ * `sumarDias()` VIVÍA AQUÍ y desde el plan 05-13 vive en `lib/domain/dates.ts`,
+ * que es donde ya estaban `hoyBog()` y `diaAnterior()`. El disparador fue que el
+ * bloque del código de acceso (§9.3) necesita "mañana" para decidir su ventana:
+ * con la copia privada de este archivo, el repo habría acabado con TRES
+ * implementaciones de las mismas cuatro líneas, y de esas la que se queda atrás
+ * nunca es la que alguien está mirando.
  *
- * AQUÍ SÍ SE CONSTRUYE UN INSTANTE, y es correcto. Lo que la regla del proyecto
- * prohíbe es LEER EL RELOJ para deducir el día; esto es aritmética de calendario
- * sobre componentes que YA vienen resueltos por `hoyBog()`, anclada
- * explícitamente en UTC con `Date.UTC` y devuelta a la misma forma de cadena. No
- * hay ninguna zona horaria implicada y el resultado no depende de cuándo corra
- * el proceso.
- *
- * Se hace así y no restando 86 400 000 milisegundos a mano porque el cruce de
- * mes y el año bisiesto son los dos casos donde la resta a pelo falla.
- *
- * No se importa la copia de `lib/test/aseos.ts`: ese archivo es del arnés de
- * pruebas, importa la fábrica administrativa sin guard y nada bajo `app/` puede
- * arrastrarlo al bundle.
+ * La de `lib/test/aseos.ts` sí sigue aparte, y eso no cambia: ese archivo es del
+ * arnés de pruebas, importa la fábrica administrativa sin guard, y nada bajo
+ * `app/` puede arrastrarlo al bundle.
  */
-function sumarDias(fecha: string, dias: number): string {
-  const [ano, mes, dia] = fecha.split('-').map(Number);
-  return new Date(Date.UTC(ano, mes - 1, dia + dias)).toISOString().slice(0, 10);
-}

@@ -335,6 +335,32 @@ function diaAnterior(iso: string): string {
 }
 
 /**
+ * Suma (o resta) dias a un dia de negocio `'YYYY-MM-DD'`, en la misma forma.
+ *
+ * AQUI SI SE CONSTRUYE UN INSTANTE, Y ES CORRECTO. Lo que la regla del proyecto
+ * prohibe es LEER EL RELOJ para deducir el dia (`new Date()` a secas), porque
+ * bajo UTC eso adelanta el dia durante las cinco horas de cada noche en que UTC
+ * ya cambio y Bogota todavia no. Esto es otra cosa: aritmetica de calendario
+ * sobre componentes que YA vienen resueltos —por `hoyBog()` o por la columna
+ * `date` de la base— anclada explicitamente en UTC con `Date.UTC` y devuelta a
+ * la misma forma de cadena. No hay ninguna zona implicada y el resultado no
+ * depende de cuando corra el proceso.
+ *
+ * Se hace asi y no restando 86 400 000 milisegundos a mano porque el cruce de
+ * mes y el ano bisiesto son exactamente los dos casos donde la resta a pelo
+ * falla y donde nadie tiene un test.
+ *
+ * VIVE AQUI Y NO EN CADA CONSUMIDOR: es el mismo modulo que ya concentra
+ * `hoyBog()` y `diaAnterior()`, y tener dos copias de estas cuatro lineas en
+ * codigo de aplicacion es como una se queda atras. `lib/test/aseos.ts` conserva
+ * la suya a proposito: el arnes de pruebas no importa modulos de aplicacion.
+ */
+export function sumarDias(fecha: string, dias: number): string {
+  const [ano, mes, dia] = fecha.split('-').map(Number);
+  return DIA_ISO.format(new Date(Date.UTC(ano, mes - 1, dia + dias)));
+}
+
+/**
  * Hora del reloj de Bogota de un INSTANTE: `"14:32"`.
  *
  * Es `HORA_BOGOTA` expuesto, y existe porque la marca de ultima actualizacion

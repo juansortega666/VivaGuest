@@ -7,6 +7,7 @@ import {
   formatHoraLimite,
   horasDesdeDtstamp,
   hoyBog,
+  sumarDias,
   tiempoRelativo,
 } from './dates';
 
@@ -106,6 +107,33 @@ describe('hoyBog', () => {
     expect(hoyBog()).toBe('2026-01-09');
     expect(hoyBog()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     vi.useRealTimers();
+  });
+});
+
+describe('sumarDias', () => {
+  /**
+   * Los tres casos donde la resta a pelo de 86 400 000 milisegundos falla, y que
+   * es la razon por la que esta funcion usa aritmetica de calendario.
+   */
+  it('cruza mes, ano y bisiesto sin desviarse', () => {
+    expect(sumarDias('2026-01-31', 1)).toBe('2026-02-01');
+    expect(sumarDias('2026-12-31', 1)).toBe('2027-01-01');
+    expect(sumarDias('2026-03-01', -1)).toBe('2026-02-28');
+    expect(sumarDias('2028-03-01', -1)).toBe('2028-02-29');
+  });
+
+  it('con cero devuelve el mismo dia', () => {
+    expect(sumarDias('2026-09-12', 0)).toBe('2026-09-12');
+  });
+
+  it('NO depende de la zona del proceso', () => {
+    // Es la propiedad que importa: el bloque del codigo de acceso decide su
+    // ventana con esto, en el TELEFONO del aseador, y un resultado que se
+    // moviera con la zona del dispositivo escondería el boton el dia del aseo.
+    process.env.TZ = 'America/Bogota';
+    expect(sumarDias('2026-09-12', 1)).toBe('2026-09-13');
+    process.env.TZ = 'Pacific/Kiritimati';
+    expect(sumarDias('2026-09-12', 1)).toBe('2026-09-13');
   });
 });
 
