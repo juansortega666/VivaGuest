@@ -21,6 +21,12 @@ import { z } from 'zod';
 const publicSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
+  /**
+   * Clave publica del par VAPID. Es publica por diseno: `pushManager.subscribe()`
+   * la necesita en el cliente como `applicationServerKey`. La privada del mismo par
+   * NO vive en ningun esquema: se lee con `readServerSecret('VAPID_PRIVATE_KEY')`.
+   */
+  NEXT_PUBLIC_VAPID_PUBLIC_KEY: z.string().min(1),
 });
 
 export type PublicEnv = z.infer<typeof publicSchema>;
@@ -41,6 +47,7 @@ export function publicEnv(): PublicEnv {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
   });
   if (!parsed.success) fail('cliente', parsed.error);
   return parsed.data;

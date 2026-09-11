@@ -96,15 +96,22 @@ jobs:
 
       # Tambien verifica que ningun script reintrodujo --turbopack.
       #
-      # Las dos variables son PLACEHOLDERS, no secretos, y no hace falta que
-      # apunten a nada real: el build no llama a Supabase. Lo unico que necesitan
-      # es que el parseo de zod de `lib/env.ts` pase durante el prerender. Sin
-      # ellas, en cuanto exista /login (Client Component que instancia
-      # createBrowserClient -> publicEnv()) el build revienta con
+      # Las tres variables son PLACEHOLDERS, no secretos, y no hace falta que
+      # apunten a nada real: el build no llama a Supabase ni envia ningun push. Lo
+      # unico que necesitan es que el parseo de zod de `lib/env.ts` pase durante el
+      # prerender. Sin ellas, en cuanto exista /login (Client Component que
+      # instancia createBrowserClient -> publicEnv()) el build revienta con
       # "Variables de entorno invalidas (cliente): NEXT_PUBLIC_SUPABASE_URL".
       # La clave secreta NO se inyecta aqui: ninguna pagina la necesita en build.
+      #
+      # LA REGLA, y es la que se olvida: TODA variable que entre a `publicSchema`
+      # de `lib/env.ts` tiene que aparecer tambien aqui el mismo dia. El esquema es
+      # estricto y falla por la variable ausente, no por la pagina que la use, asi
+      # que el build de CI se cae aunque ninguna pagina toque la variable nueva.
+      # `NEXT_PUBLIC_VAPID_PUBLIC_KEY` entro con el plan 05-01.
       - name: build
         env:
           NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+          NEXT_PUBLIC_VAPID_PUBLIC_KEY: vapid_public_ci_placeholder
         run: npm run build
