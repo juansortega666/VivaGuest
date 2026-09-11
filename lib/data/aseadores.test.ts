@@ -5,6 +5,7 @@ import {
   listarAseadoresConAsignaciones,
   type AseadorConAsignaciones,
 } from './aseadores';
+import { RPC_ESTADO_AVISOS, SIN_AVISOS_REGISTRADOS } from './avisos';
 
 /**
  * `contarActivos` es una funcion pura sobre la forma que devuelve la consulta, asi
@@ -21,6 +22,7 @@ function aseador(parcial: Partial<AseadorConAsignaciones> = {}): AseadorConAsign
     is_active: true,
     responsableDe: [],
     suplenteEn: [],
+    estadoDeAvisos: SIN_AVISOS_REGISTRADOS,
     ...parcial,
   };
 }
@@ -84,11 +86,27 @@ describe('contarActivos', () => {
  * en la consulta, que es exactamente el bug que dice vigilar. Comprobado con
  * senuelo en los dos sentidos antes de darlo por bueno.
  */
-function clienteFalso(datos: {
-  profiles: Record<string, unknown>[];
-  properties: Record<string, unknown>[];
-}): Parameters<typeof listarAseadoresConAsignaciones>[0] {
+function clienteFalso(
+  datos: {
+    profiles: Record<string, unknown>[];
+    properties: Record<string, unknown>[];
+    /**
+     * Lo que devuelve `public.estado_avisos_aseadores()`. Opcional porque la
+     * mayoria de los tests de este archivo miden el agrupado y no los avisos, y
+     * obligarlos a sembrarlo seria ruido en once casos para servir a cinco.
+     */
+    avisos?: Record<string, unknown>[];
+  },
+  /**
+   * Registro de TODO viaje a la base, tablas y funcion. Es el instrumento del
+   * test de "tres consultas y no N": sin el, una llamada por aseador y una sola
+   * devuelven el mismo resultado y el test seria un falso verde. Comprobado con
+   * senuelo en los dos sentidos.
+   */
+  registro: string[] = [],
+): Parameters<typeof listarAseadoresConAsignaciones>[0] {
   const constructor = (tabla: 'profiles' | 'properties') => {
+    registro.push(tabla);
     let filas = datos[tabla];
 
     const resolver = () => Promise.resolve({ data: filas, error: null });
@@ -111,7 +129,12 @@ function clienteFalso(datos: {
     return encadenable;
   };
 
-  return { from: constructor } as unknown as Parameters<
+  const rpc = (nombre: string) => {
+    registro.push(nombre);
+    return Promise.resolve({ data: datos.avisos ?? [], error: null });
+  };
+
+  return { from: constructor, rpc } as unknown as Parameters<
     typeof listarAseadoresConAsignaciones
   >[0];
 }
@@ -217,5 +240,139 @@ describe('listarAseadoresConAsignaciones', () => {
     } as unknown as Parameters<typeof listarAseadoresConAsignaciones>[0];
 
     await expect(listarAseadoresConAsignaciones(cliente)).rejects.toThrow(/permission denied/);
+  });
+});
+
+/**
+ * El estado de avisos DENTRO de la lectura de aseadores (D-03, criterio 6).
+ *
+ * Lo que se mide aqui es el CRUCE: que el agregado entre en un solo viaje, que
+ * cada aseador quede con el suyo, y que el que no sale del agregado quede con
+ * cero suscripciones y no con un hueco. La forma del agregado en si la prueba
+ * `./avisos.test.ts`, y la autorizacion la prueba pgTAP con roles reales.
+ */
+describe('listarAseadoresConAsignaciones: el estado de avisos', () => {
+  const APARTAMENTOS = [
+    { id: 'p1', nombre: 'Bogotá 1', is_active: true, responsable_id: 'a1', suplente_id: null },
+  ];
+
+  /** Ocho aseadores, que es la plantilla real del proyecto. */
+  const OCHO = Array.from({ length: 8 }, (_, i) => ({
+    id: `a${i + 1}`,
+    full_name: `Aseadora ${String.fromCharCode(65 + i)}`,
+    phone: null,
+    is_active: true,
+    role: 'aseador',
+  }));
+
+  function avisos(parcial: Record<string, unknown> = {}) {
+    return {
+      aseador_id: 'a1',
+      suscripciones_vivas: 2,
+      verificado_por_toque: true,
+      ultima_verificacion: '2026-09-08T15:00:00Z',
+      ultimo_visto: '2026-09-10T11:00:00Z',
+      ultimo_exito: '2026-09-10T11:05:00Z',
+      primera_suscripcion_at: '2026-09-01T09:00:00Z',
+      ...parcial,
+    };
+  }
+
+  it('hace TRES viajes a la base con ocho aseadores, no uno por aseador', async () => {
+    const registro: string[] = [];
+
+    const lista = await listarAseadoresConAsignaciones(
+      clienteFalso(
+        { profiles: OCHO, properties: APARTAMENTOS, avisos: OCHO.map((a) => avisos({ aseador_id: a.id })) },
+        registro,
+      ),
+    );
+
+    expect(lista).toHaveLength(8);
+    // Perfiles, apartamentos y el agregado. Ni uno mas: llamar al agregado
+    // dentro del bucle convertiria ocho aseadores en ocho viajes.
+    expect(registro).toEqual(['profiles', 'properties', RPC_ESTADO_AVISOS]);
+  });
+
+  it('trae el estado CRUDO, no la etiqueta: quien deriva es lib/domain', async () => {
+    const [ana] = await listarAseadoresConAsignaciones(
+      clienteFalso({
+        profiles: [OCHO[0]],
+        properties: APARTAMENTOS,
+        avisos: [avisos({ aseador_id: 'a1', suscripciones_vivas: 1, verificado_por_toque: false })],
+      }),
+    );
+
+    expect(ana.estadoDeAvisos).toEqual({
+      suscripciones_vivas: 1,
+      verificado_por_toque: false,
+      ultima_verificacion: '2026-09-08T15:00:00Z',
+      ultimo_visto: '2026-09-10T11:00:00Z',
+      ultimo_exito: '2026-09-10T11:05:00Z',
+      primera_suscripcion_at: '2026-09-01T09:00:00Z',
+    });
+
+    // Ni `Activos`, ni `Sin probar`, ni un nombre de icono, ni una clase de
+    // color: esa traduccion vive en `estadoDeAvisosDeAseador()` y pintarla aqui
+    // seria la segunda copia de la derivacion.
+    const valores = Object.values(ana.estadoDeAvisos as Record<string, unknown>);
+    expect(valores.some((v) => typeof v === 'string' && /Activos|Sin probar|Sin avisos|Bell/.test(v))).toBe(
+      false,
+    );
+  });
+
+  it('un aseador que NO sale del agregado queda con cero suscripciones, no sin dato', async () => {
+    // La funcion devuelve fila por cada aseador activo, asi que esto no pasa en
+    // el camino real. La defensa cuesta una linea y evita que un `undefined`
+    // llegue a pintarse en la columna.
+    const lista = await listarAseadoresConAsignaciones(
+      clienteFalso({
+        profiles: [OCHO[0], OCHO[1]],
+        properties: APARTAMENTOS,
+        avisos: [avisos({ aseador_id: 'a1' })],
+      }),
+    );
+
+    const sinFila = lista.find((a) => a.id === 'a2');
+    expect(sinFila?.estadoDeAvisos).toEqual(SIN_AVISOS_REGISTRADOS);
+    expect(sinFila?.estadoDeAvisos.suscripciones_vivas).toBe(0);
+  });
+
+  it('ninguna clave del estado de avisos es una credencial de envío', async () => {
+    // Se afirma sobre las CLAVES y no sobre el contenido: un test que buscara el
+    // valor pasaria el dia que la credencial llegara con otro texto. El admin no
+    // necesita ninguna de las tres para cumplir D-03 (T-05-07).
+    const [ana] = await listarAseadoresConAsignaciones(
+      clienteFalso({
+        profiles: [OCHO[0]],
+        properties: APARTAMENTOS,
+        avisos: [
+          avisos({ endpoint: 'https://fcm.example/x', p256dh: 'clave-1', auth: 'clave-2' }),
+        ],
+      }),
+    );
+
+    const claves = Object.keys(ana.estadoDeAvisos);
+    for (const credencial of ['endpoint', 'p256dh', 'auth']) {
+      expect(claves).not.toContain(credencial);
+    }
+    expect(claves).toHaveLength(6);
+  });
+
+  it('un aseador inactivo trae su estado igual desde la base: ocultarlo es de la UI', async () => {
+    // La base ya filtra por activo en el agregado, asi que un inactivo cae en la
+    // rama de ausencia. Lo que este test deja ESCRITO es que la decision de
+    // pintar una raya en vez de un estado (§5.2) se toma en el componente y no
+    // aqui: la capa de datos no esconde nada.
+    const lista = await listarAseadoresConAsignaciones(
+      clienteFalso({
+        profiles: [{ ...OCHO[0], is_active: false }],
+        properties: APARTAMENTOS,
+        avisos: [],
+      }),
+    );
+
+    expect(lista[0].is_active).toBe(false);
+    expect(lista[0].estadoDeAvisos).toEqual(SIN_AVISOS_REGISTRADOS);
   });
 });
