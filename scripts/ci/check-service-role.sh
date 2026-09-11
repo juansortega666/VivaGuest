@@ -161,6 +161,18 @@ fi
 #   - components/ui/: lo genera el CLI de shadcn. Editarlo a mano es el modelo, pero
 #     los valores que trae son del preset y se sustituyen por la capa de tokens, no
 #     reescribiendo archivo por archivo.
+#   - app/manifest.ts: el Web App Manifest es JSON que lee el SISTEMA OPERATIVO, no
+#     el navegador dentro de una hoja de estilos. `background_color` y `theme_color`
+#     los consume Android para pintar la pantalla de arranque y la barra de estado
+#     ANTES de que exista CSS, asi que un `var(--background)` ahi no significa nada:
+#     el formato solo admite un valor literal. No es un atajo, es lo unico que el
+#     estandar permite.
+#
+#     Riesgo residual, anotado para que quede dicho: si alguien cambia `--background`
+#     en globals.css, estos dos valores NO lo siguen y hay que cambiarlos a mano. La
+#     alternativa —derivarlos leyendo el .css en build— cambia un valor desalineado
+#     por una conversion de oklch a hex hecha a mano, que es peor sitio donde
+#     equivocarse. El manifest lleva la razon escrita en sus propios comentarios.
 UI_DIRS=()
 for d in app components; do
   [ -d "$d" ] && UI_DIRS+=("$d")
@@ -173,6 +185,7 @@ if [ ${#UI_DIRS[@]} -gt 0 ]; then
     "${UI_DIRS[@]}" 2>/dev/null \
     | grep -vE "$COMENTARIO_RE" \
     | grep -vE '^app/globals\.css:' \
+    | grep -vE '^app/manifest\.ts:' \
     | grep -vE '^components/ui/' || true)
   if [ -n "$COLORES" ]; then
     err "valor de color literal fuera de la capa de tokens (solo app/globals.css puede nombrarlos):"

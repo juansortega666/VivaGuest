@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  EL TILE DE MARCA DE VIVAGUEST. FUENTE ÚNICA DE LOS CINCO PNG DE `public/`.
+
+  ══════════════════════════════════════════════════════════════════════════════
+  ESTO ES EL FALLBACK DECLARADO EN `05-UI-SPEC.md` §14.2, NO LA MARCA DEFINITIVA.
+
+  `02-UI-SPEC` §4 registra que existen `vivaguest-logo-rojo.svg` y
+  `vivaguest-logo-blanco.svg`, recuperados del sitio de 2018 (web.archive.org,
+  snapshot 2018-08-22). NO ESTÁN EN EL REPOSITORIO. El contrato de diseño definió
+  este fallback justamente para que su ausencia no bloqueara la fase.
+
+  CUANDO APAREZCAN LOS SVG DE 2018, SOLO CAMBIA ESTE ARCHIVO: se reemplaza el
+  contenido de `#marca` y se corre `node scripts/dev/generar-iconos.mjs`, que
+  regenera los cinco PNG. Nada más hay que tocar.
+  ══════════════════════════════════════════════════════════════════════════════
+
+  ── LA EXENCIÓN DE CONTRASTE, ANOTADA AQUÍ PARA QUE NO HAYA QUE IR AL CONTRATO ─
+
+  Blanco sobre el coral #ff7469 da 2.64:1, por debajo de AA. Y ESTÁ BIEN: es un
+  logotipo, y WCAG 1.4.3 exime explícitamente al texto que forma parte de uno.
+  Queda escrito acá para que un auditor no lo reporte como hallazgo.
+
+  El coral es `--brand-identity` de `app/globals.css`, y este es exactamente el
+  uso que `02-UI-SPEC` §4 autoriza para ese token: *"logo y áreas grandes; nunca
+  texto ni relleno de control"*. Un tile de color se encuentra mucho más rápido
+  entre 40 iconos que uno blanco con la marca en rojo.
+
+  ── POR QUÉ LAS LETRAS SON TRAZOS Y NO UN `<text font-family="Poppins">` ───────
+
+  §14.2 pide `VG` en Poppins 600. Poner `<text font-family="Poppins">` haría que
+  este archivo se viera distinto en cada máquina que no tenga Poppins instalada
+  —y ninguna máquina de CI la tiene—, lo que rompe de frente el criterio de que
+  el script sea reejecutable y produzca LOS MISMOS cinco archivos.
+
+  Las alternativas eran peores: bajar la fuente en cada corrida mete una
+  dependencia de red en la generación de un asset, y sacar el `.woff2` que
+  `next/font` deja en `.next/static/media/` ata un asset de marca a un artefacto
+  de build con nombre hasheado.
+
+  Así que las dos letras van como geometría, construidas en el espíritu de una
+  geométrica de peso 600: la `V` son dos astas rectas con corte plano y la `G`
+  es un anillo circular con abertura y barra horizontal. NO son las curvas reales
+  de Poppins, y no pretenden serlo: es un fallback con fecha de caducidad.
+
+  ── SISTEMA DE COORDENADAS, PORQUE EL SCRIPT DEPENDE DE ÉL ────────────────────
+
+  El tile es 512×512. `#marca` dibuja en un espacio local de 210×100 (la `V` en
+  0..96, la `G` en 110..210) y se coloca con un `transform` que el script
+  RECALCULA por variante. Si se cambia el tamaño local de la marca, hay que
+  cambiar la constante `MARCA` de `scripts/dev/generar-iconos.mjs`.
+
+  `#fondo` tiene id propio porque el badge lo elimina: ese va monocromo sobre
+  transparente.
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 512 512"
+  width="512"
+  height="512"
+>
+  <defs>
+    <!--
+      La contraforma de la G y su abertura. `maskUnits="userSpaceOnUse"` y una
+      región explícita: la región por defecto es el bbox del objeto ±10% y
+      recortaría el rectángulo de la abertura, que sale del cuadro a propósito.
+    -->
+    <mask id="contraforma-g" maskUnits="userSpaceOnUse" x="-6" y="-6" width="124" height="124">
+      <rect x="-6" y="-6" width="124" height="124" fill="#ffffff" />
+      <!-- El ojo de la G. -->
+      <circle cx="50" cy="50" r="31" fill="#000000" />
+      <!-- La abertura: corta el anillo desde las 2 hasta las 3 en punto. -->
+      <rect x="50" y="24" width="62" height="26" fill="#000000" />
+    </mask>
+  </defs>
+
+  <rect id="fondo" x="0" y="0" width="512" height="512" fill="#ff7469" />
+
+  <!--
+    El transform de abajo es la variante por defecto, el tile lleno: la marca
+    ocupa el 55% del ancho (281.6 de 512), escala 281.6/210 = 1.341, y queda
+    centrada. El script lo sobreescribe para el maskable y para el badge.
+  -->
+  <g id="marca" fill="#ffffff" transform="translate(115.2 188.95) scale(1.341)">
+    <!-- V: astas rectas, corte plano arriba y en el vértice. -->
+    <path d="M0 0 L23 0 L48 72 L73 0 L96 0 L58 100 L38 100 Z" />
+
+    <!-- G: anillo con abertura, más la barra horizontal en la línea media. -->
+    <g transform="translate(110 0)">
+      <circle cx="50" cy="50" r="50" mask="url(#contraforma-g)" />
+      <rect x="52" y="50" width="46" height="19" />
+    </g>
+  </g>
+</svg>

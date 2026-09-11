@@ -31,6 +31,18 @@ export const metadata: Metadata = {
   title: "VivaGuest",
   description:
     "Administracion de apartamentos y coordinacion de aseos para renta corta.",
+  // iOS 16.4+ ya lee los iconos del manifest, pero el icono heredado de Apple
+  // sigue siendo el camino MÁS PREDECIBLE para la pantalla de inicio, y esta
+  // fase no puede permitirse el menos predecible: si el icono sale en blanco,
+  // la aseadora no encuentra la app entre las otras cuarenta y el criterio 1
+  // del ROADMAP se cae por una razón puramente cosmética.
+  //
+  // Va por `icons.apple` y no por un `<link>` escrito a mano en el JSX: el
+  // mecanismo de metadatos de Next es el camino soportado, mientras que un
+  // `<link>` suelto en el árbol depende de que React lo ice hasta el `<head>`.
+  // Verificado por curl sobre el build de producción: emite el `<link>` con el
+  // `rel` de Apple y este mismo `href`, uno solo y dentro del `<head>`.
+  icons: { apple: "/apple-touch-icon.png" },
 };
 
 export default function RootLayout({
