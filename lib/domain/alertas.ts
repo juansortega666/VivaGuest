@@ -1,5 +1,6 @@
 import type { Enums, Tables } from '@/lib/database.types';
 
+import { formatFechaLargaBog } from './dates';
 import { UMBRAL_SYNC_CAIDA_MS, estadoDeSincronizacion } from './salud-sync';
 
 /**
@@ -457,18 +458,63 @@ export function alertasComputadas(entrada: EntradaComputadas): Alerta[] {
 
     // 2. HORA LÍMITE VENCIDA. Aquí NO se acota por fecha: un aseo de anteayer
     //    sin terminar es justo el que no se puede perder.
+    //
+    //    ESA LÍNEA YA ESTABA ESCRITA Y HASTA D-08 ERA CIERTA E INALCANZABLE: la
+    //    entrada venía de `leerOperacion()`, que cortaba la ventana en `hoy`, así
+    //    que esta rama jamás veía un aseo anterior. Ahora la consulta baja siete
+    //    días y por fin es cierta de punta a punta. Criterio 7 del ROADMAP.
     const vence = venceEnMs(a.scheduled_date, a.hora_limite);
     if (vence < ahoraMs) {
-      const hhmm = a.hora_limite.slice(0, 5);
+      // ── LO ÚNICO QUE DISTINGUE UNA VIEJA DE UNA DE HOY ES EL COPY (§12.6) ──
+      //
+      // NI COLOR, NI JERARQUÍA, NI UN OCTAVO TIPO, y la tentación de destacarlas
+      // es evidente, así que queda escrito por qué no:
+      //
+      //   1. La información YA ESTÁ Y ES MÁS PRECISA QUE UN COLOR: el tiempo
+      //      relativo de la fila del panel dice `hace 2 días` contra
+      //      `hace 40 min`. Eso es un dato exacto; un color es una categoría.
+      //   2. EL ORDEN YA ES LA DISTINCIÓN: el instante de esta alerta es el
+      //      vencimiento, así que una de anteayer cae sola más abajo en el orden
+      //      descendente.
+      //   3. EL CRITERIO 4 DE LA FASE 4 PROHÍBE la jerarquía visual dentro del
+      //      panel. Su letra habla de jerarquía entre tipos; su espíritu es que
+      //      ninguna alerta grite más que otra, y pintar de otro color las viejas
+      //      es exactamente eso.
+      //
+      // De hoy, la hora: `11:30` responde "cuánto llevas tarde". De un día
+      // anterior, la fecha: esa misma hora, de un día que ya pasó, no responde la
+      // pregunta que el admin sí tiene, que es cuán viejo es esto.
+      //
+      // La fecha se formatea con el helper del proyecto y NUNCA construyendo un
+      // instante a partir de la cadena: un ISO de solo fecha se parsea como
+      // medianoche UTC, y en Bogotá el 1 de septiembre así renderiza el 31 de
+      // agosto. Misma regla que ya está escrita en `dates.ts` y misma por la que
+      // `fecha_aseo` se modela como `date`.
+      //
+      // Y es `formatFechaLargaBog` y no `formatFechaBog` porque esta última emite
+      // el día de la semana (`vie, 4 de septiembre`), y detrás de "del" eso es
+      // agramatical. `dates.ts` ya declara esa distinción y para qué existe.
+      //
+      // LOS DOS TÍTULOS VAN LITERALES, no compuestos de un tronco común: son el
+      // contrato de copy de §12.6 y se leen de un vistazo contra su tabla. Un
+      // sufijo compartido ahorraría siete palabras y costaría esa comprobación.
+      const copy =
+        a.scheduled_date < hoy
+          ? `Se venció la hora límite del ${formatFechaLargaBog(a.scheduled_date)} y el aseo sigue sin terminar.`
+          : `Se venció la hora límite de las ${a.hora_limite.slice(0, 5)} y el aseo sigue sin terminar.`;
+
       alertas.push({
         id: `hora_limite_vencida:${a.id}`,
         clave: 'hora_limite_vencida',
         ocurrioEnMs: vence,
-        titulo: `La hora límite de las ${hhmm} pasó y el aseo no ha terminado.`,
-        cuerpo: `La hora límite de las ${hhmm} pasó y el aseo no ha terminado.`,
+        titulo: copy,
+        cuerpo: copy,
         apartamento: a.apartamento,
         cleaningId: a.id,
         propertyId: a.property_id,
+        // EL ANCLA ES LO QUE HACE OBLIGATORIO EL BLOQUE `Atrasados` (§12.1): si
+        // estos aseos no se renderizan en ningún día, esta URL resuelve a nada y
+        // el clic no hace absolutamente nada ni avisa (T-05-55).
         url: `/operacion#aseo-${a.id}`,
         atendible: false,
       });

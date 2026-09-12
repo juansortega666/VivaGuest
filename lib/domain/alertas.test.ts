@@ -415,6 +415,77 @@ describe('alertasComputadas · hora límite vencida', () => {
     expect(clavesDe(alertas, 'hora_limite_vencida')).toEqual(['vivo']);
   });
 
+  it('vencida HOY, el título dice LA HORA (05-UI-SPEC §12.6)', () => {
+    const [alerta] = alertasComputadas({
+      aseos: [aseo({ id: 'de-hoy', scheduled_date: HOY, hora_limite: '11:30:00' })],
+      maxUltimoExito: '2026-09-04T17:00:00+00:00',
+      ahoraMs: AHORA,
+      hoy: HOY,
+    }).filter((a) => a.clave === 'hora_limite_vencida');
+
+    // El copy del repo decía `La hora límite de las 11:30 pasó y el aseo no ha
+    // terminado.`, que no es ninguna de las dos variantes del contrato. §12.6
+    // reemplaza LAS DOS, así que el caso de hoy también cambia.
+    expect(alerta.titulo).toBe('Se venció la hora límite de las 11:30 y el aseo sigue sin terminar.');
+    expect(alerta.cuerpo).toBe(alerta.titulo);
+  });
+
+  it('vencida en un DÍA ANTERIOR, el título dice LA FECHA y no la hora', () => {
+    const [alerta] = alertasComputadas({
+      aseos: [aseo({ id: 'de-anteayer', scheduled_date: '2026-09-02', hora_limite: '11:30:00' })],
+      maxUltimoExito: '2026-09-04T17:00:00+00:00',
+      ahoraMs: AHORA,
+      hoy: HOY,
+    }).filter((a) => a.clave === 'hora_limite_vencida');
+
+    // `11:30` de un día que ya pasó no responde la pregunta que el admin tiene:
+    // cuán viejo es esto. La fecha sí.
+    expect(alerta.titulo).toBe('Se venció la hora límite del 2 de septiembre y el aseo sigue sin terminar.');
+    expect(alerta.titulo).not.toContain('11:30');
+    expect(alerta.cuerpo).toBe(alerta.titulo);
+  });
+
+  it('los dos casos comparten CLAVE y URL: ni tipo nuevo ni destino nuevo', () => {
+    const alertas = alertasComputadas({
+      aseos: [
+        aseo({ id: 'hoy', scheduled_date: HOY, hora_limite: '11:30:00' }),
+        aseo({ id: 'viejo', scheduled_date: '2026-09-01', hora_limite: '11:30:00' }),
+      ],
+      maxUltimoExito: '2026-09-04T17:00:00+00:00',
+      ahoraMs: AHORA,
+      hoy: HOY,
+    }).filter((a) => a.clave === 'hora_limite_vencida');
+
+    // NINGÚN OCTAVO TIPO. §12.6: la distinción vive en el copy y en el orden
+    // cronológico, nunca en color ni en jerarquía. Un tipo nuevo además pondría
+    // en rojo el recorrido de homogeneidad del mapa, que es lo que el criterio 4
+    // de la Fase 4 protege.
+    expect(alertas.map((a) => a.clave)).toEqual(['hora_limite_vencida', 'hora_limite_vencida']);
+
+    // Y LA URL SIGUE SIENDO EL ANCLA DEL ASEO, que es exactamente lo que hace
+    // obligatorio el bloque `Atrasados`: sin él, la del día anterior se vería,
+    // se podría tocar y no llevaría a ninguna parte (T-05-55, §12.1).
+    expect(alertas.map((a) => a.url)).toEqual([
+      '/operacion#aseo-hoy',
+      '/operacion#aseo-viejo',
+    ]);
+  });
+
+  it('la fecha del título sale del helper del proyecto, NO de un `new Date`', () => {
+    // EL SEÑUELO DEL OFF-BY-ONE. `new Date('2026-09-01')` se parsea como
+    // medianoche UTC y en Bogotá (UTC-5) renderiza el 31 de AGOSTO. El primero
+    // de mes es donde ese error se ve, y además cruza el nombre del mes.
+    const [alerta] = alertasComputadas({
+      aseos: [aseo({ id: 'primero-de-mes', scheduled_date: '2026-09-01' })],
+      maxUltimoExito: '2026-09-04T17:00:00+00:00',
+      ahoraMs: AHORA,
+      hoy: HOY,
+    }).filter((a) => a.clave === 'hora_limite_vencida');
+
+    expect(alerta.titulo).toContain('1 de septiembre');
+    expect(alerta.titulo).not.toContain('agosto');
+  });
+
   it('vence también en días pasados, y su instante para el orden es el vencimiento', () => {
     // A diferencia de la urgente, esta NO se acota a `scheduled_date >= hoy`:
     // un aseo de anteayer sin terminar es precisamente el que no se puede
