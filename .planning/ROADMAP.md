@@ -17,7 +17,7 @@ El equipo son dos personas, así que **las fases corren en secuencia estricta**.
 - [x] **Fase 3: Motor de sincronización iCal** - Todo checkout publicado en Airbnb se convierte en un aseo pendiente, sin duplicados ni cancelaciones falsas
 - [ ] **Fase 4: Dashboard operativo del admin** - Toda la operación del día en una pantalla, con confirmación en un paso y alertas de una sola jerarquía
 - [ ] **Fase 5: Notificaciones push e instalación de la PWA** - El aseador instala la PWA y recibe cada asignación en el teléfono; el admin recibe cada evento de campo
-- [ ] **Fase 6: PWA del aseador, offline-first** - El aseador ejecuta el aseo completo con o sin señal y nada del trabajo de campo se pierde
+- [x] **Fase 6: PWA del aseador, offline-first** - El aseador ejecuta el aseo completo con o sin señal y nada del trabajo de campo se pierde
 - [ ] **Fase 7: Financiero** - Rentabilidad por aseo y cierre mensual persistido que sobrevive a la retención
 - [ ] **Fase 8: Piloto en Bogotá 1** - Los 23 apartamentos de personal propio operando dentro del sistema, sin WhatsApp ni Excel
 - [ ] **Fase 9: Borrado automático y retención** - El sistema se limpia solo sin destruir evidencia ni historial de pagos
@@ -186,6 +186,7 @@ Plans:
 - [ ] 05-17-PLAN.md — E2E en Chromium, las doce puertas y los procedimientos manuales en iPhone físico
 
 ### Phase 6: PWA del aseador, offline-first
+**Status**: Executed 2026-09-12 — 10/10 planes. Doce puertas en verde: pgTAP 269/269 declaradas, 1005 unitarios, 169 de integración, 107 E2E en Chromium. **Abierto:** el checkpoint humano de 06-10 (recorrido en un teléfono real). El criterio 4 quedó diferido por decisión del desarrollador
 **Goal**: El aseador ejecuta el aseo completo desde el teléfono y deja evidencia de lo que hizo. **Corregido 2026-09-12:** el "con o sin señal" sale del alcance, ver criterio 4
 **Depends on**: Fases 2 y 5
 **Requirements**: PWA-01, PWA-04, PWA-05, PWA-06, PWA-07, PWA-08, PWA-09, PWA-10, CHECK-01, CHECK-02, CHECK-03, CHECK-04, REPORT-01, REPORT-02, REPORT-03
@@ -199,16 +200,16 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 06-01-PLAN.md — Migración 18: derogar el bloqueo de "Terminé" (D-06), tabla de cuartos saltados con motivo, y moneda en `expenses`
-- [ ] 06-02-PLAN.md — Migración 19: los tres RPC de reporte, cada uno con su notificación al admin. Cobra la promesa de D-04 de la Fase 5
-- [ ] 06-03-PLAN.md — Lógica pura: armado del checklist, progreso, evidencia incompleta, motivos y esquema del reporte
-- [ ] 06-04-PLAN.md — La cadena de la foto: compresión con borrado de EXIF, ruta decidida por el servidor y registro idempotente
-- [ ] 06-05-PLAN.md — `accordion` y `radio-group` saneadas de la trampa del ancho, más los seis tokens de la fase
-- [ ] 06-06-PLAN.md — El home con sus tarjetas y la hoja de dos opciones: comenzar o reportar que no puede
-- [ ] 06-07-PLAN.md — El checklist en acordeón con marcado optimista y la barra fija de acción
-- [ ] 06-08-PLAN.md — El asistente de evidencia, con cámara nativa y skip con motivo de lista cerrada
-- [ ] 06-09-PLAN.md — El reporte clasificado con monto, y la pantalla de cierre
-- [ ] 06-10-PLAN.md — La señal en el dashboard del admin, el test de paridad SQL/TypeScript, el E2E y el recorrido en teléfono real
+- [x] 06-01-PLAN.md — Migración 18: derogar el bloqueo de "Terminé" (D-06), tabla de cuartos saltados con motivo, y moneda en `expenses`
+- [x] 06-02-PLAN.md — Migración 19: los tres RPC de reporte, cada uno con su notificación al admin. Cobra la promesa de D-04 de la Fase 5
+- [x] 06-03-PLAN.md — Lógica pura: armado del checklist, progreso, evidencia incompleta, motivos y esquema del reporte
+- [x] 06-04-PLAN.md — La cadena de la foto: compresión con borrado de EXIF, ruta decidida por el servidor y registro idempotente
+- [x] 06-05-PLAN.md — `accordion` y `radio-group` saneadas de la trampa del ancho, más los seis tokens de la fase
+- [x] 06-06-PLAN.md — El home con sus tarjetas y la hoja de dos opciones: comenzar o reportar que no puede
+- [x] 06-07-PLAN.md — El checklist en acordeón con marcado optimista y la barra fija de acción
+- [x] 06-08-PLAN.md — El asistente de evidencia, con cámara nativa y skip con motivo de lista cerrada
+- [x] 06-09-PLAN.md — El reporte clasificado con monto, y la pantalla de cierre
+- [x] 06-10-PLAN.md — La señal en el dashboard del admin, el test de paridad SQL/TypeScript, el E2E y el recorrido en teléfono real
 
 **Hallazgo de planeación (2026-09-12):** el backend de esta fase **ya existía casi entero**.
 `start_cleaning`, `toggle_checklist_item` y `finish_cleaning` están construidos desde la Fase 1, y
@@ -289,8 +290,8 @@ Fases con patrón ya documentado en el research (se puede saltar):
 | 2. Acceso y administración del catálogo | 15/15 | Executed — 2 checkpoints humanos abiertos | 2026-09-02 |
 | 3. Motor de sincronización iCal | 10/10 | Complete (passed_with_gaps) | 2026-09-03 |
 | 4. Dashboard operativo del admin | 14/14 | Complete   | 2026-09-06 |
-| 5. Notificaciones push e instalación de la PWA | 0/TBD | Not started | - |
-| 6. PWA del aseador, offline-first | 0/TBD | Not started | - |
+| 5. Notificaciones push e instalación de la PWA | 15/17 | Executed — 05-12 (wizard `/instalar`) y 05-17 (validación en dispositivo) diferidos por el desarrollador | 2026-09-11 |
+| 6. PWA del aseador, offline-first | 10/10 | Executed — checkpoint humano en teléfono real abierto (06-10 tarea 3) | 2026-09-12 |
 | 7. Financiero | 0/TBD | Not started | - |
 | 8. Piloto en Bogotá 1 | 0/TBD | Not started | - |
 | 9. Borrado automático y retención | 0/TBD | Not started | - |
