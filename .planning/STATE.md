@@ -5,10 +5,10 @@ milestone_name: milestone
 current_phase: 06
 current_phase_name: pwa-del-aseador
 status: planning
-stopped_at: "Fase 6 discutida con el desarrollador el 2026-09-12. 06-CONTEXT.md escrito con D-01 a D-08. ROADMAP corregido: criterio 2 (el skip de evidencia ya no bloquea), criterio 4 (offline DIFERIDO) y criterio 5 (reporte unico clasificado, no-puedo antes de empezar). Siguiente: ui-phase 6"
-last_updated: "2026-09-12T03:40:00.000Z"
+stopped_at: "Fase 6: 06-CONTEXT.md y 06-UI-SPEC.md listos. UI-SPEC aprobado 6/6 tras corregir dos FLAG (faltaba punto focal por pantalla y la proporcion 60/30/10). Instala accordion y radio-group, que disparan la regla del ancho. Siguiente: plan-phase 6"
+last_updated: "2026-09-12T04:20:00.000Z"
 last_activity: 2026-09-12
-last_activity_desc: Fase 6 definida en conversacion directa: acordeones por cuarto, evidencia al final guiada, skip con motivo, sin offline
+last_activity_desc: ui-phase 6 cerrado: contrato visual de la PWA del aseador aprobado 6/6
 progress:
   total_phases: 9
   completed_phases: 4
