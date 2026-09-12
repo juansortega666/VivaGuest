@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { sumarDias } from '@/lib/domain/dates';
+
 import {
   HORIZONTE_DIAS,
   SIN_ASIGNAR,
+  VENTANA_ATRAS_DIAS,
   agruparPorDia,
   bandejaSinConfirmar,
   cargaPorAseador,
@@ -143,11 +146,20 @@ describe('agruparPorDia', () => {
     expect(bloques.siguientes.flatMap((g) => g.filas)).toHaveLength(1);
   });
 
-  it('un aseo de AYER no aparece en ningún bloque ni en el conteo del horizonte', () => {
+  // ESTE TEST DECÍA LO CONTRARIO HASTA D-08, y decirlo era el defecto: un aseo
+  // de ayer vivo y vencido no aparecía en ninguna parte, así que la alerta que
+  // `alertasComputadas()` sí sabía producir no tenía dónde aterrizar. Criterio 7
+  // del ROADMAP. Lo que se conserva intacto es la otra mitad de la aserción: un
+  // aseo anterior a hoy NO se cuela en `hoy`, ni en `mañana`, ni en `siguientes`,
+  // ni en el conteo del horizonte.
+  it('un aseo de AYER va al bloque Atrasados y a ningún otro', () => {
     const deAyer = fila({ scheduled_date: dia(-1) });
     const deHoy = fila({ scheduled_date: HOY });
 
     const bloques = agruparPorDia([deAyer, deHoy], HOY);
+
+    expect(bloques.atrasados.map((g) => g.fecha)).toEqual([dia(-1)]);
+    expect(ids(bloques.atrasados[0].filas)).toEqual([deAyer.id]);
 
     expect(ids(bloques.hoy.filas)).toEqual([deHoy.id]);
     expect(bloques.manana.filas).toHaveLength(0);
@@ -181,6 +193,113 @@ describe('agruparPorDia', () => {
     const bloques = agruparPorDia([cancelado], HOY);
 
     expect(ids(bloques.hoy.filas)).toEqual([cancelado.id]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('agruparPorDia · Atrasados (D-08, criterio 7)', () => {
+  /**
+   * EL SEÑUELO CENTRAL DE D-08, Y HAY QUE DECIR POR QUÉ.
+   *
+   * Hay DOS filtros de fecha en `operacion.ts`, no uno: el `.gte()` de la
+   * consulta y el descarte que esta proyección hacía por su cuenta. Ampliar
+   * SOLO la consulta deja este grupo vacío y el defecto exactamente igual de
+   * vivo, con la sensación de estar arreglado. Este test se corrió en rojo con
+   * el `if (fecha < hoy) continue;` restaurado a mano, precisamente para medir
+   * que atrapa esa mitad.
+   */
+  it('AGRUPA lo anterior a hoy POR DÍA y en orden ascendente, no en una lista corrida', () => {
+    const deAyer = fila({ scheduled_date: dia(-1) });
+    const deHaceTres = fila({ scheduled_date: dia(-3) });
+    const otroDeHaceTres = fila({ scheduled_date: dia(-3), hora_limite: '15:00:00' });
+
+    const bloques = agruparPorDia([deAyer, deHaceTres, otroDeHaceTres], HOY);
+
+    // Por día, ascendente: lo más viejo arriba. Una lista corrida perdería la
+    // fecha, que es el dato que dice cuán viejo es (UI-SPEC §12.2).
+    expect(bloques.atrasados.map((g) => g.fecha)).toEqual([dia(-3), dia(-1)]);
+    expect(ids(bloques.atrasados[0].filas)).toEqual([deHaceTres.id, otroDeHaceTres.id]);
+    expect(ids(bloques.atrasados[1].filas)).toEqual([deAyer.id]);
+  });
+
+  it('solo emite los días QUE TIENEN algo: un día viejo sin aseos no pinta cabecera', () => {
+    // Al revés que `Siguientes`, que emite sus cinco días vacíos incluidos. Un
+    // día pasado sin aseos no es información: es que no había nada que hacer
+    // (UI-SPEC §12.3, misma razón por la que el bloque entero desaparece vacío).
+    const bloques = agruparPorDia([fila({ scheduled_date: dia(-2) })], HOY);
+
+    expect(bloques.atrasados.map((g) => g.fecha)).toEqual([dia(-2)]);
+  });
+
+  it('solo entran los VIVOS y GESTIONADOS: terminado, cancelado y externo quedan fuera', () => {
+    // Un aseo terminado o cancelado de ayer no está atrasado: está cerrado
+    // (UI-SPEC §12.2). Y una unidad de gestión externa no la opera VivaGuest,
+    // así que no hay nada que el admin pueda hacer al respecto.
+    const vivo = fila({ scheduled_date: dia(-1), state: 'pendiente' });
+    const enCurso = fila({ scheduled_date: dia(-1), state: 'en_curso' });
+    const terminado = fila({ scheduled_date: dia(-1), state: 'completada' });
+    const cancelado = fila({ scheduled_date: dia(-1), state: 'cancelada' });
+    const externo = filaInerte({ scheduled_date: dia(-1) });
+
+    const bloques = agruparPorDia([vivo, enCurso, terminado, cancelado, externo], HOY);
+
+    expect(bloques.atrasados).toHaveLength(1);
+    expect(ids(bloques.atrasados[0].filas)).toEqual([vivo.id, enCurso.id]);
+  });
+
+  it('el tope es de SIETE días: lo de hace ocho no se agrupa, solo se cuenta', () => {
+    expect(VENTANA_ATRAS_DIAS).toBe(7);
+
+    const enElBorde = fila({ scheduled_date: dia(-7) });
+    const fuera = fila({ scheduled_date: dia(-8) });
+    const muyFuera = fila({ scheduled_date: dia(-40) });
+    // Uno cerrado de hace un mes NO es "sin cerrar": no entra en el conteo.
+    const cerradoViejo = fila({ scheduled_date: dia(-40), state: 'completada' });
+
+    const bloques = agruparPorDia([enElBorde, fuera, muyFuera, cerradoViejo], HOY);
+
+    expect(bloques.atrasados.map((g) => g.fecha)).toEqual([dia(-7)]);
+    expect(bloques.primerDiaDeLaVentana).toBe(dia(-7));
+    expect(bloques.antesDeLaVentana).toBe(2);
+  });
+
+  it('expone la fecha del atrasado MÁS VIEJO, que es lo que la cabecera necesita', () => {
+    // `3 aseos` a secas no es una decisión; `3 aseos · el más viejo del 4 de
+    // septiembre` sí (UI-SPEC §12.2).
+    const bloques = agruparPorDia(
+      [fila({ scheduled_date: dia(-1) }), fila({ scheduled_date: dia(-5) })],
+      HOY,
+    );
+
+    expect(bloques.masViejoAtrasado).toBe(dia(-5));
+  });
+
+  it('sin nada atrasado el grupo sale vacío y sin fecha: el bloque no se renderiza', () => {
+    const bloques = agruparPorDia([fila({ scheduled_date: HOY })], HOY);
+
+    expect(bloques.atrasados).toEqual([]);
+    expect(bloques.antesDeLaVentana).toBe(0);
+    expect(bloques.masViejoAtrasado).toBeNull();
+  });
+
+  it('NO toca los tres bloques existentes ni el conteo del horizonte', () => {
+    // T-05-56: la regresión silenciosa del carril es el riesgo real de este
+    // cambio. Mismo conjunto de filas, mismas tres proyecciones de siempre.
+    const deAyer = fila({ scheduled_date: dia(-1) });
+    const deHoy = fila({ scheduled_date: HOY });
+    const deManana = fila({ scheduled_date: dia(1) });
+    const enTres = fila({ scheduled_date: dia(3) });
+    const lejos = fila({ scheduled_date: dia(30) });
+
+    const bloques = agruparPorDia([deAyer, deHoy, deManana, enTres, lejos], HOY);
+
+    expect(ids(bloques.hoy.filas)).toEqual([deHoy.id]);
+    expect(ids(bloques.manana.filas)).toEqual([deManana.id]);
+    expect(bloques.siguientes.map((g) => g.fecha)).toHaveLength(HORIZONTE_DIAS - 1);
+    expect(ids(bloques.siguientes[1].filas)).toEqual([enTres.id]);
+    expect(bloques.ultimoDiaDelHorizonte).toBe(dia(6));
+    expect(bloques.masAllaDelHorizonte).toBe(1);
   });
 });
 
@@ -476,8 +595,27 @@ describe('leerOperacion', () => {
     return leerOperacion(comoCliente(supabase)).then((operacion) => {
       expect(operacion.hoy).toBe('2026-09-10');
       expect(operacion.horizonte).toBe('2026-09-16');
-      expect(llamadas.gte).toEqual([['scheduled_date', '2026-09-10']]);
+      // D-08: el límite inferior cuelga del MISMO día de negocio de Bogotá, solo
+      // que siete días atrás. El señuelo de la zona sigue vivo: con el día del
+      // proceso, esto sería '2026-09-04'.
+      expect(llamadas.gte).toEqual([['scheduled_date', '2026-09-03']]);
       expect(llamadas.lte).toEqual([['scheduled_date', '2026-09-16']]);
+    });
+
+    it('D-08: el límite inferior baja SIETE días, no se queda en hoy', () => {
+      // Si se queda en `hoy`, el aseo de ayer vivo y vencido nunca llega a
+      // `alertasComputadas()` y el criterio 7 del ROADMAP sigue roto en la base
+      // misma de la pantalla: no hay proyección que arregle lo que no se trajo.
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-10T15:00:00Z'));
+
+      const { supabase, llamadas } = clienteFalso();
+
+      return leerOperacion(comoCliente(supabase)).then((operacion) => {
+        const [[, limiteInferior]] = llamadas.gte;
+        expect(limiteInferior).toBe(sumarDias(operacion.hoy, -VENTANA_ATRAS_DIAS));
+        expect(limiteInferior).not.toBe(operacion.hoy);
+      });
     });
   });
 
