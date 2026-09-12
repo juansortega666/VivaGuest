@@ -155,9 +155,9 @@ export function DialogoReasignar({
 
     if (estado.ok) {
       // `El aseo quedó asignado a {nombre}.` — lo compone la action con el
-      // `aseador_nombre` del FormData. NO dice ni sugiere que se le avisó a
-      // nadie: la fila queda en `notifications` y nadie la drena hasta la Fase 5
-      // (§18.1).
+      // `aseador_nombre` del FormData, y le añade la ausencia de canal cuando la
+      // hay. Afirma que el destino se quedó MUDO, nunca que el aviso LLEGÓ: el
+      // drenaje es asíncrono y la action no lo sabe (05-UI-SPEC §11.4).
       toast.success(estado.mensaje);
       onAbiertoChange(false);
       return;
@@ -235,6 +235,14 @@ export function DialogoReasignar({
               mensaje de éxito diga a quién quedó asignado sin que la action
               tenga que ir a buscarlo. Contrato de claves del plan 04-08. */}
           <input type="hidden" name="aseador_nombre" value={nombreElegido} />
+          {/* Tampoco viaja a la base. Es lo que permite que el mensaje de éxito
+              diga que ese aseador se quedó sin canal: el estado lo conoce el RSC,
+              no la action. Ver §11.3 y la cabecera de `../_copy.ts`. */}
+          <input
+            type="hidden"
+            name="aseador_sin_avisos"
+            value={destinoMudo ? 'true' : 'false'}
+          />
 
           <Field data-invalid={Boolean(errorLocal) || undefined}>
             <FieldLabel id={`${idAseador}-label`} htmlFor={idAseador}>

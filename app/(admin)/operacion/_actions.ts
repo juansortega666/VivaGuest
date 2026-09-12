@@ -10,6 +10,8 @@ import { IDX_ONE_ACTIVE_PER_PROPERTY_DATE } from '@/lib/domain/constants';
 import { formatFechaBog, hoyBog } from '@/lib/domain/dates';
 import { campoDeConstraint, mapDbError, type DbErrorLike } from '@/lib/domain/errors';
 
+import { mensajeDeReasignacion } from './_copy';
+
 /**
  * LAS NUEVE SERVER ACTIONS DE LA PANTALLA DE OPERACIÓN.
  *
@@ -100,13 +102,39 @@ import { campoDeConstraint, mapDbError, type DbErrorLike } from '@/lib/domain/er
 // ═══════════════════════════════════════════════════════════════════════════════
 // COPY
 //
-// PROHIBICIÓN EXPLÍCITA Y ES DE PRODUCTO (UI-SPEC §18.1): ningún mensaje de esta
-// fase puede decir ni sugerir que se le avisó al aseador. Confirmar asigna en
-// firme y escribe el evento en la cola de `notifications`, pero NADIE LA DRENA
-// HASTA LA FASE 5. Nada de `Se le notificó a María`, `El aseador ya fue avisado`
-// ni `Le llegó la asignación`. El copy correcto dice a quién quedó asignado el
-// aseo, no que se le avisó. Hay un test que recorre los nueve mensajes de éxito
-// buscando esas palabras.
+// ── SUPERSEDE: 04-UI-SPEC §18.1 QUEDA REEMPLAZADA POR 05-UI-SPEC §11.4 ───────
+//
+// La regla de la Fase 4 decía que ningún mensaje podía decir ni sugerir que se
+// le avisó al aseador, Y SU PREMISA ERA TEMPORAL: confirmar escribía el evento
+// en la cola de `notifications` y NADIE LA DRENABA. Con esa premisa, cualquier
+// mención del canal era una promesa falsa, así que la prohibición podía ser
+// total y el test podía buscar la palabra a secas.
+//
+// La Fase 5 construyó el drenaje. La premisa dejó de ser cierta, y una regla que
+// se aplica con la premisa rota deja de proteger lo que protegía: prohibirlo
+// todo impediría decir lo único honesto y útil que esta pantalla puede decir,
+// que es a quién NO le va a sonar el teléfono.
+//
+// ── LA REGLA QUE RIGE AHORA, Y NO ES UNA RELAJACIÓN ─────────────────────────
+//
+//   SE PUEDE afirmar la AUSENCIA de canal. En el momento de escribir el mensaje
+//   se sabe, como hecho, que ese aseador tiene cero suscripciones vivas.
+//
+//   NO SE PUEDE afirmar la ENTREGA. El drenaje es asíncrono y fire-and-forget:
+//   estas actions devuelven su `ResultadoAccion` sin haber preguntado a nadie si
+//   un teléfono sonó, y no hay forma de que lo sepan. Un mensaje que lo afirme
+//   hace que el admin deje de revisar, y el precio de esa confianza mal puesta
+//   es una aseadora que no aparece (T-05-51).
+//
+// Permitido: `no tiene los avisos activos`, `no le va a sonar el teléfono`,
+// `avísale tú`, `quedaron con un aseador sin avisos`.
+// Prohibido: cualquier forma de decir que el aviso salió, llegó o fue recibido.
+//
+// El test de este contrato recorre TODOS los mensajes de éxito de la pantalla
+// —los de acá y los tres toasts de `./_copy.ts`— buscando las formas de afirmar
+// entrega, y se corrió en rojo y en verde. Un test invertido que nadie vio rojo
+// no prueba nada, y este lleva desde la Fase 4 sosteniendo una promesa de
+// producto.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const MENSAJE_DATOS_INVALIDOS = 'Datos inválidos.';
@@ -222,10 +250,22 @@ const esquemaConfirmar = z.object({
   instrucciones: textoOpcional,
 });
 
+/**
+ * Marca de solo copy. Igual que `aseador_nombre`, NO VIAJA A LA BASE.
+ *
+ * El cliente manda la cadena `'true'`; cualquier otra cosa es `false`. Es un dato
+ * de PRESENTACIÓN, no de autorización: quién tiene avisos y quién no lo decide el
+ * agregado `security definer` que lee el RSC, y aunque alguien invocara la action
+ * con la marca al revés lo único que conseguiría es un toast que le miente a sí
+ * mismo. La reasignación se escribe igual.
+ */
+const marcaDeCopy = z.union([z.string(), z.null()]).transform((v) => v === 'true');
+
 const esquemaReasignar = z.object({
   aseo_id: uuid,
   aseador_id: uuid,
   aseador_nombre: nombreParaCopy,
+  aseador_sin_avisos: marcaDeCopy,
 });
 
 const esquemaCrear = z.object({
@@ -326,7 +366,7 @@ export async function reasignarAseo(
   if (!ctx.ok) return ctx;
 
   const parseado = esquemaReasignar.safeParse(
-    campos(formData, ['aseo_id', 'aseador_id', 'aseador_nombre']),
+    campos(formData, ['aseo_id', 'aseador_id', 'aseador_nombre', 'aseador_sin_avisos']),
   );
   if (!parseado.success) return { ok: false, error: MENSAJE_DATOS_INVALIDOS };
 
@@ -337,10 +377,15 @@ export async function reasignarAseo(
   if (error) return fallo(error);
 
 
-  const nombre = parseado.data.aseador_nombre;
+  // El copy sale de `./_copy.ts` y no se escribe acá: es el mismo sitio del que
+  // salen los dos toasts de la tanda, y así el test de §11.4 los recorre todos
+  // sin tener que ir a buscarlos a dos capas distintas.
   return {
     ok: true,
-    mensaje: nombre ? `El aseo quedó asignado a ${nombre}.` : 'El aseo quedó reasignado.',
+    mensaje: mensajeDeReasignacion(
+      parseado.data.aseador_nombre,
+      parseado.data.aseador_sin_avisos,
+    ),
   };
 }
 

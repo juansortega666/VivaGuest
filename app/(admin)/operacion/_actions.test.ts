@@ -85,6 +85,7 @@ beforeEach(() => {
 // Importado despues de los mocks: `vi.mock` esta izado, pero el modulo bajo
 // prueba resuelve `@/lib/auth/guards` en su primera evaluacion.
 const acciones = await import('./_actions');
+const { mensajeDeTandaCompleta, mensajeDeTandaInterrumpida } = await import('./_copy');
 
 const {
   confirmarAseo,
@@ -448,11 +449,62 @@ describe('traduccion de errores de la base', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// 6. LA PROHIBICION DE PRODUCTO: NADIE AVISO A NADIE
+// 6. LA REGLA DE COPY DE §11.4: SE PUEDE AFIRMAR LA AUSENCIA, NUNCA LA ENTREGA
+//
+// ── ESTE BLOQUE ESTA INVERTIDO RESPECTO A LA FASE 4, Y ESO ES LO QUE PRUEBA ──
+//
+// El test original recorria los mensajes de exito buscando la palabra de aviso a
+// secas, porque entonces NADIE DRENABA LA COLA y cualquier mencion del canal era
+// una promesa falsa. La Fase 5 construyo el drenaje, asi que aquella premisa dejo
+// de ser cierta y el patron viejo quedo al reves: hoy prohibiria justo la unica
+// frase honesta y util que esta pantalla puede decir, que es a quien NO le va a
+// sonar el telefono.
+//
+// La regla nueva (05-UI-SPEC §11.4, que supersede 04-UI-SPEC §18.1) separa dos
+// cosas que se parecen:
+//
+//   AUSENCIA de canal -> permitida. Es un hecho conocido en el momento de
+//   escribir el mensaje: cero suscripciones vivas.
+//
+//   ENTREGA -> prohibida. El drenaje es asincrono y fire-and-forget; ni la action
+//   ni el `Sheet` saben si un telefono sono (T-05-51).
+//
+// El patron de abajo es el que da el contrato, para que nadie lo improvise.
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('ningun copy dice ni sugiere que se le aviso al aseador', () => {
-  it('ninguno de los mensajes de exito menciona notificacion', async () => {
+const AFIRMA_ENTREGA = /(se le (notific|mand|avis)|ya fue avisad|le lleg[oó]|ya sabe)/i;
+
+/** La columna derecha de la tabla de §11.4, verbatim. */
+const COPY_PROHIBIDO = [
+  'Se le notificó a María',
+  'El aseador ya fue avisado',
+  'Le llegó la asignación',
+  'Se le mandó el aviso',
+  'María ya sabe',
+];
+
+/** La columna izquierda de la tabla de §11.4, verbatim. */
+const COPY_PERMITIDO = [
+  'no tiene los avisos activos',
+  'no le va a sonar el teléfono',
+  'avísale tú',
+  'quedaron con un aseador sin avisos',
+];
+
+describe('el patron de §11.4 distingue ausencia de entrega', () => {
+  // Estas dos aserciones son las que convierten el bloque en una prueba y no en
+  // una decoracion: un patron que nunca se vio rojo no mide nada.
+  it.each(COPY_PROHIBIDO)('atrapa el copy prohibido: %s', (frase) => {
+    expect(frase).toMatch(AFIRMA_ENTREGA);
+  });
+
+  it.each(COPY_PERMITIDO)('deja pasar el copy permitido: %s', (frase) => {
+    expect(frase).not.toMatch(AFIRMA_ENTREGA);
+  });
+});
+
+describe('ningun mensaje de exito de la pantalla afirma que el aviso llego', () => {
+  it('ninguno de los mensajes de las siete actions lo afirma', async () => {
     const mensajes: string[] = [];
     for (const [, accion, formData] of MUTACIONES) {
       const r = (await accion(null, formData())) as { ok: boolean; mensaje?: string };
@@ -460,11 +512,110 @@ describe('ningun copy dice ni sugiere que se le aviso al aseador', () => {
     }
     expect(mensajes).toHaveLength(MUTACIONES.length);
 
-    // La Fase 5 es la que drena la cola. Hasta entonces, decir "se le aviso"
-    // seria mentir, y la mentira solo se descubre cuando la aseadora no llega.
     for (const m of mensajes) {
-      expect(m.toLowerCase()).not.toMatch(/notific|avis|le lleg|push|se le mand/);
+      expect(m).not.toMatch(AFIRMA_ENTREGA);
     }
+  });
+
+  it('tampoco lo afirma el mensaje de la reasignacion a alguien sin canal', async () => {
+    const r = (await reasignarAseo(
+      null,
+      fd({
+        aseo_id: ASEO,
+        aseador_id: ASEADOR,
+        aseador_nombre: 'María',
+        aseador_sin_avisos: 'true',
+      }),
+    )) as { ok: boolean; mensaje: string };
+
+    expect(r.ok).toBe(true);
+    expect(r.mensaje).not.toMatch(AFIRMA_ENTREGA);
+  });
+
+  it('ni los dos toasts de cierre de la tanda', () => {
+    const mensajes = [
+      mensajeDeTandaCompleta(15, 3),
+      mensajeDeTandaInterrumpida(3, 15, 1),
+      mensajeDeTandaCompleta(15, 0),
+      mensajeDeTandaInterrumpida(3, 15, 0),
+    ];
+
+    for (const m of mensajes) {
+      expect(m).not.toMatch(AFIRMA_ENTREGA);
+    }
+  });
+});
+
+// ── LOS TRES TOASTS NUEVOS, AFIRMADOS LITERALES ─────────────────────────────
+// El copy de §11.3 va verbatim para que una reescritura futura tenga que pasar
+// por aca y, de paso, por el patron de arriba.
+
+describe('el copy literal de los toasts de §11.3', () => {
+  it('tanda completa con casos sin canal', () => {
+    expect(mensajeDeTandaCompleta(15, 3)).toBe(
+      'Listo: 15 aseos confirmados. 3 quedaron con un aseador sin avisos.',
+    );
+  });
+
+  it('tanda interrumpida con UN caso sin canal, en singular', () => {
+    expect(mensajeDeTandaInterrumpida(3, 15, 1)).toBe(
+      'Confirmaste 3 de 15. Los demás siguen en la bandeja. 1 quedó con un aseador sin avisos.',
+    );
+  });
+
+  it('tanda sin ningun caso: el mensaje de la Fase 4, intacto y sin espacio de mas', () => {
+    expect(mensajeDeTandaCompleta(15, 0)).toBe('Listo: 15 aseos confirmados.');
+    expect(mensajeDeTandaCompleta(1, 0)).toBe('Listo: 1 aseo confirmado.');
+    expect(mensajeDeTandaInterrumpida(3, 15, 0)).toBe(
+      'Confirmaste 3 de 15. Los demás siguen en la bandeja.',
+    );
+  });
+
+  it('reasignar a alguien sin canal', async () => {
+    const r = (await reasignarAseo(
+      null,
+      fd({
+        aseo_id: ASEO,
+        aseador_id: ASEADOR,
+        aseador_nombre: 'María',
+        aseador_sin_avisos: 'true',
+      }),
+    )) as { mensaje: string };
+
+    expect(r.mensaje).toBe(
+      'El aseo quedó asignado a María. No tiene los avisos activos: avísale tú.',
+    );
+  });
+
+  it('reasignar a alguien CON canal no dice nada del canal, ni para bien ni para mal', async () => {
+    const r = (await reasignarAseo(
+      null,
+      fd({
+        aseo_id: ASEO,
+        aseador_id: ASEADOR,
+        aseador_nombre: 'María',
+        aseador_sin_avisos: 'false',
+      }),
+    )) as { mensaje: string };
+
+    expect(r.mensaje).toBe('El aseo quedó asignado a María.');
+  });
+
+  it('la marca de copy NO viaja a la base: la RPC recibe los dos parametros de siempre', async () => {
+    await reasignarAseo(
+      null,
+      fd({
+        aseo_id: ASEO,
+        aseador_id: ASEADOR,
+        aseador_nombre: 'María',
+        aseador_sin_avisos: 'true',
+      }),
+    );
+
+    expect(rpc).toHaveBeenCalledWith('reassign_cleaning', {
+      p_cleaning: ASEO,
+      p_aseador: ASEADOR,
+    });
   });
 });
 

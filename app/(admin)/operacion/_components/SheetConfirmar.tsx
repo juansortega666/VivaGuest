@@ -26,6 +26,7 @@ import type { ResultadoAccion } from '@/lib/domain/acciones';
 import { formatFechaBog, formatHoraLimite } from '@/lib/domain/dates';
 
 import { confirmarAseo } from '../_actions';
+import { mensajeDeTandaCompleta, mensajeDeTandaInterrumpida } from '../_copy';
 import { AvisoAseadorSinPush } from './AvisoAseadorSinPush';
 
 /**
@@ -150,6 +151,15 @@ export function SheetConfirmar({
 
   const [indice, setIndice] = useState(0);
   const [confirmados, setConfirmados] = useState(0);
+  /**
+   * Cuántos de los CONFIRMADOS fueron a parar a alguien sin canal (§11.3).
+   *
+   * Se cuenta acá y no en la action porque este componente es el único que tiene
+   * el estado de avisos a mano: la action recibe un id de aseo y nada más. Cuenta
+   * confirmados, no vistos: un aseo que el admin saltó no quedó asignado a nadie
+   * y no tiene por qué aparecer en el recuento del cierre.
+   */
+  const [mudosConfirmados, setMudosConfirmados] = useState(0);
   const [campos, setCampos] = useState(CAMPOS_VACIOS);
   const [errorHuespedes, setErrorHuespedes] = useState<string | null>(null);
   const [fallo, setFallo] = useState<string | null>(null);
@@ -193,18 +203,18 @@ export function SheetConfirmar({
   /**
    * El cierre, con el ÚNICO toast de toda la tanda.
    *
-   * `n` llega por parámetro y no se lee del estado: cuando la tanda termina sola,
-   * quien llama acaba de calcular el contador definitivo y el `confirmados` de
-   * esta clausura todavía es el anterior.
+   * `n` y `mudos` llegan por parámetro y no se leen del estado: cuando la tanda
+   * termina sola, quien llama acaba de calcular los contadores definitivos y los
+   * de esta clausura todavía son los anteriores.
    *
    * Con cero confirmados no sale toast: abrir y cerrar sin tocar nada no es un
    * resultado que anunciar.
    */
-  function finalizar(n: number) {
+  function finalizar(n: number, mudos: number) {
     if (n === total) {
-      toast.success(`Listo: ${n} ${n === 1 ? 'aseo confirmado' : 'aseos confirmados'}.`);
+      toast.success(mensajeDeTandaCompleta(n, mudos));
     } else if (n > 0) {
-      toast.success(`Confirmaste ${n} de ${total}. Los demás siguen en la bandeja.`);
+      toast.success(mensajeDeTandaInterrumpida(n, total, mudos));
     }
 
     // La action ya llamó a `revalidatePath`; esto pide el árbol de servidor YA
@@ -214,13 +224,13 @@ export function SheetConfirmar({
   }
 
   /** Pasa al siguiente de la tanda, o cierra si este era el último. */
-  function avanzar(confirmadosTrasEsto: number) {
+  function avanzar(confirmadosTrasEsto: number, mudosTrasEsto: number) {
     setFallo(null);
     setErrorHuespedes(null);
     setCampos(CAMPOS_VACIOS);
 
     if (esElUltimo) {
-      finalizar(confirmadosTrasEsto);
+      finalizar(confirmadosTrasEsto, mudosTrasEsto);
       return;
     }
     setIndice((i) => i + 1);
@@ -240,10 +250,17 @@ export function SheetConfirmar({
 
     const n = confirmados + 1;
     setConfirmados(n);
+
+    // El recuento del cierre. Se suma DESPUÉS del éxito y no al pintar la
+    // advertencia: lo que el toast cuenta es cuántos quedaron asignados a alguien
+    // sin canal, no cuántas veces el admin vio la línea ámbar.
+    const m = mudosConfirmados + (nombreDelMudo === null ? 0 : 1);
+    setMudosConfirmados(m);
+
     // El anuncio es lo que sustituye al toast por confirmación: quien ve la
     // pantalla tiene la barra de progreso, quien no la ve necesita esto (§16.3).
     setAnuncio(`Aseo ${n} de ${total} confirmado.`);
-    avanzar(n);
+    avanzar(n, m);
     // `avanzar` y `confirmados` se leen en el mismo tick del resultado; la marca
     // `procesado` es la que garantiza una sola ejecución por respuesta.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -264,7 +281,7 @@ export function SheetConfirmar({
    * remedio que cerrar la tanda entera. El saltado se queda en la bandeja.
    */
   function saltar() {
-    avanzar(confirmados);
+    avanzar(confirmados, mudosConfirmados);
   }
 
   function enviar(formData: FormData) {
@@ -294,7 +311,7 @@ export function SheetConfirmar({
         // Lo único que se pierde es lo tecleado en el aseo actual, y eso va sin
         // diálogo de "¿seguro?": son dos campos, y un descarte encima de un
         // `Sheet` encima de una tanda de quince es una pila de tres.
-        if (!abierto) finalizar(confirmados);
+        if (!abierto) finalizar(confirmados, mudosConfirmados);
       }}
     >
       <SheetContent
@@ -413,7 +430,7 @@ export function SheetConfirmar({
             Nunca dos rellenos adyacentes (02-UI-SPEC.md §4.6).
           */}
           <SheetFooter className="flex-row items-center justify-between gap-md border-t border-border px-0 pb-0">
-            <Button type="button" variant="outline" size="lg" onClick={() => finalizar(confirmados)}>
+            <Button type="button" variant="outline" size="lg" onClick={() => finalizar(confirmados, mudosConfirmados)}>
               Cerrar
             </Button>
 
