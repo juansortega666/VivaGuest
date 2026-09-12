@@ -5,11 +5,11 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import { comenzarAseo } from '@/app/(cleaner)/_actions';
-import { terminarAseo } from '@/app/(cleaner)/aseos/[id]/_actions';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 
 import { useEstadoDelAseo } from './ChecklistPorCuarto';
+import { HojaChecklistIncompleto } from './HojaChecklistIncompleto';
 
 /**
  * LA BARRA FIJA DE ACCION (D-04, 06-UI-SPEC §7.4).
@@ -51,23 +51,23 @@ import { useEstadoDelAseo } from './ChecklistPorCuarto';
  * se declara en el layout de este arbol. Sin eso, esta clase compila, no falla y
  * no hace nada: el defecto solo se ve en un telefono con muesca.
  *
- * ── LA COSTURA CON EL ASISTENTE DE EVIDENCIA ───────────────────────────────
+ * ── ESTE BOTON NO TERMINA EL ASEO: ENTRA A LA EVIDENCIA ───────────────────
  *
- * En el plan 06-08, `confirmar()` deja de llamar a la accion de terminar y pasa
- * a abrir el asistente de fotos, que es quien termina el aseo al final del
- * ultimo paso (§8). Lo que NO cambia en ese plan es nada de lo de arriba: ni la
- * pregunta de §8.1, ni que el boton siga sin apagarse.
+ * Es D-05, y es la desviacion del diseno original: la foto se pide **al final**,
+ * en un asistente guiado, no a mitad del checklist. Asi que `Terminar aseo` abre
+ * `/aseos/[id]/evidencia`, y quien cierra el aseo es el ultimo paso de alli.
+ *
+ * ── Y LA DECISION DE SI PREGUNTAR VIVE AQUI, NO EN LA HOJA ────────────────
+ *
+ * La hoja de §8.1 solo pinta y devuelve dos respuestas. Meterle la regla de
+ * cuando aparecer la ataria a esta pantalla y la volveria irreusable en la
+ * siguiente que necesite lo mismo.
  * ════════════════════════════════════════════════════════════════════════════
  */
 
 const ROTULO_TERMINAR = 'Terminar aseo';
 const ROTULO_COMENZAR = 'Comenzar aseo';
 const ROTULO_EN_VUELO = 'Un momento…';
-
-const CONFIRMA_PRIMARIA = 'Terminar de todos modos';
-const CONFIRMA_SECUNDARIA = 'Volver al checklist';
-const CONFIRMA_CUERPO =
-  'Puedes terminar igual, pero el administrador va a ver cuáles quedaron pendientes.';
 
 export function BarraAccionAseo({
   aseoId,
@@ -84,7 +84,13 @@ export function BarraAccionAseo({
 
   const faltan = progreso.total - progreso.hechas;
 
-  function ejecutar(accion: 'comenzar' | 'terminar') {
+  /** La evidencia vive en su propia ruta. Ver la cabecera del asistente. */
+  function entrarALaEvidencia() {
+    setPreguntando(false);
+    router.push(`/aseos/${aseoId}/evidencia`);
+  }
+
+  function comenzar() {
     // Los toques repetidos se descartan aqui. Ver la cabecera: el control no se
     // apaga, asi que la reentrada se corta en el manejador.
     if (enVuelo) return;
@@ -93,21 +99,9 @@ export function BarraAccionAseo({
       const cuerpo = new FormData();
       cuerpo.set('aseo', aseoId);
 
-      const r =
-        accion === 'comenzar'
-          ? await comenzarAseo(null, cuerpo)
-          : await terminarAseo(null, cuerpo);
-
+      const r = await comenzarAseo(null, cuerpo);
       if (!r.ok) {
         toast.error(r.error);
-        return;
-      }
-
-      setPreguntando(false);
-
-      if (accion === 'terminar') {
-        toast.success(r.mensaje);
-        router.push('/mis-aseos');
         return;
       }
 
@@ -119,14 +113,14 @@ export function BarraAccionAseo({
 
   function alTocar() {
     if (modo === 'comenzar') {
-      ejecutar('comenzar');
+      comenzar();
       return;
     }
     if (faltan > 0) {
       setPreguntando(true);
       return;
     }
-    ejecutar('terminar');
+    entrarALaEvidencia();
   }
 
   const rotulo = enVuelo
@@ -167,39 +161,17 @@ export function BarraAccionAseo({
       */}
       <Sheet open={preguntando} onOpenChange={(v) => (v ? null : setPreguntando(false))}>
         <SheetContent side="bottom" className="max-w-aseador">
-          <SheetHeader className="gap-xs">
-            <SheetTitle className="text-heading-movil text-foreground">
-              Te faltan {faltan} {faltan === 1 ? 'tarea' : 'tareas'} por marcar.
-            </SheetTitle>
-            <p className="text-body-movil text-muted-foreground">{CONFIRMA_CUERPO}</p>
-          </SheetHeader>
-
-          <div className="flex flex-col gap-sm p-lg pt-0">
-            <Button
-              type="button"
-              onClick={() => ejecutar('terminar')}
-              className="min-h-toque-comodo w-full text-body-movil"
-            >
-              {enVuelo ? ROTULO_EN_VUELO : CONFIRMA_PRIMARIA}
-            </Button>
-
-            {/*
-              `ghost` de 44px, y el orden importa: la salida que devuelve al
-              trabajo va DEBAJO de la que termina, porque la aseadora que abrio
-              esta hoja ya decidio terminar. La secundaria esta para quien se
-              arrepiente, no para dirigir.
-            */}
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setPreguntando(false)}
-              className="min-h-toque w-full text-body-movil"
-            >
-              {CONFIRMA_SECUNDARIA}
-            </Button>
+          <SheetTitle className="sr-only">Te faltan tareas por marcar</SheetTitle>
+          <div className="p-lg">
+            <HojaChecklistIncompleto
+              faltan={faltan}
+              onSeguir={entrarALaEvidencia}
+              onVolver={() => setPreguntando(false)}
+            />
           </div>
         </SheetContent>
       </Sheet>
+
     </>
   );
 }
