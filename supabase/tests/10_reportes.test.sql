@@ -89,14 +89,19 @@ insert into auth.users (id, email) values
   ('a1000000-0000-0000-0000-00000000000a', 'aseadora10-a@vg.co'),
   ('a1000000-0000-0000-0000-00000000000b', 'aseadora10-b@vg.co');
 
-insert into public.profiles (id, role, full_name, is_active) values
-  ('ad100000-0000-0000-0000-000000000001', 'admin',   'Admin 10 Uno',      true),
-  ('ad100000-0000-0000-0000-000000000002', 'admin',   'Admin 10 Dos',      true),
-  ('ad100000-0000-0000-0000-000000000003', 'admin',   'Admin 10 DE BAJA',  false),
-  ('a1000000-0000-0000-0000-00000000000a', 'aseador', 'Aseadora 10A',      true),
-  ('a1000000-0000-0000-0000-00000000000b', 'aseador', 'Aseadora 10B',      true)
+-- `deactivated_at` no es opcional cuando `is_active` es falso: lo impone
+-- `profiles_deactivation_coherent`. Medido al escribir este archivo.
+insert into public.profiles (id, role, full_name, is_active, deactivated_at) values
+  ('ad100000-0000-0000-0000-000000000001', 'admin',   'Admin 10 Uno',      true,  null),
+  ('ad100000-0000-0000-0000-000000000002', 'admin',   'Admin 10 Dos',      true,  null),
+  ('ad100000-0000-0000-0000-000000000003', 'admin',   'Admin 10 DE BAJA',  false, now()),
+  ('a1000000-0000-0000-0000-00000000000a', 'aseador', 'Aseadora 10A',      true,  null),
+  ('a1000000-0000-0000-0000-00000000000b', 'aseador', 'Aseadora 10B',      true,  null)
 on conflict (id) do update
-  set role = excluded.role, full_name = excluded.full_name, is_active = excluded.is_active;
+  set role           = excluded.role,
+      full_name      = excluded.full_name,
+      is_active      = excluded.is_active,
+      deactivated_at = excluded.deactivated_at;
 
 insert into public.properties
   (id, nombre, cluster, gestion_vivaguest, hora_limite,

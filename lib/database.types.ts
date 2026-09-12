@@ -1427,6 +1427,23 @@ export type Database = {
         Args: { p_endpoint: string }
         Returns: string
       }
+      report_damage: {
+        Args: { p_cleaning: string; p_descripcion: string }
+        Returns: string
+      }
+      report_expense: {
+        Args: {
+          p_cleaning: string
+          p_concepto: string
+          p_moneda?: string
+          p_monto: number
+        }
+        Returns: string
+      }
+      report_missing_items: {
+        Args: { p_cleaning: string; p_items: string[] }
+        Returns: string
+      }
       reschedule_cleaning: {
         Args: { p_cleaning: string; p_fecha: string }
         Returns: undefined
