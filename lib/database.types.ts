@@ -1460,7 +1460,7 @@ export type Database = {
         Args: {
           p_cleaning: string
           p_motivo: Database["public"]["Enums"]["motivo_sin_evidencia"]
-          p_nota: string
+          p_nota?: string
           p_room: string
         }
         Returns: undefined
@@ -1479,7 +1479,7 @@ export type Database = {
       }
       today_bog: { Args: never; Returns: string }
       toggle_checklist_item: {
-        Args: { p_done: boolean; p_item: string; p_nota: string }
+        Args: { p_done: boolean; p_item: string; p_nota?: string }
         Returns: undefined
       }
       unskip_room_evidence: {
