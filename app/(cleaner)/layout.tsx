@@ -1,3 +1,5 @@
+import type { Viewport } from 'next';
+
 import { BannerAvisos } from '@/app/(cleaner)/_components/BannerAvisos';
 import { exigirSesion } from '@/lib/auth/guards';
 import { leerEndpointDePushPropio } from '@/lib/data/avisos';
@@ -24,6 +26,24 @@ import { publicEnv } from '@/lib/env';
  * tipografica de este arbol es la movil de `05-UI-SPEC` §3.1, con sufijo, y
  * `scripts/ci/check-escala-movil.sh` lo impone.
  */
+/**
+ * `viewport-fit=cover` — Y SIN ESTO, `env(safe-area-inset-*)` VALE SIEMPRE CERO.
+ *
+ * No es una mejora estetica. La barra fija de accion de `/aseos/[id]` se apoya en
+ * `env(safe-area-inset-bottom)` para no quedar debajo de la barra de gestos del
+ * iPhone, donde el toque no termina el aseo: **saca de la aplicacion**. Por
+ * defecto el navegador recorta el viewport al area segura y el valor de esa
+ * variable es 0, asi que la clase compila, pasa el grep, no falla en ningun test
+ * y no hace absolutamente nada. El defecto solo se ve en un telefono con muesca.
+ *
+ * Va en el layout de ESTE arbol y no en el raiz: el shell del admin es de
+ * escritorio y no tiene ninguna superficie fija al borde inferior. Declararlo
+ * global cambiaria el recorte de una pantalla que no lo necesita.
+ */
+export const viewport: Viewport = {
+  viewportFit: 'cover',
+};
+
 export default async function CleanerLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {

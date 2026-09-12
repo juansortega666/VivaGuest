@@ -199,6 +199,54 @@ const INVENTARIO: readonly Emisor[] = [
     dedupe: `fmt:${FEED}:20260911`,
     cleaning: null,
   },
+
+  // ── Fase 6 ────────────────────────────────────────────────────────────────
+  // Los cuatro que la Fase 6 añadió. Este test los cazó al correr, que es
+  // exactamente para lo que la Fase 5 lo escribió: un emisor nuevo obliga a
+  // mirar si su clase puede colapsar con la de otro del mismo aseo.
+  //
+  // Veredicto de esa revisión: **ninguno colapsa con ninguno.** Los tres tipos
+  // de reporte son clases distintas entre sí y distintas de `no_puedo` y de
+  // `asignacion`, que es justo el caso que D-05 de la Fase 5 existe para
+  // evitar ("un daño reportado borra un 'no puedo' del mismo aseo antes de que
+  // el admin lo lea"). Y el identificador de la fila entra en su `dedupe_key`,
+  // así que dos daños del mismo aseo tampoco se borran entre sí.
+  {
+    n: 15,
+    migracion: '18_ejecucion_aseo',
+    emisor: 'finish_cleaning (reescrito sin el bloqueo de PWA-07)',
+    type: 'aseo_completado',
+    destinatario: 'admin',
+    dedupe: `done:${ASEO}`,
+    cleaning: ASEO,
+  },
+  {
+    n: 16,
+    migracion: '19_rpc_reportes',
+    emisor: 'report_damage',
+    type: 'dano_reportado',
+    destinatario: 'admin',
+    dedupe: `dano:${ASEO}:${NOTIF}`,
+    cleaning: ASEO,
+  },
+  {
+    n: 17,
+    migracion: '19_rpc_reportes',
+    emisor: 'report_expense',
+    type: 'gasto_reportado',
+    destinatario: 'admin',
+    dedupe: `gasto:${ASEO}:${NOTIF}`,
+    cleaning: ASEO,
+  },
+  {
+    n: 18,
+    migracion: '19_rpc_reportes',
+    emisor: 'report_missing_items',
+    type: 'faltantes_reportados',
+    destinatario: 'admin',
+    dedupe: `falta:${ASEO}:${NOTIF}`,
+    cleaning: ASEO,
+  },
 ];
 
 /**
@@ -369,12 +417,19 @@ describe('lo que NO puede colapsar: la razón de ser de D-05', () => {
       expect([...clases], `la clave ${clave} sirve a varias clases`).toHaveLength(1);
     }
 
-    // Catorce emisores producen NUEVE claves, y cada fusión tiene dueño:
-    //   · asignacion + aseo          -> #1 y #4  (reasignación de vuelta, §10.2)
-    //   · aseo_cancelado + aseo      -> #5 a #8  (cancelado y a-revisión del mismo aseo)
+    // Dieciocho emisores producen DOCE claves, y cada fusión tiene dueño:
+    //   · asignacion + aseo          -> #1 y #4   (reasignación de vuelta, §10.2)
+    //   · aseo_cancelado + aseo      -> #5 a #8   (cancelado y a-revisión del mismo aseo)
     //   · calendario_caido fmt:feed  -> #10 y #14 (reconcile y watchdog dicen lo mismo)
-    // Las otras seis son emisores únicos.
-    expect(porClave.size).toBe(9);
+    //   · aseo_completado + aseo     -> #2 y #15  **Fase 6.** NO son dos emisores:
+    //     es el MISMO `finish_cleaning`, que la migración 18 reescribió con
+    //     `create or replace` para quitarle el bloqueo de PWA-07. El conteo por
+    //     líneas en disco lo ve dos veces porque las dos migraciones quedan en
+    //     el historial; la clave de colapso lo ve como uno, que es lo correcto.
+    // Las tres de reporte de la Fase 6 (#16, #17, #18) son clases distintas
+    // entre sí y de todo lo anterior, así que suman tres claves nuevas: es
+    // exactamente lo que D-05 exige y el caso que existe para evitar.
+    expect(porClave.size).toBe(12);
   });
 
   it('dos aseos distintos de la misma clase no colapsan: la tanda de quince son quince avisos', () => {
@@ -476,7 +531,9 @@ describe('el inventario cubre el repo entero', () => {
       'apareció un emisor de notifications sin clasificar en esta tabla: ' +
         'mira si su `type` puede colapsar con el de otro emisor del mismo aseo',
     ).toBe(emisoresEnDisco);
-    expect(INVENTARIO.length).toBe(14);
+    // 18 desde la Fase 6: 14 de antes, más `finish_cleaning` reescrito en la
+    // migración 18 y los tres RPC de reporte de la 19.
+    expect(INVENTARIO.length).toBe(18);
   });
 
   it('los números de orden del inventario son correlativos y sin huecos', () => {

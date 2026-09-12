@@ -5,7 +5,11 @@ import 'server-only';
 import { z } from 'zod';
 
 import { NoAutorizado, exigirSesion } from '@/lib/auth/guards';
+import { firmarSubida, registrarFoto, type VinculoDeFoto } from '@/lib/data/evidencia';
+import type { ResultadoAccion } from '@/lib/domain/acciones';
 import { mapDbError, type DbErrorLike } from '@/lib/domain/errors';
+import { MOTIVOS_SKIP, exigeNota, type MotivoSkip } from '@/lib/domain/motivos';
+import { esquemaReporte } from '@/lib/domain/reporte.schema';
 
 /**
  * LA UNICA RUTA DE SALIDA DEL CODIGO DE ACCESO HACIA EL TELEFONO DEL ASEADOR.
@@ -146,4 +150,435 @@ export async function revelarCodigo(
   }
 
   return { ok: true, codigo };
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LA EJECUCION DEL ASEO — Fase 6
+//
+// Todas repiten el mismo orden, y NO es estilistico:
+//
+//     1. exigirSesion()  — un Server Action es un endpoint HTTP PUBLICO, exista
+//                          o no una pantalla que lo llame
+//     2. safeParse()     — lo minimo, antes de tocar la base
+//     3. el RPC          — SOLO entonces, y con el JWT del usuario
+//
+// Ninguna construye la fabrica administrativa. Ninguna nombra la tabla de
+// secretos. Y ninguna pide revalidacion de ruta desde el servidor: ese helper
+// de Next tiene un bug MEDIDO en este repo que cuelga el navegador (plan
+// 04-14). El refresco lo pide `router.refresh()` en el cliente. El nombre
+// literal del helper no se escribe aqui ni en prosa, porque la verificacion
+// del plan lo busca por grep sin filtrar comentarios y una mencion pondria el
+// build en rojo describiendo justo lo que no se hizo.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** El guard, en la forma que este arbol ya usa. */
+async function sesion() {
+  try {
+    const { supabase, user } = await exigirSesion();
+    return { ok: true as const, supabase, uid: user.id };
+  } catch (e) {
+    if (e instanceof NoAutorizado) return { ok: false as const, error: e.message };
+    throw e;
+  }
+}
+
+const esquemaTipoEvidencia = z.enum(['checklist', 'dano', 'gasto', 'faltante']);
+const esquemaMotivo = z.enum(MOTIVOS_SKIP as unknown as [MotivoSkip, ...MotivoSkip[]]);
+
+const MENSAJE_SUBIDA_FALLIDA = 'No se pudo subir la foto.';
+
+export type ResultadoDeFirma =
+  | { ok: true; ruta: string; token: string }
+  | { ok: false; error: string };
+
+/**
+ * Pide permiso de subida para una ruta que compone EL SERVIDOR.
+ *
+ * El cliente manda el aseo y el tipo; **no manda ni puede proponer la ruta**. En
+ * un bucket privado el nombre del archivo es una autorizacion.
+ */
+export async function pedirSubidaDeFoto(
+  _prev: ResultadoDeFirma | null,
+  formData: FormData,
+): Promise<ResultadoDeFirma> {
+  const ctx = await sesion();
+  if (!ctx.ok) return { ok: false, error: ctx.error };
+
+  const aseo = esquemaAseo.safeParse(formData.get('aseo'));
+  const tipo = esquemaTipoEvidencia.safeParse(formData.get('tipo'));
+  if (!aseo.success || !tipo.success) return { ok: false, error: MENSAJE_DATOS_INVALIDOS };
+
+  const { permiso, error } = await firmarSubida(ctx.supabase, {
+    cleaningId: aseo.data,
+    tipo: tipo.data,
+  });
+  if (!permiso || error) return { ok: false, error: MENSAJE_SUBIDA_FALLIDA };
+
+  return { ok: true, ruta: permiso.ruta, token: permiso.token };
+}
+
+/**
+ * Registra la foto ya subida y, si ese cuarto estaba saltado, le quita la marca.
+ *
+ * **La evidencia llego, la excusa sobra** (§8.4). Por eso el `unskip` va aqui y
+ * no en un boton aparte: nadie se acuerda de deshacer una excusa a mano.
+ */
+export async function registrarFotoDeCuarto(
+  _prev: ResultadoAccion | null,
+  formData: FormData,
+): Promise<ResultadoAccion> {
+  const ctx = await sesion();
+  if (!ctx.ok) return { ok: false, error: ctx.error };
+
+  const aseo = esquemaAseo.safeParse(formData.get('aseo'));
+  const item = esquemaAseo.safeParse(formData.get('item'));
+  const cuarto = esquemaAseo.safeParse(formData.get('cuarto'));
+  const ruta = z.string().min(1).safeParse(formData.get('ruta'));
+  const bytes = z.coerce.number().int().positive().safeParse(formData.get('bytes'));
+  const ancho = z.coerce.number().int().positive().safeParse(formData.get('ancho'));
+  const alto = z.coerce.number().int().positive().safeParse(formData.get('alto'));
+
+  if (!aseo.success || !item.success || !ruta.success || !bytes.success
+      || !ancho.success || !alto.success) {
+    return { ok: false, error: MENSAJE_DATOS_INVALIDOS };
+  }
+
+  const vinculo: VinculoDeFoto = { tipo: 'checklist', checklistItemId: item.data };
+
+  const registro = await registrarFoto(ctx.supabase, {
+    cleaningId: aseo.data,
+    vinculo,
+    uploadedBy: ctx.uid,
+    metadatos: {
+      storagePath: ruta.data,
+      bytes: bytes.data,
+      width: ancho.data,
+      height: alto.data,
+      mimeType: 'image/jpeg',
+    },
+  });
+
+  if (registro.estado === 'error') return { ok: false, error: MENSAJE_SUBIDA_FALLIDA };
+
+  // `ya_registrada` se trata como exito: es el reintento por mala senal, y la
+  // idempotencia la da `storage_path unique`.
+  if (cuarto.success) {
+    await ctx.supabase.rpc('unskip_room_evidence', {
+      p_cleaning: aseo.data,
+      p_room: cuarto.data,
+    });
+  }
+
+  return { ok: true, mensaje: 'Foto guardada.' };
+}
+
+/**
+ * Salta la evidencia de un cuarto, con motivo de lista cerrada.
+ *
+ * El motivo `otro` exige nota, y eso se valida aqui **y** en la base
+ * (`crs_otro_exige_nota`). Dos capas: esta es cortesia de pantalla, la de la
+ * base es el control.
+ */
+export async function saltarCuarto(
+  _prev: ResultadoAccion | null,
+  formData: FormData,
+): Promise<ResultadoAccion> {
+  const ctx = await sesion();
+  if (!ctx.ok) return { ok: false, error: ctx.error };
+
+  const aseo = esquemaAseo.safeParse(formData.get('aseo'));
+  const cuarto = esquemaAseo.safeParse(formData.get('cuarto'));
+  const motivo = esquemaMotivo.safeParse(formData.get('motivo'));
+  const notaCruda = formData.get('nota');
+  const nota = typeof notaCruda === 'string' ? notaCruda.trim() : '';
+
+  if (!aseo.success || !cuarto.success || !motivo.success) {
+    return { ok: false, error: MENSAJE_DATOS_INVALIDOS };
+  }
+  if (exigeNota(motivo.data) && nota.length === 0) {
+    return { ok: false, error: 'Cuentale al administrador que paso.', campo: 'nota' };
+  }
+
+  const { error } = await ctx.supabase.rpc('skip_room_evidence', {
+    p_cleaning: aseo.data,
+    p_room: cuarto.data,
+    p_motivo: motivo.data,
+    ...(nota.length > 0 ? { p_nota: nota } : {}),
+  });
+  if (error) return fallo(error);
+
+  return { ok: true, mensaje: 'Listo.' };
+}
+
+/** Marca o desmarca una tarea. Envuelve el RPC que existe desde la migracion 09. */
+export async function marcarTarea(
+  _prev: ResultadoAccion | null,
+  formData: FormData,
+): Promise<ResultadoAccion> {
+  const ctx = await sesion();
+  if (!ctx.ok) return { ok: false, error: ctx.error };
+
+  const item = esquemaAseo.safeParse(formData.get('item'));
+  const hecha = z.enum(['true', 'false']).safeParse(formData.get('hecha'));
+  if (!item.success || !hecha.success) return { ok: false, error: MENSAJE_DATOS_INVALIDOS };
+
+  const { error } = await ctx.supabase.rpc('toggle_checklist_item', {
+    p_item: item.data,
+    p_done: hecha.data === 'true',
+  });
+  if (error) return fallo(error);
+
+  return { ok: true, mensaje: 'Guardado.' };
+}
+
+/**
+ * Termina el aseo.
+ *
+ * ── AQUI NO SE REVALIDA EL CHECKLIST, Y ES DELIBERADO ───────────────────────
+ *
+ * `finish_cleaning` dejo de rechazar por checklist incompleto en la migracion 18
+ * (D-06). **Reponer aqui una comprobacion de progreso reintroduciria el bloqueo
+ * por la puerta de atras**, que es exactamente lo que se derogo: un bloqueo deja
+ * al aseador atrapado en campo y termina en una llamada telefonica.
+ *
+ * La falta de evidencia se hace visible con `aseo_sin_evidencia_completa()`, no
+ * impidiendo terminar.
+ */
+export async function terminarAseo(
+  _prev: ResultadoAccion | null,
+  formData: FormData,
+): Promise<ResultadoAccion> {
+  const ctx = await sesion();
+  if (!ctx.ok) return { ok: false, error: ctx.error };
+
+  const aseo = esquemaAseo.safeParse(formData.get('aseo'));
+  if (!aseo.success) return { ok: false, error: MENSAJE_DATOS_INVALIDOS };
+
+  const { error } = await ctx.supabase.rpc('finish_cleaning', { p_cleaning: aseo.data });
+  if (error) return fallo(error);
+
+  // El mensaje dice lo que paso, no que se le aviso a nadie: el drenaje es
+  // asincrono y esta action no sabe si el aviso llego (regla de 05-UI-SPEC §11.4).
+  return { ok: true, mensaje: 'Aseo terminado.' };
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LOS REPORTES DE CAMPO — REPORT-01, REPORT-02, REPORT-03 (plan 06-09)
+//
+// Los tres RPC existen desde el plan 06-02, cada uno con su guarda de
+// pertenencia (`private.aseo_en_curso_propio`) y su notificacion a cada admin
+// activo. Estas actions NO los reimplementan: los envuelven con el mismo orden
+// de siempre.
+//
+// ── POR QUE LA VALIDACION VIVE EN UNA UNION DISCRIMINADA ─────────────────────
+//
+// `lib/domain/reporte.schema.ts` discrimina por categoria, y eso hace que un
+// gasto sin monto NO COMPILE. Un objeto suelto con `monto` opcional dejaria
+// pasar justo el caso que el cierre mensual de la Fase 7 no puede sumar, y el
+// sintoma llegaria un mes despues, cuando el admin tenga que leer un texto libre
+// para adivinar cuanto se gasto.
+//
+// Son TRES capas sobre el mismo dato y ninguna sobra: el tipo, el esquema, y el
+// `check (monto > 0)` de la tabla. La de abajo es la unica que no se puede
+// saltar.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Devuelve el identificador de lo reportado.
+ *
+ * No es un lujo: la foto del daño es OBLIGATORIA y la del recibo cuelga del
+ * gasto, asi que el cliente necesita de que colgarla. Sin esto habria que
+ * releer la fila recien escrita para encontrarla, que es un viaje mas y una
+ * carrera contra cualquier otro reporte del mismo aseo.
+ */
+export type ResultadoDeReporte =
+  | { ok: true; mensaje: string; id: string }
+  | { ok: false; error: string; campo?: string };
+
+const MENSAJE_REPORTE_GUARDADO = 'Reporte guardado.';
+
+/**
+ * El primer error del esquema, con su campo cuando lo tiene.
+ *
+ * La regla de `campo` viene de 02-UI-SPEC §9.4: con campo el error va INLINE
+ * bajo ese input; sin campo va a un aviso y el formulario conserva lo escrito.
+ * Perder lo tecleado por un error de servidor es la forma mas rapida de que
+ * alguien deje de usar la herramienta.
+ */
+function falloDeEsquema(e: z.ZodError): { ok: false; error: string; campo?: string } {
+  const primero = e.issues[0];
+  const campo = typeof primero?.path?.[0] === 'string' ? primero.path[0] : undefined;
+  return { ok: false, error: primero?.message ?? MENSAJE_DATOS_INVALIDOS, campo };
+}
+
+/**
+ * Reporta un daño. REPORT-01.
+ *
+ * El RPC notifica a CADA admin activo y el trigger de la migracion 17 despacha
+ * el push. Esta action no sabe si el aviso llego, asi que su mensaje no lo
+ * afirma: dice lo que paso, que es que el reporte quedo guardado
+ * (05-UI-SPEC §11.4).
+ */
+export async function reportarDano(
+  _prev: ResultadoDeReporte | null,
+  formData: FormData,
+): Promise<ResultadoDeReporte> {
+  const ctx = await sesion();
+  if (!ctx.ok) return { ok: false, error: ctx.error };
+
+  const aseo = esquemaAseo.safeParse(formData.get('aseo'));
+  if (!aseo.success) return { ok: false, error: MENSAJE_DATOS_INVALIDOS };
+
+  const parseado = esquemaReporte.safeParse({
+    categoria: 'dano',
+    descripcion: formData.get('descripcion') ?? '',
+  });
+  if (!parseado.success) return falloDeEsquema(parseado.error);
+  if (parseado.data.categoria !== 'dano') return { ok: false, error: MENSAJE_DATOS_INVALIDOS };
+
+  const { data, error } = await ctx.supabase.rpc('report_damage', {
+    p_cleaning: aseo.data,
+    p_descripcion: parseado.data.descripcion,
+  });
+  if (error) return fallo(error);
+  if (!data) return { ok: false, error: MENSAJE_DATOS_INVALIDOS };
+
+  return { ok: true, mensaje: MENSAJE_REPORTE_GUARDADO, id: data };
+}
+
+/**
+ * Reporta un gasto con su monto. REPORT-02.
+ *
+ * ── EL MONTO VIAJA EN LA UNIDAD MINIMA DE LA MONEDA ────────────────────────
+ *
+ * Es la regla 1 del camino a v2 de `PROJECT.md`: el entero de pesos sirve para
+ * COP, CLP y PYG, que no tienen subunidad, y **no sirve** para MXN, BRL, ARS ni
+ * PEN, que si la tienen. El producto se va a vender en LATAM, y este es el
+ * primer campo de dinero que escribe un usuario final: ahora es una columna, y
+ * despues de la Fase 7 seria una migracion con historico financiero vivo.
+ *
+ * La moneda se manda explicita. Sin ella, un monto es un numero sin unidad.
+ */
+export async function reportarGasto(
+  _prev: ResultadoDeReporte | null,
+  formData: FormData,
+): Promise<ResultadoDeReporte> {
+  const ctx = await sesion();
+  if (!ctx.ok) return { ok: false, error: ctx.error };
+
+  const aseo = esquemaAseo.safeParse(formData.get('aseo'));
+  if (!aseo.success) return { ok: false, error: MENSAJE_DATOS_INVALIDOS };
+
+  const montoCrudo = formData.get('monto');
+  const monedaCruda = formData.get('moneda');
+
+  const parseado = esquemaReporte.safeParse({
+    categoria: 'gasto',
+    descripcion: formData.get('descripcion') ?? '',
+    // `Number('')` es 0, que el esquema rechaza por no ser positivo. Se manda
+    // `NaN` cuando no hay nada escrito para que el mensaje sea el de "escribe
+    // cuanto costo" y no el de un cero que nadie tecleo.
+    monto: typeof montoCrudo === 'string' && montoCrudo.trim() !== ''
+      ? Number(montoCrudo)
+      : Number.NaN,
+    ...(typeof monedaCruda === 'string' && monedaCruda !== '' ? { moneda: monedaCruda } : {}),
+  });
+  if (!parseado.success) return falloDeEsquema(parseado.error);
+  if (parseado.data.categoria !== 'gasto') return { ok: false, error: MENSAJE_DATOS_INVALIDOS };
+
+  const { data, error } = await ctx.supabase.rpc('report_expense', {
+    p_cleaning: aseo.data,
+    p_concepto: parseado.data.descripcion,
+    p_monto: parseado.data.monto,
+    p_moneda: parseado.data.moneda,
+  });
+  if (error) return fallo(error);
+  if (!data) return { ok: false, error: MENSAJE_DATOS_INVALIDOS };
+
+  return { ok: true, mensaje: MENSAJE_REPORTE_GUARDADO, id: data };
+}
+
+/**
+ * Reporta lo que faltaba. REPORT-03.
+ *
+ * Va como arreglo y no como texto libre porque el admin lo va a CONTAR: saber
+ * que el mismo apartamento se queda sin papel cuatro veces al mes es lo que
+ * convierte el reporte en una decision de compra. Un parrafo no se cuenta.
+ */
+export async function reportarFaltantes(
+  _prev: ResultadoDeReporte | null,
+  formData: FormData,
+): Promise<ResultadoDeReporte> {
+  const ctx = await sesion();
+  if (!ctx.ok) return { ok: false, error: ctx.error };
+
+  const aseo = esquemaAseo.safeParse(formData.get('aseo'));
+  if (!aseo.success) return { ok: false, error: MENSAJE_DATOS_INVALIDOS };
+
+  // Una linea por cosa que falto. Las vacias se descartan antes de validar: la
+  // gente deja renglones sueltos al escribir en un telefono.
+  const crudo = formData.get('items');
+  const items = typeof crudo === 'string'
+    ? crudo.split('\n').map((s) => s.trim()).filter((s) => s.length > 0)
+    : [];
+
+  const parseado = esquemaReporte.safeParse({ categoria: 'faltante', items });
+  if (!parseado.success) return falloDeEsquema(parseado.error);
+  if (parseado.data.categoria !== 'faltante') return { ok: false, error: MENSAJE_DATOS_INVALIDOS };
+
+  const { data, error } = await ctx.supabase.rpc('report_missing_items', {
+    p_cleaning: aseo.data,
+    p_items: parseado.data.items,
+  });
+  if (error) return fallo(error);
+  if (!data) return { ok: false, error: MENSAJE_DATOS_INVALIDOS };
+
+  return { ok: true, mensaje: MENSAJE_REPORTE_GUARDADO, id: data };
+}
+
+/** Registra la foto de un daño o de un gasto ya creado. */
+export async function registrarFotoDeReporte(
+  _prev: ResultadoAccion | null,
+  formData: FormData,
+): Promise<ResultadoAccion> {
+  const ctx = await sesion();
+  if (!ctx.ok) return { ok: false, error: ctx.error };
+
+  const aseo = esquemaAseo.safeParse(formData.get('aseo'));
+  const destino = esquemaAseo.safeParse(formData.get('destino'));
+  const tipo = z.enum(['dano', 'gasto']).safeParse(formData.get('tipo'));
+  const ruta = z.string().min(1).safeParse(formData.get('ruta'));
+  const bytes = z.coerce.number().int().positive().safeParse(formData.get('bytes'));
+  const ancho = z.coerce.number().int().positive().safeParse(formData.get('ancho'));
+  const alto = z.coerce.number().int().positive().safeParse(formData.get('alto'));
+
+  if (!aseo.success || !destino.success || !tipo.success || !ruta.success
+      || !bytes.success || !ancho.success || !alto.success) {
+    return { ok: false, error: MENSAJE_DATOS_INVALIDOS };
+  }
+
+  // La union impide que una foto quede colgada de dos sitios a la vez.
+  const vinculo: VinculoDeFoto =
+    tipo.data === 'dano'
+      ? { tipo: 'dano', damageId: destino.data }
+      : { tipo: 'gasto', expenseId: destino.data };
+
+  const registro = await registrarFoto(ctx.supabase, {
+    cleaningId: aseo.data,
+    vinculo,
+    uploadedBy: ctx.uid,
+    metadatos: {
+      storagePath: ruta.data,
+      bytes: bytes.data,
+      width: ancho.data,
+      height: alto.data,
+      mimeType: 'image/jpeg',
+    },
+  });
+
+  if (registro.estado === 'error') return { ok: false, error: MENSAJE_SUBIDA_FALLIDA };
+
+  return { ok: true, mensaje: 'Foto guardada.' };
 }

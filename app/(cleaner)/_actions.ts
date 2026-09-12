@@ -2,9 +2,17 @@
 
 import 'server-only';
 
+import { z } from 'zod';
+
 import { NoAutorizado, exigirSesion } from '@/lib/auth/guards';
 import type { ResultadoAccion } from '@/lib/domain/acciones';
 import { mapDbError, type DbErrorLike } from '@/lib/domain/errors';
+import {
+  ETIQUETAS_NO_PUEDO,
+  MOTIVOS_NO_PUEDO,
+  exigeNota,
+  type MotivoNoPuedo,
+} from '@/lib/domain/motivos';
 import {
   esquemaEndpointDePush,
   esquemaSuscripcion,
@@ -254,4 +262,85 @@ export async function marcarVisto(
   if (error) return fallo(error);
 
   return { ok: true, mensaje: 'Listo.' };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 4/4 — LA EJECUCION DEL ASEO (Fase 6)
+//
+// Las dos que la HOJA de la tarjeta dispara. Mismo orden obligado que el resto:
+// guard, validacion, y solo entonces el RPC con el JWT del usuario.
+//
+// Los dos RPC que envuelven YA EXISTEN desde la migracion 09. Esta fase no crea
+// ninguno: lo que faltaba era la pantalla.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Marca el aseo `en_curso`. Envuelve `start_cleaning` (migracion 09). */
+export async function comenzarAseo(
+  _prev: ResultadoAccion | null,
+  formData: FormData,
+): Promise<ResultadoAccion> {
+  const ctx = await guard();
+  if (!ctx.ok) return ctx;
+
+  const aseo = z.uuid().safeParse(campo(formData, 'aseo'));
+  if (!aseo.success) return { ok: false, error: MENSAJE_DATOS_INVALIDOS };
+
+  const { error } = await ctx.supabase.rpc('start_cleaning', { p_cleaning: aseo.data });
+  if (error) return fallo(error);
+
+  return { ok: true, mensaje: 'Empezaste el aseo.' };
+}
+
+/**
+ * Devuelve el aseo a Pendiente sin asignar y avisa al admin. Es PWA-05.
+ *
+ * ── POR QUE ESTO NO ES UNA ACCION DESTRUCTIVA ───────────────────────────────
+ *
+ * No borra nada. El aseo vuelve a la bandeja y el admin lo reasigna. Es lo
+ * CONTRARIO de destruir trabajo: es evitar que un aseo se pierda porque la
+ * persona asignada no puede hacerlo. Por eso la pantalla no usa rojo ni pide
+ * confirmacion con un dialogo (§14.2 del contrato de UI).
+ *
+ * ── Y POR QUE EL MENSAJE DICE "YA LO SABE" Y NO "YA LE LLEGO" ───────────────
+ *
+ * `decline_cleaning` escribe la notificacion en la MISMA transaccion, asi que al
+ * volver de aqui el hecho esta registrado con certeza. Lo que NO se puede
+ * afirmar es la ENTREGA: el drenaje es asincrono y esta action no sabe si el
+ * aviso llego al telefono del admin. Es la regla de `05-UI-SPEC.md` §11.4, y el
+ * test invertido de la Fase 5 la vigila.
+ */
+export async function devolverAseo(
+  _prev: ResultadoAccion | null,
+  formData: FormData,
+): Promise<ResultadoAccion> {
+  const ctx = await guard();
+  if (!ctx.ok) return ctx;
+
+  const aseo = z.uuid().safeParse(campo(formData, 'aseo'));
+  const motivo = z
+    .enum(MOTIVOS_NO_PUEDO as unknown as [MotivoNoPuedo, ...MotivoNoPuedo[]])
+    .safeParse(campo(formData, 'motivo'));
+  const nota = campo(formData, 'nota').trim();
+
+  if (!aseo.success || !motivo.success) return { ok: false, error: MENSAJE_DATOS_INVALIDOS };
+
+  // `otro` sin explicacion no le sirve a nadie al otro lado.
+  if (exigeNota(motivo.data) && nota.length === 0) {
+    return { ok: false, error: 'Cuentale al administrador que paso.', campo: 'nota' };
+  }
+
+  // El RPC recibe texto, no enum: `decline_cleaning` es de la Fase 1 y no se
+  // toca. Se manda la etiqueta legible mas la nota, que es lo que el admin va a
+  // leer en su panel.
+  const texto = nota.length > 0
+    ? `${ETIQUETAS_NO_PUEDO[motivo.data]}. ${nota}`
+    : ETIQUETAS_NO_PUEDO[motivo.data];
+
+  const { error } = await ctx.supabase.rpc('decline_cleaning', {
+    p_cleaning: aseo.data,
+    p_motivo: texto,
+  });
+  if (error) return fallo(error);
+
+  return { ok: true, mensaje: 'Listo. El administrador ya lo sabe.' };
 }

@@ -558,6 +558,23 @@
      puerta, con guantes (§3.2). El tracking separa los glifos lo justo para que
      `0`/`O` y `1`/`l` no se confundan al copiarlos a mano. */
   --tracking-codigo:     0.12em;
+
+  /* ── Fase 6: la ejecucion del aseo ──────────────────────────────────────
+     `--spacing-barra-aseo` son 56px de boton mas 8 de aire arriba y abajo. EL
+     CONTENIDO DE LA PAGINA RESERVA ESTE ALTO COMO PADDING INFERIOR: sin eso la
+     ultima tarea del checklist queda debajo de la barra fija y nadie la ve. */
+  --spacing-barra-aseo:       72px;
+  --spacing-fila-tarea:       48px;  /* casilla de 44px de area + texto */
+  --spacing-cabecera-cuarto:  56px;  /* la cabecera abrible del acordeon */
+  --spacing-miniatura:        64px;  /* la miniatura de la foto tomada */
+
+  /* ── anchos: NOMBRE PROPIO, NUNCA NOMBRE DE TALLA ───────────────────────
+     `foto` y `motivo` se verificaron nombre por nombre contra la escala de
+     espaciado el 2026-09-12: no colisionan con ninguna talla. Es exactamente
+     la comprobacion que faltaba las dos veces que este defecto costo un quick.
+     Los dos van tambien al grupo `max-w` de `cn()` en lib/utils.ts. */
+  --container-foto:          320px;  /* previsualizacion en el wizard (§8.2) */
+  --container-motivo:        320px;  /* caja de motivos del skip (§8.4) */
 }
 
 /* ── Fase 5: la escala tipografica del arbol del aseador — 05-UI-SPEC.md §3.1 ─

@@ -135,6 +135,15 @@ export type FilaDeOperacion = Pick<
 > & {
   property: PropiedadDeAseo | null;
   aseador: AseadorDeAseo | null;
+  /**
+   * Quedó algún cuarto saltado, o alguna tarea que exige foto sin foto.
+   *
+   * NO es una columna de `cleanings`: se computa al leer. Materializarla
+   * obligaría a sincronizarla desde tres sitios (el checklist, las fotos y los
+   * saltos), y el día que uno de los tres se olvidara, el dashboard mentiría
+   * sin que nadie lo notara.
+   */
+  sin_evidencia_completa: boolean;
 };
 
 /** Un día del carril ancho, con su cabecera propia (UI-SPEC §8.1). */
@@ -314,12 +323,63 @@ export async function leerOperacion(
 
   if (error) throw new Error(error.message);
 
+  const filas = (data ?? []) as FilaSinMarca[];
+
+  /**
+   * LA MARCA DE EVIDENCIA INCOMPLETA, EN **UN** VIAJE MÁS Y NO EN N.
+   *
+   * ── LOS DOS CAMINOS, Y POR QUÉ SE DESCARTÓ EL OBVIO ──────────────────────
+   *
+   * El obvio es llamar `aseo_sin_evidencia_completa()` por fila. Son decenas de
+   * aseos en la ventana, así que serían decenas de viajes de red en serie para
+   * pintar una tabla: el mismo defecto que este archivo ya evita con sus otras
+   * lecturas, y por la misma razón escrita allí.
+   *
+   * El elegido es `aseos_sin_evidencia_completa()` (migración 21), que recibe la
+   * lista entera y devuelve el subconjunto. La evaluación por fila sigue
+   * ocurriendo, pero **dentro de la base**, que es donde cuesta barato.
+   *
+   * Y esa función **no reimplementa la regla**: llama a la escalar. La regla ya
+   * vive dos veces —SQL y `lib/domain/checklist.ts`— con un test de paridad que
+   * las compara; una tercera copia no tendría ni ese test, y el síntoma de que
+   * divergiera sería el dashboard diciendo que un aseo está completo mientras la
+   * pantalla del aseador dice lo contrario.
+   *
+   * ── SI ESTA CONSULTA FALLA, LA TABLA SE PINTA IGUAL ─────────────────────
+   *
+   * La marca es una señal secundaria. Tumbar `/operacion` entera —que es la
+   * pantalla desde la que el admin confirma y reasigna— porque una señal
+   * accesoria no se pudo leer sería cambiar un dato que falta por una jornada
+   * sin herramienta. Se degrada a `false`, que es lo que la fila decía antes de
+   * esta fase.
+   */
+  const sinEvidencia = await marcarSinEvidencia(supabase, filas.map((f) => f.id));
+
   return {
-    filas: data ?? [],
+    filas: filas.map((f) => ({ ...f, sin_evidencia_completa: sinEvidencia.has(f.id) })),
     hoy,
     horizonte,
     leidoEnMs: ahoraMs,
   };
+}
+
+/** La fila tal como la devuelve PostgREST, antes de que se le pegue la marca. */
+type FilaSinMarca = Omit<FilaDeOperacion, 'sin_evidencia_completa'>;
+
+async function marcarSinEvidencia(
+  supabase: SupabaseClient<Database>,
+  ids: string[],
+): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+
+  const { data, error } = await supabase.rpc('aseos_sin_evidencia_completa', {
+    p_cleanings: ids,
+  });
+
+  // Ver arriba: la señal se degrada, la pantalla no.
+  if (error || !data) return new Set();
+
+  return new Set(data);
 }
 
 /**

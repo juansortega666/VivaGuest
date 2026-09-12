@@ -265,8 +265,20 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-12T02:19:32.328Z
-Stopped at: Fase 05 BLOQUEADA en 15/17. El plan 05-12 espera las 5 capturas de instalacion en public/instalar/ (accion humana, sin sustituto). 05-17 depende de 05-12. Suites: unit 889, integration 163, db:test 229 PASS, build 14 rutas
+Last session: 2026-09-12
+Stopped at: **Fase 06 ejecutada, 10/10 planes.** Las doce puertas en verde con conteo reconciliado: pgTAP `Files=11, Tests=269` (= suma exacta de los `plan(N)`), `test:unit` 55 archivos / 1005 tests, `test:integration` 19 archivos / 169 tests, `test:e2e` 107 en Chromium, `lint` 0 errores, `ci:arch`, `build` y `tsc` limpios.
+
+**Abierto (unico):** el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real. Los cinco criterios de fallo estan escritos en `06-10-SUMMARY.md`. Nada mas bloquea la fase.
+
+**Diferidos por decision del desarrollador:** 05-12 (wizard `/instalar` con sus 5 capturas), 05-17 (validacion en dispositivo fisico) y el criterio 4 de la Fase 6 (offline, D-08, registrado en `.planning/BACKLOG.md`).
+
+**Tres cosas que esta fase encontro y conviene no olvidar:**
+
+  a. **El test de paridad SQL/TypeScript encontro una divergencia real el primer dia que corrio**: `armarChecklist()` descartaba el salto de un cuarto sin tareas, asi que el dashboard del admin marcaba el aseo y la pantalla de la aseadora decia que estaba completo. Arreglado del lado de TypeScript, con cuatro tests unitarios que lo fijan.
+
+  b. **`env(safe-area-inset-bottom)` valia CERO** hasta que se declaro `viewport-fit=cover` en el layout de `app/(cleaner)/`. La clase estaba, compilaba y no hacia nada: un verde falso que solo se ve en un iPhone con muesca.
+
+  c. **Tres aserciones de `e2e/operacion.spec.ts` llevaban rojas desde la Fase 5** sin que nadie lo viera: los toast de confirmar y reasignar ganaron la coletilla de 'aseador sin avisos' y los tests comparaban la cadena exacta de la Fase 4. Ahora comparan por prefijo.
 
 **Sin bloqueos activos.** El stack local de Supabase esta arriba y sano (12 contenedores), la
 migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` **29 archivos / 548 tests**,
@@ -298,5 +310,5 @@ migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` **29 ar
 6. **El resto del reloj YA NO lo domina iCloud** con las caches calientes: en el 04-07, `tsc` tardo
    segundos, `db:test` 2,3 s y la integracion completa 9,7 s.
 
-Siguiente: la wave 6 de la Fase 4 (04-10, 04-11, 04-12).
-Resume file: .planning/phases/05-notificaciones-push-e-instalaci-n-de-la-pwa/05-12-PLAN.md
+Siguiente: cerrar el checkpoint humano de la Fase 6 en un telefono real, o arrancar la Fase 7 (Financiero), que es la que consume el `monto` entero que esta fase empezo a capturar.
+Resume file: .planning/phases/06-pwa-del-aseador-offline-first/06-10-SUMMARY.md
