@@ -28,7 +28,7 @@ import {
   type NotificacionParaAlertas,
 } from '@/lib/domain/alertas';
 import { estadoDeAvisosDeAseador } from '@/lib/domain/avisos';
-import { formatFechaBog } from '@/lib/domain/dates';
+import { formatFechaBog, formatFechaLargaBog } from '@/lib/domain/dates';
 import { publicEnv } from '@/lib/env';
 
 import { BandejaSinConfirmar } from './_components/BandejaSinConfirmar';
@@ -102,6 +102,30 @@ function notificacionesParaAlertas(
 }
 
 /**
+ * El texto de la derecha de la cabecera de `Atrasados` (05-UI-SPEC §12.2):
+ * `3 aseos · el más viejo del 4 de septiembre`.
+ *
+ * `el más viejo del {fecha}` es lo que convierte `3 aseos` en una decision: tres
+ * de ayer y tres de hace una semana son problemas distintos, y el numero solo no
+ * distingue los dos casos.
+ *
+ * CON UNO SOLO SE DICE `1 aseo · del 4 de septiembre`: "el mas viejo" de un
+ * conjunto de uno es una comparacion que no existe, y el contrato solo redacto la
+ * forma plural. La fecha se conserva en los dos casos porque es el dato que da la
+ * decision.
+ *
+ * `formatFechaLargaBog` y no `formatFechaBog`: esta ultima emite el dia de la
+ * semana (`vie, 4 de septiembre`) y detras de "del" eso es agramatical.
+ */
+function resumenDeAtrasados(total: number, masViejo: string | null): string {
+  const conteo = `${total} ${total === 1 ? 'aseo' : 'aseos'}`;
+  if (masViejo === null) return conteo;
+
+  const cual = total === 1 ? 'del' : 'el más viejo del';
+  return `${conteo} · ${cual} ${formatFechaLargaBog(masViejo)}`;
+}
+
+/**
  * `/operacion` — la pantalla de la Fase 4 (04-UI-SPEC.md §6).
  *
  * Es la ruta UNICA del dashboard operativo (D-01): no hay `/dia`, ni
@@ -139,9 +163,9 @@ function notificacionesParaAlertas(
  * No se construye vista movil de `(admin)`.
  *
  * ── UNA SOLA IDA A `cleanings` PARA LAS TRES SUPERFICIES ───────────────────
- * `leerOperacion()` trae la ventana entera (hoy … hoy+6) con los dos embeds, y
- * `agruparPorDia`, `bandejaSinConfirmar` y `cargaPorAseador` son proyecciones
- * PURAS sobre ese mismo conjunto. Asi la pantalla tiene UNA marca de tiempo que
+ * `leerOperacion()` trae la ventana entera (hoy−7 … hoy+6, ampliada hacia atras
+ * por D-08) con los dos embeds, y `agruparPorDia`, `bandejaSinConfirmar` y
+ * `cargaPorAseador` son proyecciones PURAS sobre ese mismo conjunto. Asi la pantalla tiene UNA marca de tiempo que
  * mostrar y no tres, que es lo que D-14 pide. La lista de aseadores activos si es
  * un segundo viaje: vive en `profiles` y no hay forma de traerla en el mismo.
  *
@@ -292,6 +316,9 @@ export default async function OperacionPage({
   // ve con el bloque cerrado, que es como nace.
   const filasSiguientes = bloques.siguientes.flatMap((grupo) => grupo.filas);
 
+  // Lo mismo para `Atrasados`, que tambien es un bloque agregado con dias dentro.
+  const filasAtrasadas = bloques.atrasados.flatMap((grupo) => grupo.filas);
+
   // Lo que el menu de cada fila necesita y la fila no trae (plan 04-11). Baja por
   // `BloqueDia` -> `TablaDia` -> `FilaAseo` sin que ninguno de los tres lo use:
   // el consumidor es `MenuAseo`. Va como UN objeto y no como tres props sueltas
@@ -306,6 +333,11 @@ export default async function OperacionPage({
     responsableSinAvisos,
     aseadoresSinAvisos,
     hoy: operacion.hoy,
+    // EL MISMO instante de la lectura que usan la ventana de la consulta y el
+    // computo de las alertas (D-14). Lo consume `FilaAseo` para el `Hourglass` de
+    // hora limite vencida: asi la senal de la fila y la alerta del panel salen
+    // del mismo reloj y no pueden contradecirse dentro del mismo render.
+    ahoraMs,
   };
 
   /**
@@ -388,6 +420,81 @@ export default async function OperacionPage({
           />
 
           <FranjaCarga chips={chips} sinAvisos={aseadoresSinAvisos} />
+
+          {/*
+            ── `Atrasados`, EL BLOQUE DE D-08 (05-UI-SPEC §12) ─────────────────
+
+            VA PRIMERO, ENCIMA DE `Hoy`: es lo unico de esta pantalla que YA salio
+            mal. Y nace EXPANDIDO, al reves que `Manana` y `Siguientes`, que nacen
+            colapsados porque son planeacion. Esto es una falla, y una falla
+            colapsada es una falla escondida.
+
+            ── Y SOLO SE RENDERIZA SI TIENE CONTENIDO, QUE CONTRADICE §8.1 ─────
+
+            `04-UI-SPEC` §8.1 dice que un dia sin aseos SE PINTA IGUAL, con
+            `0 aseos`, porque "que hoy no haya nada es informacion". Aca la regla
+            es la contraria y la asimetria tiene razon (§12.3), asi que queda
+            escrita o parece un descuido:
+
+              `Hoy` es un HECHO DEL CALENDARIO, y que este vacio es un dato que el
+              admin necesita confirmar. `Atrasados` es un FILTRO SOBRE UNA FALLA:
+              estar vacio es el estado normal y esperado. Un `Atrasados · 0 aseos`
+              visible todos los dias entrena al admin a saltarselo con la vista, y
+              el dia que diga `3` no lo va a ver.
+
+            Por dentro AGRUPA POR DIA, igual que `Siguientes` y por la misma razon
+            de DASH-01: el bloque abarca varios dias y una lista corrida perderia
+            la fecha, que es justo el dato que dice cuan viejo es cada uno. Los
+            dias de dentro nacen todos abiertos —todos tienen contenido, porque la
+            proyeccion solo emite los que lo tienen—, sin la condicion de
+            `Siguientes`, que existe para no apilar cinco vacios.
+
+            Y ESTE BLOQUE ES LO QUE HACE QUE EL CLIC DE UNA ALERTA DE UN DIA
+            ANTERIOR ATERRICE EN ALGUN SITIO (§12.1, T-05-55): el `href` de esas
+            alertas es `/operacion#aseo-{id}` y ese ancla lo pone `FilaAseo`, asi
+            que sin estas filas renderizadas la alerta se veria, se podria tocar y
+            no llevaria a ninguna parte.
+          */}
+          {bloques.atrasados.length > 0 && (
+            <BloqueDia
+              rotulo="Atrasados"
+              filas={filasAtrasadas}
+              acciones={acciones}
+              expandidoInicial
+              resumen={resumenDeAtrasados(filasAtrasadas.length, bloques.masViejoAtrasado)}
+            >
+              <div className="flex flex-col gap-lg p-md">
+                {bloques.atrasados.map((grupo) => (
+                  <BloqueDia
+                    key={grupo.fecha}
+                    fecha={grupo.fecha}
+                    filas={grupo.filas}
+                    acciones={acciones}
+                    expandidoInicial
+                  />
+                ))}
+              </div>
+            </BloqueDia>
+          )}
+
+          {/*
+            Lo que queda POR DETRAS de la ventana de siete dias se CUENTA y no se
+            agrupa, exactamente como lo de mas alla del horizonte por el otro
+            extremo (§12.4). Va sin expansion y apunta a un destino real: el
+            historial del apartamento, que existe y es de solo lectura.
+
+            La ventana tiene tope porque sin el la consulta creceria sin limite
+            —la retencion del producto es de seis meses— pero lo que queda afuera
+            NO SE ESCONDE: se dice cuanto hay y donde verlo (T-05-54).
+          */}
+          {bloques.antesDeLaVentana > 0 && (
+            <p className="text-micro text-muted-foreground">
+              Hay {bloques.antesDeLaVentana}{' '}
+              {bloques.antesDeLaVentana === 1 ? 'aseo sin cerrar' : 'aseos sin cerrar'} de antes
+              del {formatFechaLargaBog(bloques.primerDiaDeLaVentana)}. Ábrelos desde la ficha de su
+              apartamento.
+            </p>
+          )}
 
           {/*
             `Hoy` nace expandido; `Manana` y `Siguientes`, colapsados (§8.1). El

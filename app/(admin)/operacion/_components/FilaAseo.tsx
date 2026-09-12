@@ -1,9 +1,10 @@
-import { Flag, Zap } from 'lucide-react';
+import { Flag, Hourglass, Zap } from 'lucide-react';
 import Link from 'next/link';
 
 import { Badge } from '@/components/ui/badge';
 import { TableCell, TableRow } from '@/components/ui/table';
 import type { FilaDeOperacion } from '@/lib/data/operacion';
+import { horaLimiteVencida } from '@/lib/domain/alertas';
 import { copyDeReviewReason, estadoDeAseo } from '@/lib/domain/cleanings';
 import { formatHoraLimite } from '@/lib/domain/dates';
 
@@ -88,13 +89,31 @@ function BadgeDeTipo({ tipo }: { tipo: FilaDeOperacion['tipo'] }) {
 }
 
 /**
- * Las dos senales inline de §5.2. No son estados y por eso no viven en la columna
- * ESTADO: un aseo urgente sigue estando pendiente o en curso.
+ * Las TRES senales inline (04-UI-SPEC §5.2, ampliado por 05-UI-SPEC §12.5). No
+ * son estados y por eso no viven en la columna ESTADO: un aseo urgente, o con la
+ * hora limite vencida, sigue estando pendiente o en curso.
  *
  * Van con `aria-label` y NO con `aria-hidden`: son iconos sin texto adyacente que
  * los explique, al reves que el de la celda ESTADO.
+ *
+ * ── LA TERCERA, `Hourglass`, Y POR QUE SE MUESTRA EN CUALQUIER BLOQUE ──────
+ * `Hourglass` no es un icono nuevo: ya esta en la lista cerrada de la Fase 4 y
+ * significa exactamente esto mismo en el panel de alertas, asi que el admin lo
+ * aprende una vez.
+ *
+ * Aparece en CUALQUIER bloque, no solo en `Atrasados`. Un aseo de HOY con la hora
+ * limite vencida a las 11:30 es igual de tarde, y hasta ahora la fila no lo
+ * decia: el dato estaba solo en el panel. Y dentro de `Atrasados` es redundante
+ * por construccion —todo lo que hay ahi esta vencido— y AUN ASI se muestra, a
+ * proposito: una fila que cambia de vocabulario segun el bloque en que vive es
+ * una fila que hay que aprender dos veces.
+ *
+ * El predicado NO se escribe aqui: sale de `horaLimiteVencida()`, la misma
+ * funcion que decide si el panel alerta. Un `state === 'pendiente' || ...` local
+ * seria una segunda verdad sobre el mismo dato, y el dia que se desincronizara
+ * la fila diria que va tarde y el panel no.
  */
-function SenalesInline({ fila }: { fila: FilaDeOperacion }) {
+function SenalesInline({ fila, ahoraMs }: { fila: FilaDeOperacion; ahoraMs: number }) {
   return (
     <>
       {fila.is_urgent && (
@@ -121,6 +140,14 @@ function SenalesInline({ fila }: { fila: FilaDeOperacion }) {
             aria-label={copyDeReviewReason(fila.review_reason)}
           />
         </span>
+      )}
+
+      {horaLimiteVencida(fila, ahoraMs) && (
+        <Hourglass
+          className="size-3.5 shrink-0 text-status-warn"
+          strokeWidth={2}
+          aria-label="Se venció la hora límite"
+        />
       )}
     </>
   );
@@ -192,6 +219,12 @@ export function FilaAseo({
       // Lo que NO se hace: pintarla gris entera, que la haria leer como
       // deshabilitada por fallo, ni sacarla a otra vista, que romperia el
       // panorama del dia que el admin necesita (§7.4, D-20).
+      //
+      // Y LO QUE D-08 TAMPOCO HACE: NINGUNA FILA ATRASADA SE TINTA, ni cambia de
+      // peso, ni de alto (05-UI-SPEC §12.5). La fila atrasada se distingue porque
+      // esta en el bloque `Atrasados`, que es el canal de mayor ancho de banda que
+      // existe en esta pantalla. Tintar la fila reabriria una prohibicion de la
+      // Fase 4 para repetir algo que el bloque ya dice.
       className={
         inerte
           ? 'relative h-fila scroll-mt-barra border-b border-border bg-background'
@@ -216,7 +249,7 @@ export function FilaAseo({
           {!inerte && (
             <>
               <BadgeDeTipo tipo={fila.tipo} />
-              <SenalesInline fila={fila} />
+              <SenalesInline fila={fila} ahoraMs={acciones.ahoraMs} />
             </>
           )}
         </span>

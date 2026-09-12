@@ -399,6 +399,31 @@ export function venceEnMs(scheduledDate: string, horaLimite: string): number {
 }
 
 /**
+ * ¿ESTE ASEO TIENE LA HORA LÍMITE VENCIDA? Un solo predicado, dos consumidores.
+ *
+ * Lo usan la alerta computada de abajo y el `Hourglass` inline de `FilaAseo`
+ * (05-UI-SPEC §12.5), y existe EXACTAMENTE para que no puedan divergir. Escribir
+ * el `state in ('pendiente','en_curso')` a mano dentro del componente sería una
+ * segunda verdad sobre el mismo dato, y la que se quedara atrás lo haría en
+ * silencio: la fila diría que va tarde y el panel no, o al revés.
+ *
+ * `is_managed` no es redundante con el estado: una unidad de gestión externa
+ * está inerte por `cl_unmanaged_is_inert` y VivaGuest no la opera, así que decir
+ * que va tarde sería pedirle al admin algo que no puede hacer.
+ *
+ * PURA, como todo este módulo: el instante entra por parámetro y no se lee el
+ * reloj. La pantalla lee el suyo UNA vez (D-14) y lo baja a las dos superficies,
+ * que es lo que hace que digan lo mismo en el mismo render.
+ */
+export function horaLimiteVencida(
+  aseo: Pick<AseoParaAlertas, 'is_managed' | 'state' | 'scheduled_date' | 'hora_limite'>,
+  ahoraMs: number,
+): boolean {
+  const vivo = aseo.is_managed && aseo.state !== null && ESTADOS_VIVOS.has(aseo.state);
+  return vivo && venceEnMs(aseo.scheduled_date, aseo.hora_limite) < ahoraMs;
+}
+
+/**
  * Las tres alertas que NO son filas de `notifications` (UI-SPEC §11.2).
  *
  * | Tipo                | Condición                                                              | Instante para el orden              |
@@ -463,8 +488,14 @@ export function alertasComputadas(entrada: EntradaComputadas): Alerta[] {
     //    entrada venía de `leerOperacion()`, que cortaba la ventana en `hoy`, así
     //    que esta rama jamás veía un aseo anterior. Ahora la consulta baja siete
     //    días y por fin es cierta de punta a punta. Criterio 7 del ROADMAP.
-    const vence = venceEnMs(a.scheduled_date, a.hora_limite);
-    if (vence < ahoraMs) {
+    //    Y LA CONDICIÓN SALE DEL MISMO PREDICADO que pinta el `Hourglass` de la
+    //    fila, no de un `if` paralelo: la alerta y la fila donde aterriza su clic
+    //    tienen que aparecer juntas o no aparecer (T-05-55). `vivo` ya es cierto
+    //    acá arriba, así que la comprobación que `horaLimiteVencida` repite es
+    //    redundante y barata; lo que compra es que haya un solo sitio donde esto
+    //    esté escrito.
+    if (horaLimiteVencida(a, ahoraMs)) {
+      const vence = venceEnMs(a.scheduled_date, a.hora_limite);
       // ── LO ÚNICO QUE DISTINGUE UNA VIEJA DE UNA DE HOY ES EL COPY (§12.6) ──
       //
       // NI COLOR, NI JERARQUÍA, NI UN OCTAVO TIPO, y la tentación de destacarlas

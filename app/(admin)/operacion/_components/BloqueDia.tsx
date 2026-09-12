@@ -45,9 +45,10 @@ export function BloqueDia({
   filas,
   acciones,
   expandidoInicial = false,
+  resumen,
   children,
 }: {
-  /** El rotulo relativo (`Hoy`, `Mañana`, `Siguientes (5 días)`). Opcional. */
+  /** El rotulo relativo (`Hoy`, `Mañana`, `Siguientes (5 días)`, `Atrasados`). Opcional. */
   rotulo?: string;
   /** `'YYYY-MM-DD'` de negocio. Se formatea con `formatFechaBog()`. */
   fecha?: string;
@@ -59,6 +60,19 @@ export function BloqueDia({
    */
   acciones: ContextoDeAcciones;
   expandidoInicial?: boolean;
+  /**
+   * El texto de la derecha de la cabecera, YA COMPUESTO por el llamador.
+   *
+   * Existe por un solo caso y se declara para que no crezca: `Atrasados` dice
+   * `3 aseos · el más viejo del 4 de septiembre` (05-UI-SPEC §12.2), y ese
+   * `el más viejo del …` sale de `masViejoAtrasado`, un dato de la proyeccion que
+   * este componente no recibe y que no tiene por que recibir. Componerlo aqui
+   * dentro obligaria a meterle a un bloque de dia la nocion de "atrasado".
+   *
+   * Sin esta prop, la cabecera compone lo suyo de siempre: `N aseos` mas
+   * `· N sin confirmar` si lo hay.
+   */
+  resumen?: string;
   /**
    * Contenido propio en vez de la tabla. Lo usa `Siguientes`, que no es un dia:
    * agrupa cinco, y cada uno trae su cabecera y su tabla. Cuando hay `children`
@@ -115,10 +129,16 @@ export function BloqueDia({
         </button>
 
         <span className="ml-auto text-micro tabular-nums text-muted-foreground">
-          {total} {total === 1 ? 'aseo' : 'aseos'}
-          {/* `3 sin confirmar` solo si es mayor que cero: un `0 sin confirmar` es
-              una linea de texto que dice que no hay nada que decir. */}
-          {sinConfirmar > 0 && ` · ${sinConfirmar} sin confirmar`}
+          {resumen === undefined ? (
+            <>
+              {total} {total === 1 ? 'aseo' : 'aseos'}
+              {/* `3 sin confirmar` solo si es mayor que cero: un `0 sin confirmar` es
+                  una linea de texto que dice que no hay nada que decir. */}
+              {sinConfirmar > 0 && ` · ${sinConfirmar} sin confirmar`}
+            </>
+          ) : (
+            resumen
+          )}
         </span>
 
         {!agregado && cancelados.length > 0 && (
@@ -273,7 +293,14 @@ function particionar(filas: FilaDeOperacion[]) {
   return { visibles, cancelados, sinConfirmar };
 }
 
-/** `Hoy · jue, 3 de septiembre`, o solo la fecha cuando el dia no tiene rotulo propio. */
+/**
+ * `Hoy · jue, 3 de septiembre`, o solo la fecha cuando el dia no tiene rotulo
+ * propio, o SOLO EL ROTULO cuando el bloque no es un dia.
+ *
+ * Ese tercer caso ya existia para `Siguientes (5 días)` y es el que usa
+ * `Atrasados`: no lleva fecha relativa detras porque no es un dia, es un filtro
+ * sobre varios (05-UI-SPEC §12.2).
+ */
 function etiquetaDeCabecera(rotulo: string | undefined, fecha: string | undefined): string {
   if (!fecha) return rotulo ?? '';
 

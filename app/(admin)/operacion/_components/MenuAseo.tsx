@@ -114,6 +114,18 @@ export interface ContextoDeAcciones {
   aseadoresSinAvisos: string[];
   /** El día de negocio de Bogotá, del servidor. Es el `min` del campo de fecha. */
   hoy: string;
+  /**
+   * EL INSTANTE DE LA LECTURA, EL MISMO DE TODA LA PANTALLA (D-14). Lo pide
+   * `FilaAseo` para el `Hourglass` de hora límite vencida (05-UI-SPEC §12.5).
+   *
+   * Baja por parámetro y NO se lee con un `Date.now()` dentro de la fila, por dos
+   * razones: la fila vive del lado del cliente, así que su reloj daría una hora
+   * distinta a la del servidor y el marcador parpadearía entre el HTML servido y
+   * la hidratación; y aunque coincidieran, serían dos instantes para la misma
+   * pregunta, que es exactamente lo que D-14 prohíbe. Con esta marca, el
+   * `Hourglass` de la fila y la alerta del panel no pueden discrepar.
+   */
+  ahoraMs: number;
 }
 
 export function MenuAseo({

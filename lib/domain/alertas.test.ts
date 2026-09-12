@@ -14,6 +14,7 @@ import {
   alertasComputadas,
   conteosPorTipo,
   mezclarAlertas,
+  horaLimiteVencida,
   presentacionDeAlerta,
   venceEnMs,
 } from './alertas';
@@ -341,6 +342,50 @@ describe('alertasComputadas · urgente', () => {
     expect(alerta.atendible).toBe(false);
     expect(alerta.cleaningId).toBe('a');
     expect(alerta.url).toBe('/operacion#aseo-a');
+  });
+});
+
+describe('horaLimiteVencida', () => {
+  it('es el MISMO predicado que decide la alerta: la fila y el panel no pueden divergir', () => {
+    // Las dos superficies (el `Hourglass` de `FilaAseo` y la alerta del panel)
+    // tienen que decir lo mismo en el mismo render, o la alerta aparecería sin
+    // fila que la respalde (T-05-55). Se afirma sobre el conjunto entero, no
+    // sobre un caso: cualquier aseo en el que las dos discrepen pone esto rojo.
+    const casos = [
+      aseo({ id: 'vivo-vencido', hora_limite: '06:00:00' }),
+      aseo({ id: 'vivo-a-tiempo', hora_limite: '23:00:00' }),
+      aseo({ id: 'en-curso-vencido', hora_limite: '06:00:00', state: 'en_curso' }),
+      aseo({ id: 'terminado', hora_limite: '06:00:00', state: 'completada' }),
+      aseo({ id: 'cancelado', hora_limite: '06:00:00', state: 'cancelada' }),
+      aseo({ id: 'externo', hora_limite: '06:00:00', is_managed: false, state: null }),
+      aseo({ id: 'de-anteayer', hora_limite: '06:00:00', scheduled_date: '2026-09-02' }),
+    ];
+
+    const porElPredicado = casos.filter((a) => horaLimiteVencida(a, AHORA)).map((a) => a.id);
+
+    const porElPanel = clavesDe(
+      alertasComputadas({
+        aseos: casos,
+        maxUltimoExito: '2026-09-04T17:00:00+00:00',
+        ahoraMs: AHORA,
+        hoy: HOY,
+      }),
+      'hora_limite_vencida',
+    );
+
+    expect(porElPredicado).toEqual(['vivo-vencido', 'en-curso-vencido', 'de-anteayer']);
+    expect(porElPredicado).toEqual(porElPanel);
+  });
+
+  it('no lee el reloj: el instante entra por parámetro', () => {
+    // Con `ahoraMs` una hora ANTES del vencimiento, el mismo aseo no está
+    // vencido. Un `Date.now()` por dentro haría que la fila y el panel midieran
+    // instantes distintos dentro del mismo render, que es justo lo que D-14
+    // existe para impedir.
+    const a = aseo({ id: 'x', hora_limite: '14:00:00' });
+
+    expect(horaLimiteVencida(a, venceEnMs(HOY, '14:00:00') - 1)).toBe(false);
+    expect(horaLimiteVencida(a, venceEnMs(HOY, '14:00:00') + 1)).toBe(true);
   });
 });
 
