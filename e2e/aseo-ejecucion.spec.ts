@@ -9,10 +9,23 @@ import {
 import { cargarEnvLocal, clienteDeServicio } from './global-setup';
 
 /**
- * EL RECORRIDO COMPLETO DEL ASEADOR, DE PUNTA A PUNTA (plan 06-09).
+ * EL RECORRIDO COMPLETO DEL ASEADOR, DE PUNTA A PUNTA (planes 06-09 y 06-10).
  *
  * ════════════════════════════════════════════════════════════════════════════
- * ESTE ARCHIVO SUSTITUYE AL "RECORRIDO MANUAL" QUE PEDIA EL PLAN.
+ * LO QUE ESTE ARCHIVO **NO** CUBRE, Y CONVIENE LEERLO ANTES QUE LO QUE SI.
+ *
+ *   · **iOS.** Corre solo en Chromium, que es el unico proyecto de
+ *     `playwright.config.ts`. Playwright no ejecuta service workers en WebKit,
+ *     asi que un proyecto de Safari daria un verde que no significa nada. Lo
+ *     que el iPhone anade —la instalacion en pantalla de inicio, el permiso
+ *     irreversible, el push— se valida a mano en un telefono real.
+ *
+ *   · **El comportamiento sin senal.** Esta DIFERIDO (D-08) y la interfaz tiene
+ *     prohibido sugerirlo (§11.4). No se escribe ningun test de offline, ni
+ *     siquiera uno que "documente" la ausencia: un test de algo que no existe
+ *     es ruido que hay que mantener.
+ *
+ * ── Y ESTE ARCHIVO SUSTITUYE AL "RECORRIDO MANUAL" QUE PEDIA EL PLAN ──────
  *
  * El criterio de aceptacion decia: *"Recorrido manual completo anotado en el
  * SUMMARY: comenzar un aseo, marcar tareas, terminar, subir una foto, saltar un
@@ -141,6 +154,35 @@ test.describe('el recorrido completo', () => {
     await paginaAseador.locator('label:has(input[type=checkbox])').first().click();
     await expect(paginaAseador.getByRole('checkbox').first()).toBeChecked();
 
+    // El estado de verdad, no el de la pantalla.
+    const empezado = await servicio
+      .from('cleanings')
+      .select('state, started_at')
+      .eq('id', aseoId)
+      .single();
+    expect(empezado.data?.state).toBe('en_curso');
+    expect(empezado.data?.started_at).not.toBeNull();
+
+    /**
+     * Y la tarea quedo marcada EN LA BASE, no solo en la casilla.
+     *
+     * Se sondea en vez de afirmar de golpe, y eso **documenta el diseno**: el
+     * marcado es optimista a proposito (§11.2), asi que la casilla cambia antes
+     * de que el servidor responda. Afirmar al instante mediria una carrera y
+     * fallaria un martes; sondear afirma lo que de verdad importa, que es que la
+     * marca ACABA en la base.
+     */
+    await expect
+      .poll(async () => {
+        const r = await servicio
+          .from('cleaning_checklist_items')
+          .select('id')
+          .eq('cleaning_id', aseoId)
+          .not('done_at', 'is', null);
+        return r.data?.length ?? 0;
+      })
+      .toBe(1);
+
     // ── 3. Terminar con el checklist a medias: informa, NO bloquea ──────────
     await paginaAseador.getByRole('button', { name: 'Terminar aseo' }).click();
     await expect(paginaAseador.getByText(/tarea[s]? por marcar\./)).toBeVisible();
@@ -217,5 +259,28 @@ test.describe('el recorrido completo', () => {
     // La MISMA funcion que el dashboard del admin consulta.
     const marca = await servicio.rpc('aseo_sin_evidencia_completa', { p_cleaning: aseoId });
     expect(marca.data).toBe(true);
+  });
+
+  /**
+   * ── 11. LA OTRA MITAD DE D-06 ─────────────────────────────────────────────
+   *
+   * Saltar un cuarto se permitio **a cambio de que el admin lo vea**. Sin este
+   * paso, el permiso no tiene contrapartida: todo lo anterior podria estar en
+   * verde y la evidencia seguir sin tener quien la reclame.
+   *
+   * Va en su propio test y con sesion de ADMIN, que es otro contexto de
+   * navegador. Depende del anterior a proposito y esta declarado en el nombre.
+   */
+  test('y el admin ve la senal de evidencia incompleta en su dashboard', async ({
+    paginaAdmin,
+  }) => {
+    await paginaAdmin.goto('/operacion');
+
+    const fila = paginaAdmin.locator(`#aseo-${aseoId}`);
+    await expect(fila).toBeVisible();
+
+    // `aria-label` y no texto: es un icono sin etiqueta al lado, igual que las
+    // otras tres senales de la fila.
+    await expect(fila.getByLabel('Sin evidencia completa')).toBeVisible();
   });
 });

@@ -111,6 +111,37 @@ async function esperarToast(p: Page, texto: string) {
   await expect(toast).toBeVisible({ timeout: 15_000 });
 }
 
+/**
+ * El toast de una confirmacion, que desde la Fase 5 puede llevar coletilla.
+ *
+ * ── POR QUE ESTA FUNCION EXISTE, Y ES UN DEFECTO ENCONTRADO EN EL PLAN 06-10 ─
+ *
+ * Las dos aserciones que la usan estaban **rojas desde la Fase 5** y nadie lo
+ * habia visto: `mensajeDeTandaCompleta()` gano el sufijo
+ * `N quedaron con un aseador sin avisos.` y estas dos comparaban la cadena
+ * EXACTA de la Fase 4.
+ *
+ * Y el sufijo aparece SIEMPRE en esta suite, por una razon que conviene dejar
+ * escrita: los usuarios que siembra `global-setup.ts` nunca registran una
+ * suscripcion de push, porque nadie les da permiso de notificaciones en un
+ * navegador de pruebas. O sea que **toda** confirmacion de este archivo va a
+ * parar a un aseador sin canal, que es exactamente el caso que el copy de la
+ * Fase 5 existe para avisar.
+ *
+ * Se compara por PREFIJO y no se reescribe la cadena entera con el sufijo: lo
+ * que estos dos tests miden es el flujo de confirmacion, no el estado de los
+ * avisos. Fijar aqui el numero exacto de aseadores mudos ataria un test de
+ * `/operacion` a un detalle de la siembra de push.
+ */
+async function esperarToastQueEmpiezaCon(p: Page, prefijo: string) {
+  await p.mouse.move(4, 4);
+
+  const toast = p
+    .locator('[data-sonner-toast]')
+    .getByText(new RegExp(`^${prefijo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  await expect(toast).toBeVisible({ timeout: 15_000 });
+}
+
 let servicio: Servicio;
 let escenario: EscenarioDeOperacion;
 let idAdmin = '';
@@ -263,7 +294,7 @@ test('crear, confirmar, reasignar, reprogramar y cerrar, el mismo aseo de punta 
 
   await sheet.getByLabel('Número de huéspedes').fill('3');
   await sheet.getByRole('button', { name: 'Confirmar y cerrar' }).click();
-  await esperarToast(paginaAdmin, 'Listo: 1 aseo confirmado.');
+  await esperarToastQueEmpiezaCon(paginaAdmin, 'Listo: 1 aseo confirmado.');
 
   // ── (c) REASIGNAR ────────────────────────────────────────────────────────
   await menuDelAseo(paginaAdmin, gestionada.nombre, fechas.hoy).click();
@@ -279,7 +310,10 @@ test('crear, confirmar, reasignar, reprogramar y cerrar, el mismo aseo de punta 
   await dialogoReasignar.getByLabel('Aseador').click();
   await paginaAdmin.getByRole('option', { name: aseadoraB.nombre, exact: true }).click();
   await dialogoReasignar.getByRole('button', { name: 'Reasignar' }).click();
-  await esperarToast(paginaAdmin, `El aseo quedó asignado a ${aseadoraB.nombre}.`);
+  // Mismo caso que los dos de arriba: desde la Fase 5 este mensaje lleva
+  // ` No tiene los avisos activos: avísale tú.` cuando la persona no tiene
+  // canal, y en esta suite NINGUNA lo tiene. Ver `esperarToastQueEmpiezaCon`.
+  await esperarToastQueEmpiezaCon(paginaAdmin, `El aseo quedó asignado a ${aseadoraB.nombre}.`);
 
   // ── (d) REPROGRAMAR a hoy+2 ──────────────────────────────────────────────
   await menuDelAseo(paginaAdmin, gestionada.nombre, fechas.hoy).click();
@@ -493,7 +527,10 @@ test('confirmar tres de quince y cerrar a mitad NO pierde lo confirmado', async 
   await expect(sheet.getByText('4 de 15', { exact: true })).toBeVisible();
   await sheet.locator('form').getByRole('button', { name: 'Cerrar', exact: true }).click();
 
-  await esperarToast(paginaAdmin, 'Confirmaste 3 de 15. Los demás siguen en la bandeja.');
+  await esperarToastQueEmpiezaCon(
+    paginaAdmin,
+    'Confirmaste 3 de 15. Los demás siguen en la bandeja.',
+  );
 
   // La bandeja queda con doce.
   await expect(paginaAdmin.getByRole('button', { name: 'Confirmar 12 aseos' })).toBeVisible();

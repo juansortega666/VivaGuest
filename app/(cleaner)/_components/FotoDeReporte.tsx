@@ -46,13 +46,17 @@ const COPY = {
 
 export function FotoDeReporte({
   aseoId,
-  destinoId,
   tipo,
   onSubida,
   onOmitir,
 }: {
   aseoId: string;
-  destinoId: string;
+  /**
+   * De que cuelga la foto, y basta con el TIPO.
+   *
+   * El identificador concreto no entra aqui: lo pone el llamador al registrar.
+   * Asi este componente no puede equivocarse de destino, porque no lo conoce.
+   */
   tipo: 'dano' | 'gasto';
   /** Registra la fila. Devuelve `false` si el registro fallo. */
   onSubida: (datos: {

@@ -112,9 +112,49 @@ export function armarChecklist(
     };
   });
 
+  /**
+   * UN CUARTO SALTADO QUE NO TIENE NINGUNA TAREA TAMBIEN ES UN GRUPO.
+   *
+   * ── ESTO LO ENCONTRO EL TEST DE PARIDAD, Y ERA UNA DIVERGENCIA DE VERDAD ──
+   *
+   * Agrupando SOLO por las filas del checklist, el salto de un cuarto sin
+   * tareas se quedaba sin grupo al que pegarse y desaparecia en silencio. La
+   * consecuencia no era cosmetica: `sinEvidenciaCompleta()` devolvia `false`
+   * mientras `public.aseo_sin_evidencia_completa()` devolvia `true` sobre EL
+   * MISMO aseo, porque la de SQL pregunta por la tabla de saltos directamente y
+   * no le importa si el cuarto tiene tareas.
+   *
+   * O sea: el dashboard del admin marcaba el aseo y la pantalla de la aseadora
+   * decia que estaba completo. Nadie mira las dos a la vez, asi que habria
+   * vivido ahi.
+   *
+   * Se resuelve del lado de TypeScript y no relajando el SQL a proposito: la de
+   * SQL es la conservadora —marca de mas, nunca de menos— y es la que ve el
+   * admin, que es quien tiene que reclamar la evidencia.
+   */
+  const conGrupo = new Set(grupos.map((g) => g.propertyRoomId));
+  for (const skip of skips) {
+    if (conGrupo.has(skip.property_room_id)) continue;
+    grupos.push({
+      propertyRoomId: skip.property_room_id,
+      etiqueta: skip.room_label,
+      tareas: [],
+      saltado: skip,
+    });
+  }
+
+  /**
+   * Los cuartos sin tareas van AL FINAL, no al principio.
+   *
+   * Con `?? 0` caerian arriba del todo, que es el peor sitio: lo primero que
+   * veria la aseadora al abrir el aseo seria un cuarto en el que no hay nada que
+   * hacer. Se ordenan por el `sort_order` mas bajo de sus tareas, y quien no
+   * tiene ninguna se va detras.
+   */
   return grupos.sort(
     (a, b) =>
-      (a.tareas[0]?.sort_order ?? 0) - (b.tareas[0]?.sort_order ?? 0) ||
+      (a.tareas[0]?.sort_order ?? Number.POSITIVE_INFINITY) -
+        (b.tareas[0]?.sort_order ?? Number.POSITIVE_INFINITY) ||
       a.etiqueta.localeCompare(b.etiqueta, 'es-CO'),
   );
 }

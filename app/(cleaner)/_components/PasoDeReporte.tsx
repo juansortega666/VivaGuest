@@ -206,7 +206,6 @@ export function PasoDeReporte({
       {pendienteDeFoto !== null && (
         <FotoDeReporte
           aseoId={aseoId}
-          destinoId={pendienteDeFoto.id}
           tipo={pendienteDeFoto.tipo}
           onSubida={async (datos) => {
             const cuerpo = new FormData();

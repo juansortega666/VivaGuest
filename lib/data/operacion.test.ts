@@ -71,6 +71,8 @@ function fila(parcial: Partial<FilaDeOperacion> = {}): FilaDeOperacion {
       hora_limite: '11:30:00',
     },
     aseador: null,
+    // La marca de la Fase 6. Por defecto falsa: lo que la fila decia antes.
+    sin_evidencia_completa: false,
     ...parcial,
   };
 }
@@ -540,6 +542,7 @@ function clienteFalso(filas: FilaDeOperacion[] = []) {
     gte: [] as [string, unknown][],
     lte: [] as [string, unknown][],
     order: [] as [string, unknown][],
+    rpc: [] as string[],
   };
 
   const builder = {
@@ -568,6 +571,13 @@ function clienteFalso(filas: FilaDeOperacion[] = []) {
     from(tabla: string) {
       llamadas.tabla = tabla;
       return builder;
+    },
+    // La consulta en lote de la marca de evidencia (plan 06-10). El doble
+    // responde vacio: los tests de este bloque miden la VENTANA y el ORDEN, no
+    // la marca, y la marca tiene su propio bloque al final del archivo.
+    async rpc(nombre: string) {
+      llamadas.rpc.push(nombre);
+      return { data: [], error: null };
     },
   };
 
@@ -655,5 +665,84 @@ describe('leerOperacion', () => {
     // D-14: la cabecera muestra UNA marca de tiempo. Si cada superficie trajera
     // la suya, no habría respuesta a "¿cuál se muestra?".
     expect(operacion.leidoEnMs).toBe(1_700_000_000_000);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// LA MARCA DE EVIDENCIA INCOMPLETA — plan 06-10
+//
+// ── QUE MIDE ESTE BLOQUE ───────────────────────────────────────────────────
+//
+// D-06 permitio saltar un cuarto **a cambio de que el admin lo vea**. Esta es
+// esa segunda mitad, y lo que se comprueba aqui es que llega a la fila sin
+// gastar un viaje por aseo, y que se degrada en vez de tumbar la pantalla.
+//
+// Lo que NO mide: que la regla sea correcta. Eso vive en la base y lo compara
+// `lib/domain/evidencia-paridad.integration.test.ts`.
+// ════════════════════════════════════════════════════════════════════════════
+
+describe('la marca de evidencia incompleta en la lectura', () => {
+  type RespuestaRpc = { data: unknown; error: { message: string } | null };
+
+  function clienteConAseos(filas: unknown[], rpcResponde: RespuestaRpc) {
+    const orderFinal = vi.fn(async () => ({ data: filas, error: null }));
+    const order1 = vi.fn(() => ({ order: orderFinal }));
+    const lte = vi.fn(() => ({ order: order1 }));
+    const gte = vi.fn(() => ({ lte }));
+    const select = vi.fn(() => ({ gte }));
+    const from = vi.fn(() => ({ select }));
+    const rpc = vi.fn<(nombre: string, argumentos: Record<string, unknown>) => Promise<RespuestaRpc>>(
+      async () => rpcResponde,
+    );
+    return { from, select, rpc };
+  }
+
+  const A = 'aseo-marcado';
+  const B = 'aseo-limpio';
+
+  function dosAseos() {
+    return [
+      { id: A, scheduled_date: HOY, state: 'completada', property: { id: 'p1' }, aseador: null },
+      { id: B, scheduled_date: HOY, state: 'completada', property: { id: 'p1' }, aseador: null },
+    ];
+  }
+
+  it('marca SOLO los aseos que la base devuelve, en un unico viaje', async () => {
+    const c = clienteConAseos(dosAseos(), { data: [A], error: null });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r = await leerOperacion(c as any, Date.parse(`${HOY}T15:00:00Z`));
+
+    expect(r.filas.find((f) => f.id === A)?.sin_evidencia_completa).toBe(true);
+    expect(r.filas.find((f) => f.id === B)?.sin_evidencia_completa).toBe(false);
+
+    // UN viaje, no uno por aseo: es toda la razon de que exista la version en
+    // lote de la migracion 21.
+    expect(c.rpc).toHaveBeenCalledTimes(1);
+    expect(c.rpc.mock.calls[0][0]).toBe('aseos_sin_evidencia_completa');
+    expect(c.rpc.mock.calls[0][1]).toEqual({ p_cleanings: [A, B] });
+  });
+
+  it('si la consulta de la marca falla, la tabla se pinta igual', async () => {
+    // La marca es una senal secundaria. Tumbar `/operacion` —la pantalla desde
+    // la que el admin confirma y reasigna— porque no se pudo leer una senal
+    // accesoria seria cambiar un dato que falta por una jornada sin herramienta.
+    const c = clienteConAseos(dosAseos(), { data: null, error: { message: 'caida' } });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r = await leerOperacion(c as any, Date.parse(`${HOY}T15:00:00Z`));
+
+    expect(r.filas).toHaveLength(2);
+    expect(r.filas.every((f) => f.sin_evidencia_completa === false)).toBe(true);
+  });
+
+  it('sin aseos en la ventana no pregunta nada', async () => {
+    const c = clienteConAseos([], { data: [], error: null });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r = await leerOperacion(c as any, Date.parse(`${HOY}T15:00:00Z`));
+
+    expect(r.filas).toHaveLength(0);
+    expect(c.rpc).not.toHaveBeenCalled();
   });
 });

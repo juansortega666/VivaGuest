@@ -186,3 +186,58 @@ describe('primerCuartoIncompleto', () => {
     expect(primerCuartoIncompleto(armarChecklist(filas))).toBeNull();
   });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// LA DIVERGENCIA QUE ENCONTRO EL TEST DE PARIDAD — plan 06-10
+//
+// Agrupando SOLO por las filas del checklist, el salto de un cuarto que no tiene
+// ninguna tarea se quedaba sin grupo al que pegarse y desaparecia. El sintoma no
+// era cosmetico: el dashboard del admin marcaba el aseo como sin evidencia
+// completa y la pantalla de la aseadora decia que estaba completo, sobre EL
+// MISMO aseo. Nadie mira las dos a la vez, asi que habria vivido ahi.
+// ════════════════════════════════════════════════════════════════════════════
+
+describe('un cuarto saltado sin ninguna tarea', () => {
+  const HUESPEDES = 'e0000000-0000-0000-0000-000000000009';
+
+  const skipHuerfano = {
+    property_room_id: HUESPEDES,
+    room_label: 'Cuarto de huéspedes',
+    motivo: 'cuarto_cerrado' as const,
+    nota: null,
+  };
+
+  it('genera su propio grupo, con su etiqueta de snapshot', () => {
+    const grupos = armarChecklist(tresCuartos(), [skipHuerfano]);
+
+    const suyo = grupos.find((g) => g.propertyRoomId === HUESPEDES);
+    expect(suyo).toBeDefined();
+    expect(suyo?.etiqueta).toBe('Cuarto de huéspedes');
+    expect(suyo?.tareas).toHaveLength(0);
+    expect(suyo?.saltado?.motivo).toBe('cuarto_cerrado');
+  });
+
+  it('hace que el aseo cuente como SIN evidencia completa', () => {
+    // Es la asercion que espeja a `public.aseo_sin_evidencia_completa()`, que
+    // pregunta por la tabla de saltos sin importarle si el cuarto tiene tareas.
+    const grupos = armarChecklist(tresCuartos(), [skipHuerfano]);
+    expect(sinEvidenciaCompleta(grupos, [])).toBe(true);
+  });
+
+  it('va al FINAL del acordeón, no al principio', () => {
+    // Con el orden por defecto caeria arriba del todo, que es el peor sitio: lo
+    // primero que veria la aseadora al abrir el aseo seria un cuarto en el que
+    // no hay nada que hacer.
+    const grupos = armarChecklist(tresCuartos(), [skipHuerfano]);
+    expect(grupos[grupos.length - 1].propertyRoomId).toBe(HUESPEDES);
+  });
+
+  it('no altera el orden de los cuartos que sí tienen tareas', () => {
+    const conSkip = armarChecklist(tresCuartos(), [skipHuerfano]);
+    const sinSkip = armarChecklist(tresCuartos());
+
+    expect(conSkip.slice(0, sinSkip.length).map((g) => g.propertyRoomId)).toEqual(
+      sinSkip.map((g) => g.propertyRoomId),
+    );
+  });
+});

@@ -1372,6 +1372,10 @@ export type Database = {
         Args: { p_cleaning: string }
         Returns: boolean
       }
+      aseos_sin_evidencia_completa: {
+        Args: { p_cleanings: string[] }
+        Returns: string[]
+      }
       cancel_cleaning: { Args: { p_cleaning: string }; Returns: undefined }
       clear_review_flag: { Args: { p_cleaning: string }; Returns: undefined }
       close_cleaning: { Args: { p_cleaning: string }; Returns: undefined }

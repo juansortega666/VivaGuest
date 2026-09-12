@@ -10,6 +10,7 @@ import { formatHoraLimite } from '@/lib/domain/dates';
 
 import { EstadoAseo } from './EstadoAseo';
 import { MenuAseo, type ContextoDeAcciones } from './MenuAseo';
+import { SenalSinEvidencia } from './SenalSinEvidencia';
 
 /**
  * La fila de aseo (04-UI-SPEC.md §7). Es la unidad visual que mas se repite en la
@@ -89,7 +90,8 @@ function BadgeDeTipo({ tipo }: { tipo: FilaDeOperacion['tipo'] }) {
 }
 
 /**
- * Las TRES senales inline (04-UI-SPEC §5.2, ampliado por 05-UI-SPEC §12.5). No
+ * Las CUATRO senales inline (04-UI-SPEC §5.2, ampliado por 05-UI-SPEC §12.5 y
+ * por 06-UI-SPEC §8.5). No
  * son estados y por eso no viven en la columna ESTADO: un aseo urgente, o con la
  * hora limite vencida, sigue estando pendiente o en curso.
  *
@@ -112,6 +114,15 @@ function BadgeDeTipo({ tipo }: { tipo: FilaDeOperacion['tipo'] }) {
  * funcion que decide si el panel alerta. Un `state === 'pendiente' || ...` local
  * seria una segunda verdad sobre el mismo dato, y el dia que se desincronizara
  * la fila diria que va tarde y el panel no.
+ *
+ * ── LA CUARTA, `ImageOff`, Y POR QUE NO ES UNA ALERTA DEL PANEL ────────────
+ *
+ * Misma disciplina que la tercera: el predicado tampoco se escribe aqui. Viene
+ * ya resuelto en la fila, calculado por la MISMA funcion de SQL que la pantalla
+ * del aseador espeja. Y no entra al panel de alertas porque es un ESTADO del
+ * aseo, no un evento fechado: el panel ordena cronologicamente y un estado ahi o
+ * se clava arriba o necesita una fecha inventada. La razon larga esta en la
+ * cabecera del componente de esa senal.
  */
 function SenalesInline({ fila, ahoraMs }: { fila: FilaDeOperacion; ahoraMs: number }) {
   return (
@@ -149,6 +160,8 @@ function SenalesInline({ fila, ahoraMs }: { fila: FilaDeOperacion; ahoraMs: numb
           aria-label="Se venció la hora límite"
         />
       )}
+
+      {fila.sin_evidencia_completa && <SenalSinEvidencia />}
     </>
   );
 }
