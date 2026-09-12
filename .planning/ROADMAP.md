@@ -183,7 +183,7 @@ Plans:
 - [ ] 05-14-PLAN.md — D-03 en `/aseadores`: columna `AVISOS`, chip de estado y link de instalación
 - [ ] 05-15-PLAN.md — D-03 en `/operacion`: advertencia antes de asignar, franja del admin y la inversión del test de copy
 - [ ] 05-16-PLAN.md — D-08: los dos filtros de fecha, el bloque `Atrasados` y la señal de hora límite vencida
-- [ ] 05-17-PLAN.md — E2E en Chromium, las doce puertas y los procedimientos manuales en iPhone físico
+- [ ] 05-17-PLAN.md — E2E en Chromium, las doce puertas y los procedimientos manuales en un iPhone y un Android reales
 
 ### Phase 6: PWA del aseador, offline-first
 **Goal**: El aseador ejecuta el aseo completo desde el teléfono, con o sin señal, y nada de lo que hizo en campo se pierde
