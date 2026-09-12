@@ -96,7 +96,7 @@ igual a la suma de los `plan(N)` de los ocho archivos.
 | 05-16-03 | 16 | 8 | DASH-01 | T-05-55 | La alerta de dia anterior **tiene donde aterrizar** | build + manual | `npm run build && npm run ci:arch` (+ comprobacion manual del ancla) | ✅ | ⬜ pending |
 | 05-17-01 | 17 | 9 | NOTIF-01, PWA-02 | T-05-30, T-05-57 | Un push entregado de verdad produce notificacion, tambien si es ilegible | e2e | `npm run test:e2e -- push-instalacion` | ❌ W0 (lo crea la tarea) | ⬜ pending |
 | 05-17-02 | 17 | 9 | NOTIF-03, NOTIF-04 | — | Las doce puertas en verde con su conteo anotado | suite completa | `npm run db:test && npm run test:unit && npm run test:integration && npm run ci:arch && npm run build` | ✅ | ⬜ pending |
-| 05-17-03 | 17 | 9 | PWA-02, PWA-03, NOTIF-01 | T-05-03, T-05-35, T-05-57 | El aviso llega a un iPhone y a un Android reales **sin** el codigo de acceso dentro | checkpoint | — (bloqueante humano, M1/M2 en las dos plataformas) | n/a | ⬜ pending |
+| 05-17-03 | 17 | 9 | PWA-02, PWA-03, NOTIF-01 | T-05-03, T-05-35, T-05-57 | El aviso llega a un iPhone real **sin** el codigo de acceso dentro | checkpoint | — (bloqueante humano, M1/M2/M6) | n/a | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -144,7 +144,7 @@ arreglado), y el `try/catch` del handler `push` (el que revoca el permiso en iOS
 | M3 — modo avion y cola de la plataforma | NOTIF-03 | Depende del comportamiento de APNs con el dispositivo desconectado | 05-17 Task 3, procedimiento M3 |
 | M4 — denegacion y recuperacion en iOS | PWA-03 | La irreversibilidad de la denegacion no esta documentada por Apple y hay que medirla | 05-17 Task 3, procedimiento M4. **En dispositivo de pruebas, nunca en el de un aseador real** |
 | M5 — revocacion por push silencioso | NOTIF-04 | Mide el numero real de fallos tolerados, que ninguna documentacion oficial da | 05-17 Task 3, procedimiento M5. **Destructivo y opcional**, solo en staging |
-| **M6 — una prueba por plataforma** | PWA-02 | Ni Chromium automatizado ni el simulador cubren la entrega real; hay que verla en un aparato | 05-17 Task 3. **Un iPhone y un Android, no una matriz por persona** (decision del 2026-09-11, corrige a D-01: el numero de aseadores es variable). El equipo incompatible lo detecta el banner S0 en el onboarding |
+| **M6 — matriz de dispositivos reales** | PWA-02 | Un aseador con un iPhone viejo no aparece en ninguna suite | 05-17 Task 3 y `docs/matriz-dispositivos.md`. Inventario completo: tarea previa al piloto de la Fase 8 (D-01) |
 | La tabla de `/aseadores` a 1280px sin scroll horizontal | NOTIF-04 | La cuenta de §2.3 esta hecha; medirla es lo que la convierte en un hecho | 05-14 Task 2, contra el build de produccion |
 | El clic de una alerta atrasada aterriza en su fila | DASH-01 | Es el ancla de una alerta de un bloque nuevo; verlo es lo que prueba que existe | 05-16 Task 3, con un aseo vivo y vencido de ayer sembrado |
 | El escenario "cero carga hoy y un aseador sin avisos" | NOTIF-04 | Es el dia concreto en que la franja tiene que aparecer y hoy no aparece | 05-15 Task 2, contra el build de produccion |
