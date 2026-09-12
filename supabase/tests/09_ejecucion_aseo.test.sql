@@ -132,9 +132,9 @@ on conflict (id) do update
 -- Dos tipos de cuarto. El de baño tiene una tarea que exige foto y otra que no:
 -- es lo que permite distinguir "cuarto sin foto porque falta" de "cuarto sin
 -- foto porque no la necesitaba", que son los dos casos que más se confunden.
-insert into public.room_types (id, nombre, is_active) values
-  ('c9000000-0000-0000-0000-000000000001', 'Cocina 09', true),
-  ('c9000000-0000-0000-0000-000000000002', 'Baño 09',   true);
+insert into public.room_types (id, slug, nombre, sort_order) values
+  ('c9000000-0000-0000-0000-000000000001', 'cocina-09', 'Cocina 09', 1),
+  ('c9000000-0000-0000-0000-000000000002', 'bano-09',   'Baño 09',   2);
 
 insert into public.checklist_tasks (id, room_type_id, descripcion, slot, requiere_foto, is_active) values
   ('d9000000-0000-0000-0000-000000000001', 'c9000000-0000-0000-0000-000000000001',
@@ -346,16 +346,28 @@ select is(
 select has_column('public', 'expenses', 'moneda',
   'expenses tiene columna moneda: el bigint de pesos enteros no sirve para Mexico ni Brasil');
 
--- 17. Y está acotada a tres letras mayúsculas, no es texto libre.
-select is(
-  pg_temp.estado_de('a9000000-0000-0000-0000-00000000000a',
-    $q$insert into public.expenses (cleaning_id, property_id, concepto, monto, moneda, reported_by)
-       values ('f9000000-0000-0000-0000-000000000003',
-               'b9000000-0000-0000-0000-000000000001',
-               'Trapeador', 15000, 'cop',
-               'a9000000-0000-0000-0000-00000000000a')$q$),
+-- 17. Y está acotada a tres letras MAYÚSCULAS, no es texto libre.
+--
+--     MEDIDO al escribir esta aserción, y merece quedar anotado: el primer
+--     intento la escribió como un `insert` con la sesión de la aseadora, y
+--     devolvió **42501 y no 23514**. La razón es que `expenses` NO TIENE DML
+--     para `authenticated`: toda escritura pasa por RPC, que es la regla del
+--     proyecto para `cleanings` y sus hijas. O sea que la aserción original
+--     medía el privilegio, no el CHECK, y habría pasado en verde incluso con
+--     la columna sin restricción ninguna.
+--
+--     Se escribe como `throws_ok`, que corre con el rol del archivo (`postgres`)
+--     y por tanto sí llega hasta el CHECK. El invariante de privilegio ya lo
+--     cubre el guardarraíl 8 de `02_guardarrailes.test.sql`.
+select throws_ok(
+  $q$insert into public.expenses (cleaning_id, property_id, concepto, monto, moneda, reported_by)
+     values ('f9000000-0000-0000-0000-000000000003',
+             'b9000000-0000-0000-0000-000000000001',
+             'Trapeador', 15000, 'cop',
+             'a9000000-0000-0000-0000-00000000000a')$q$,
   '23514',
-  'la moneda en minuscula la rechaza el CHECK: el codigo va en mayusculas');
+  null,
+  'la moneda en minuscula la rechaza el CHECK: el codigo ISO va en mayusculas');
 
 
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -374,7 +386,7 @@ select is(
   pg_temp.estado_de('a9000000-0000-0000-0000-00000000000a',
     $q$select public.toggle_checklist_item(
          (select i.id from public.cleaning_checklist_items i
-           where i.cleaning_id = 'f9000000-0000-0000-0000-000000000004' limit 1), true)$q$),
+           where i.cleaning_id = 'f9000000-0000-0000-0000-000000000004' limit 1), true, null)$q$),
   '42501',
   'no regresion: toggle_checklist_item de un aseo ajeno sigue en 42501');
 

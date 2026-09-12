@@ -428,6 +428,61 @@ export type Database = {
           },
         ]
       }
+      cleaning_room_skips: {
+        Row: {
+          cleaning_id: string
+          created_at: string
+          id: string
+          motivo: Database["public"]["Enums"]["motivo_sin_evidencia"]
+          nota: string | null
+          property_room_id: string
+          room_label: string
+          skipped_by: string
+        }
+        Insert: {
+          cleaning_id: string
+          created_at?: string
+          id?: string
+          motivo: Database["public"]["Enums"]["motivo_sin_evidencia"]
+          nota?: string | null
+          property_room_id: string
+          room_label: string
+          skipped_by: string
+        }
+        Update: {
+          cleaning_id?: string
+          created_at?: string
+          id?: string
+          motivo?: Database["public"]["Enums"]["motivo_sin_evidencia"]
+          nota?: string | null
+          property_room_id?: string
+          room_label?: string
+          skipped_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cleaning_room_skips_cleaning_id_fkey"
+            columns: ["cleaning_id"]
+            isOneToOne: false
+            referencedRelation: "cleanings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cleaning_room_skips_property_room_id_fkey"
+            columns: ["property_room_id"]
+            isOneToOne: false
+            referencedRelation: "property_rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cleaning_room_skips_skipped_by_fkey"
+            columns: ["skipped_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cleaning_state_transitions: {
         Row: {
           actor_id: string | null
@@ -666,6 +721,7 @@ export type Database = {
           concepto: string
           created_at: string
           id: string
+          moneda: string
           monto: number
           property_id: string
           reported_by: string
@@ -675,6 +731,7 @@ export type Database = {
           concepto: string
           created_at?: string
           id?: string
+          moneda?: string
           monto: number
           property_id: string
           reported_by: string
@@ -684,6 +741,7 @@ export type Database = {
           concepto?: string
           created_at?: string
           id?: string
+          moneda?: string
           monto?: number
           property_id?: string
           reported_by?: string
@@ -1310,6 +1368,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      aseo_sin_evidencia_completa: {
+        Args: { p_cleaning: string }
+        Returns: boolean
+      }
       cancel_cleaning: { Args: { p_cleaning: string }; Returns: undefined }
       clear_review_flag: { Args: { p_cleaning: string }; Returns: undefined }
       close_cleaning: { Args: { p_cleaning: string }; Returns: undefined }
@@ -1377,6 +1439,15 @@ export type Database = {
           tipo_cerradura: string
         }[]
       }
+      skip_room_evidence: {
+        Args: {
+          p_cleaning: string
+          p_motivo: Database["public"]["Enums"]["motivo_sin_evidencia"]
+          p_nota: string
+          p_room: string
+        }
+        Returns: undefined
+      }
       start_cleaning: { Args: { p_cleaning: string }; Returns: undefined }
       sync_feed_apply: {
         Args: {
@@ -1394,12 +1465,21 @@ export type Database = {
         Args: { p_done: boolean; p_item: string; p_nota: string }
         Returns: undefined
       }
+      unskip_room_evidence: {
+        Args: { p_cleaning: string; p_room: string }
+        Returns: undefined
+      }
     }
     Enums: {
       cleaning_state: "pendiente" | "en_curso" | "completada" | "cancelada"
       cleaning_type: "normal" | "repaso" | "emergencia"
       feed_provider: "airbnb" | "booking" | "otro"
       grado_verificacion_aviso: "toque" | "manual"
+      motivo_sin_evidencia:
+        | "huesped_dejo_cosas"
+        | "cuarto_cerrado"
+        | "sin_luz"
+        | "otro"
       notification_type:
         | "asignacion"
         | "no_puedo"
@@ -1545,6 +1625,12 @@ export const Constants = {
       cleaning_type: ["normal", "repaso", "emergencia"],
       feed_provider: ["airbnb", "booking", "otro"],
       grado_verificacion_aviso: ["toque", "manual"],
+      motivo_sin_evidencia: [
+        "huesped_dejo_cosas",
+        "cuarto_cerrado",
+        "sin_luz",
+        "otro",
+      ],
       notification_type: [
         "asignacion",
         "no_puedo",
