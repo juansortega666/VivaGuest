@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 05
 current_phase_name: notificaciones-push-e-instalacion-de-la-pwa
 status: executing
-stopped_at: "Fase 05 en ejecucion: waves 1-7 completas (14/17 planes). Suites: unit 876, integration 163, db:test 229 PASS, build 14 rutas. Siguiente: wave 8, plan 05-16 y luego 05-12 (checkpoint humano bloqueante: 5 capturas de instalacion)"
-last_updated: "2026-09-12T00:25:29.204Z"
+stopped_at: "Fase 05 BLOQUEADA en 15/17. El plan 05-12 espera las 5 capturas de instalacion en public/instalar/ (accion humana, sin sustituto). 05-17 depende de 05-12. Suites: unit 889, integration 163, db:test 229 PASS, build 14 rutas"
+last_updated: "2026-09-12T02:19:32.340Z"
 last_activity: 2026-09-10
 last_activity_desc: discuss-phase 5 cerrado; ROADMAP §Phase 5 actualizado con los criterios 6 y 7
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 65
-  completed_plans: 62
+  completed_plans: 63
   percent: 44
 ---
 
@@ -265,8 +265,8 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-12T00:25:29.194Z
-Stopped at: Fase 05 en ejecucion: waves 1-7 completas (14/17 planes). Suites: unit 876, integration 163, db:test 229 PASS, build 14 rutas. Siguiente: wave 8, plan 05-16 y luego 05-12 (checkpoint humano bloqueante: 5 capturas de instalacion)
+Last session: 2026-09-12T02:19:32.328Z
+Stopped at: Fase 05 BLOQUEADA en 15/17. El plan 05-12 espera las 5 capturas de instalacion en public/instalar/ (accion humana, sin sustituto). 05-17 depende de 05-12. Suites: unit 889, integration 163, db:test 229 PASS, build 14 rutas
 
 **Sin bloqueos activos.** El stack local de Supabase esta arriba y sano (12 contenedores), la
 migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` **29 archivos / 548 tests**,
@@ -299,4 +299,4 @@ migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` **29 ar
    segundos, `db:test` 2,3 s y la integracion completa 9,7 s.
 
 Siguiente: la wave 6 de la Fase 4 (04-10, 04-11, 04-12).
-Resume file: .planning/phases/05-notificaciones-push-e-instalaci-n-de-la-pwa/05-16-PLAN.md
+Resume file: .planning/phases/05-notificaciones-push-e-instalaci-n-de-la-pwa/05-12-PLAN.md
