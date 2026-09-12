@@ -77,5 +77,11 @@ export default async function EvidenciaDelAseoPage({
   // recibe cuartos, no filas sueltas, y no vuelve a ordenar nada por su cuenta.
   const grupos = armarChecklist(aseo.checklist, aseo.skips);
 
-  return <WizardEvidencia aseoId={aseo.id} grupos={grupos} />;
+  return (
+    <WizardEvidencia
+      aseoId={aseo.id}
+      apartamento={aseo.property?.nombre ?? ''}
+      grupos={grupos}
+    />
+  );
 }

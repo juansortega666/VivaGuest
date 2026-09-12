@@ -3,17 +3,13 @@
 import { Camera, TriangleAlert } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 
-import {
-  pedirSubidaDeFoto,
-  registrarFotoDeCuarto,
-} from '@/app/(cleaner)/aseos/[id]/_actions';
+import { registrarFotoDeCuarto } from '@/app/(cleaner)/aseos/[id]/_actions';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import type { GrupoDeCuarto } from '@/lib/domain/checklist';
-import { BUCKET_EVIDENCIA } from '@/lib/fotos/nombres';
 import { comprimirFoto, type FotoComprimida } from '@/lib/fotos/comprimir';
-import { createClient } from '@/lib/supabase/browser';
+import { subirAlBucket } from '@/lib/fotos/subir';
 
 /**
  * UN PASO DEL ASISTENTE: LA FOTO DE UN CUARTO (CHECK-03, CHECK-04, §8.3).
@@ -166,26 +162,12 @@ export function PasoDeFoto({
       if (tarea === null) return;
       setFase('subiendo');
 
-      // ── 3. El permiso, con la ruta que compuso el servidor ────────────────
-      const pedido = new FormData();
-      pedido.set('aseo', aseoId);
-      pedido.set('tipo', 'checklist');
-
-      const permiso = await pedirSubidaDeFoto(null, pedido);
-      if (!permiso.ok) {
-        setFase('fallo');
-        return;
-      }
-
-      // ── 4. La subida, contra esa ruta y ninguna otra ──────────────────────
-      const supabase = createClient();
-      const { error } = await supabase.storage
-        .from(BUCKET_EVIDENCIA)
-        .uploadToSignedUrl(permiso.ruta, permiso.token, foto.blob, {
-          contentType: foto.mimeType,
-        });
-
-      if (error) {
+      // ── 3 y 4. El permiso con la ruta del servidor, y la subida a ESA ruta.
+      // Los dos pasos viven en `lib/fotos/subir.ts` porque la pantalla del
+      // reporte hace exactamente lo mismo, y dos copias de este cableado son dos
+      // sitios donde alguien puede mandar la ruta desde el cliente.
+      const subida = await subirAlBucket(aseoId, 'checklist', foto);
+      if (!subida.ok) {
         setFase('fallo');
         return;
       }
@@ -195,7 +177,7 @@ export function PasoDeFoto({
       registro.set('aseo', aseoId);
       registro.set('item', tarea.id);
       registro.set('cuarto', cuarto.propertyRoomId);
-      registro.set('ruta', permiso.ruta);
+      registro.set('ruta', subida.ruta);
       registro.set('bytes', String(foto.bytes));
       registro.set('ancho', String(foto.width));
       registro.set('alto', String(foto.height));
@@ -207,7 +189,7 @@ export function PasoDeFoto({
       }
 
       setFase('subida');
-      onSubida({ itemId: tarea.id, ruta: permiso.ruta });
+      onSubida({ itemId: tarea.id, ruta: subida.ruta });
     },
     [aseoId, cuarto.propertyRoomId, onSubida, tarea],
   );

@@ -222,3 +222,213 @@ describe('los otros errores', () => {
     expect(r.ok).toBe(false);
   });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 5. LOS REPORTES DE CAMPO — plan 06-09
+//
+// ── QUE MIDE ESTE BLOQUE, Y POR QUE CADA ASERCION ESTA ────────────────────
+//
+// Un Server Action es un endpoint HTTP PUBLICO exista o no una pantalla que lo
+// llame. Asi que lo primero que se mide es que el guard corra ANTES de nada; sin
+// el, reportar un daño en el aseo de cualquiera es una peticion HTTP.
+//
+// Y despues el monto, con TRES aserciones, porque es el unico dato de esta fase
+// que el cierre mensual de la Fase 7 va a SUMAR. Un gasto sin monto no es un
+// gasto incompleto: es un numero que el admin va a tener que adivinar leyendo
+// un texto libre, un mes despues.
+// ════════════════════════════════════════════════════════════════════════════
+
+const { reportarDano, reportarGasto, reportarFaltantes, terminarAseo } = acciones;
+
+const REPORTE_ID = '55555555-5555-4555-8555-555555555555';
+
+/** Lo que devuelven los tres RPC de reporte: un identificador suelto. */
+function idDelRpc(): RespuestaFalsa {
+  return { data: REPORTE_ID, error: null };
+}
+
+describe('los reportes: el guard va primero', () => {
+  it('las tres actions rechazan sin sesion y NO llaman a la base', async () => {
+    comoIntruso();
+
+    const r1 = await reportarDano(null, fd({ aseo: ASEO_ID, descripcion: 'Se rompio el espejo' }));
+    const r2 = await reportarGasto(
+      null,
+      fd({ aseo: ASEO_ID, descripcion: 'Jabon', monto: '12000' }),
+    );
+    const r3 = await reportarFaltantes(null, fd({ aseo: ASEO_ID, items: 'Papel higienico' }));
+
+    expect(r1.ok).toBe(false);
+    expect(r2.ok).toBe(false);
+    expect(r3.ok).toBe(false);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+});
+
+describe('el daño', () => {
+  it('sin descripcion no llega a la base', async () => {
+    respuesta = idDelRpc();
+
+    const r = await reportarDano(null, fd({ aseo: ASEO_ID, descripcion: '   ' }));
+
+    expect(r.ok).toBe(false);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('devuelve el identificador para colgarle la foto obligatoria', async () => {
+    respuesta = idDelRpc();
+
+    const r = await reportarDano(null, fd({ aseo: ASEO_ID, descripcion: 'Se rompio el espejo' }));
+
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.id).toBe(REPORTE_ID);
+    expect(rpc.mock.calls[0][0]).toBe('report_damage');
+  });
+});
+
+describe('el gasto: el monto es el dato que la Fase 7 va a sumar', () => {
+  it('SIN monto no llega a la base', async () => {
+    respuesta = idDelRpc();
+
+    const r = await reportarGasto(null, fd({ aseo: ASEO_ID, descripcion: 'Jabon' }));
+
+    expect(r.ok).toBe(false);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('con monto CERO no llega a la base', async () => {
+    respuesta = idDelRpc();
+
+    const r = await reportarGasto(null, fd({ aseo: ASEO_ID, descripcion: 'Jabon', monto: '0' }));
+
+    expect(r.ok).toBe(false);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('con monto NEGATIVO no llega a la base', async () => {
+    respuesta = idDelRpc();
+
+    const r = await reportarGasto(null, fd({ aseo: ASEO_ID, descripcion: 'Jabon', monto: '-500' }));
+
+    expect(r.ok).toBe(false);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('manda la moneda explicita, y por defecto es la del pais', async () => {
+    // Un monto sin unidad es un numero. La regla 1 del camino a v2 exige que la
+    // moneda viaje siempre, aunque hoy solo haya una.
+    respuesta = idDelRpc();
+
+    await reportarGasto(null, fd({ aseo: ASEO_ID, descripcion: 'Jabon', monto: '12000' }));
+
+    expect(rpc.mock.calls[0][0]).toBe('report_expense');
+    expect(rpc.mock.calls[0][1]).toEqual({
+      p_cleaning: ASEO_ID,
+      p_concepto: 'Jabon',
+      p_monto: 12000,
+      p_moneda: 'COP',
+    });
+  });
+
+  it('respeta la moneda cuando llega otra', async () => {
+    respuesta = idDelRpc();
+
+    await reportarGasto(
+      null,
+      fd({ aseo: ASEO_ID, descripcion: 'Jabon', monto: '12000', moneda: 'MXN' }),
+    );
+
+    expect(rpc.mock.calls[0][1]).toMatchObject({ p_moneda: 'MXN' });
+  });
+
+  it('el monto viaja como ENTERO, no como cadena', async () => {
+    // `numeric` llega como string desde supabase-js y rompe la aritmetica en
+    // silencio. La columna es entera y lo que viaja tambien tiene que serlo.
+    respuesta = idDelRpc();
+
+    await reportarGasto(null, fd({ aseo: ASEO_ID, descripcion: 'Jabon', monto: '12000' }));
+
+    expect(typeof (rpc.mock.calls[0][1] as { p_monto: unknown }).p_monto).toBe('number');
+  });
+});
+
+describe('los faltantes', () => {
+  it('con la lista vacia no llega a la base', async () => {
+    respuesta = idDelRpc();
+
+    const r = await reportarFaltantes(null, fd({ aseo: ASEO_ID, items: '   \n  \n' }));
+
+    expect(r.ok).toBe(false);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('parte por lineas y descarta las vacias', async () => {
+    // La gente deja renglones sueltos al escribir en un telefono, y un item
+    // vacio haria fallar el `check` de la tabla por una razon que no es suya.
+    respuesta = idDelRpc();
+
+    await reportarFaltantes(
+      null,
+      fd({ aseo: ASEO_ID, items: 'Papel higienico\n\n  Jabon de manos  \n' }),
+    );
+
+    expect(rpc.mock.calls[0][1]).toEqual({
+      p_cleaning: ASEO_ID,
+      p_items: ['Papel higienico', 'Jabon de manos'],
+    });
+  });
+});
+
+describe('los errores de la base en los reportes', () => {
+  it('en P0001 devuelven el hint y no el token de maquina', async () => {
+    respuesta = {
+      data: null,
+      error: { code: 'P0001', message: 'aseo_no_en_curso', hint: 'Ese aseo no está en curso.' },
+    };
+
+    const r = await reportarDano(null, fd({ aseo: ASEO_ID, descripcion: 'Se rompio el espejo' }));
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error).toBe('Ese aseo no está en curso.');
+      expect(r.error).not.toContain('aseo_no_en_curso');
+    }
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 6. TERMINAR NO REVALIDA EL CHECKLIST EN EL CLIENTE
+//
+// `finish_cleaning` dejo de rechazar por checklist incompleto en la migracion
+// 18, y fue una decision (D-06): un bloqueo deja al aseador atrapado en campo y
+// termina en una llamada telefonica. Reponer la comprobacion aqui la
+// reintroduciria por la puerta de atras, y este test es lo que lo impide.
+// ════════════════════════════════════════════════════════════════════════════
+
+describe('terminar el aseo', () => {
+  it('llama al RPC directo, sin mirar el progreso del checklist', async () => {
+    respuesta = { data: null, error: null };
+
+    const r = await terminarAseo(null, fd({ aseo: ASEO_ID }));
+
+    expect(r.ok).toBe(true);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc.mock.calls[0][0]).toBe('finish_cleaning');
+    expect(rpc.mock.calls[0][1]).toEqual({ p_cleaning: ASEO_ID });
+  });
+
+  it('su mensaje de exito NO afirma que se le aviso a nadie', async () => {
+    // 05-UI-SPEC §11.4: se puede afirmar la AUSENCIA de canal, nunca la entrega.
+    // El drenaje del push es asincrono y esta action no sabe si llego.
+    respuesta = { data: null, error: null };
+
+    const r = await terminarAseo(null, fd({ aseo: ASEO_ID }));
+
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      for (const afirmacion of ['notific', 'avisad', 'le llegó', 'le llego']) {
+        expect(r.mensaje.toLowerCase()).not.toContain(afirmacion);
+      }
+    }
+  });
+});

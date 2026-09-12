@@ -12,7 +12,9 @@ import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { cuartoNecesitaFoto, type GrupoDeCuarto } from '@/lib/domain/checklist';
 import { ETIQUETAS_SKIP, type MotivoSkip } from '@/lib/domain/motivos';
 
+import { CierreDeAseo } from './CierreDeAseo';
 import { HojaSaltarCuarto } from './HojaSaltarCuarto';
+import { PasoDeReporte } from './PasoDeReporte';
 import { PasoDeFoto, type FotoLista } from './PasoDeFoto';
 
 /**
@@ -59,6 +61,19 @@ import { PasoDeFoto, type FotoLista } from './PasoDeFoto';
  * quito la evidencia.
  *
  * El unico camino para no fotografiar un cuarto pasa por la hoja de motivo.
+ *
+ * ── LAS TRES FASES, Y POR QUE VIVEN EN LA MISMA RUTA ──────────────────────
+ *
+ *   fotos -> reporte -> cierre
+ *
+ * En la misma ruta y no en tres, porque el boton de atras del telefono tiene que
+ * significar **una** cosa aqui dentro: volver al checklist. Con una ruta por
+ * fase, atras devolveria a la foto del ultimo cuarto, que ya esta subida, y
+ * desde ahi a la anterior: un laberinto hacia atras sobre trabajo ya hecho.
+ *
+ * El aseo se cierra **entre el reporte y el cierre**, no antes: la pantalla de
+ * cierre solo se alcanza tras un `finish_cleaning` con exito, asi que nunca dice
+ * "Listo" sobre algo que no quedo guardado.
  * ════════════════════════════════════════════════════════════════════════════
  */
 
@@ -71,17 +86,15 @@ const COPY = {
   salir: 'Salir del asistente',
   siguiente: 'Siguiente',
   ultimo: 'Continuar',
-  sinCuartos: 'Este aseo no pide fotos.',
-  sinCuartosCuerpo: 'Puedes terminarlo directamente.',
-  terminar: 'Terminar aseo',
-  enVuelo: 'Terminando…',
 } as const;
 
 export function WizardEvidencia({
   aseoId,
+  apartamento,
   grupos,
 }: {
   aseoId: string;
+  apartamento: string;
   grupos: GrupoDeCuarto[];
 }) {
   const router = useRouter();
@@ -102,6 +115,11 @@ export function WizardEvidencia({
   });
   const [saltando, setSaltando] = useState(false);
   const [cerrando, setCerrando] = useState(false);
+  const [fase, setFase] = useState<'fotos' | 'reporte' | 'cierre'>(() =>
+    // Sin cuartos que pidan foto no hay nada que fotografiar, pero SI hay algo
+    // que reportar: se entra directo al ultimo paso, que ademas es opcional.
+    pasos.length === 0 ? 'reporte' : 'fotos',
+  );
 
   const actual = pasos[indice] ?? null;
   const total = pasos.length;
@@ -116,16 +134,16 @@ export function WizardEvidencia({
       setIndice((i) => i + 1);
       return;
     }
-    cerrarElAseo();
+    setFase('reporte');
   }
 
   /**
-   * ── LA COSTURA CON EL PASO DE REPORTE ─────────────────────────────────────
+   * Cierra el aseo. Lo llama el ultimo paso, el del reporte.
    *
-   * Hoy el ultimo `Continuar` cierra el aseo. En el plan 06-09 se intercala
-   * antes el paso de reporte (dano, gasto, faltante) y su pantalla de cierre,
-   * que es quien pasa a llamar aqui. Lo que NO cambia: el reporte es OPCIONAL,
-   * asi que este camino —terminar sin reportar nada— sigue existiendo entero.
+   * **No revalida el checklist**, y no es un olvido: `finish_cleaning` dejo de
+   * rechazar por checklist incompleto en la migracion 18 (D-06). Reponer aqui
+   * una comprobacion de progreso reintroduciria el bloqueo por la puerta de
+   * atras, que es justo lo que se derogo.
    */
   function cerrarElAseo() {
     if (cerrando) return;
@@ -142,27 +160,23 @@ export function WizardEvidencia({
         return;
       }
 
-      toast.success(r.mensaje);
-      router.push('/mis-aseos');
+      // NO se navega a ningun lado: se pasa a la pantalla de cierre, que es lo
+      // unico que puede decir "Listo" con fundamento, porque solo se llega aqui
+      // con el aseo ya guardado.
+      setFase('cierre');
     })();
   }
 
-  if (total === 0) {
-    return (
-      <div className="flex flex-col gap-lg">
-        <div className="flex flex-col gap-xs">
-          <h1 className="text-display-movil text-foreground">{COPY.sinCuartos}</h1>
-          <p className="text-body-movil text-muted-foreground">{COPY.sinCuartosCuerpo}</p>
-        </div>
-        <Button
-          type="button"
-          onClick={cerrarElAseo}
-          className="min-h-toque-comodo w-full text-body-movil"
-        >
-          {cerrando ? COPY.enVuelo : COPY.terminar}
-        </Button>
-      </div>
-    );
+  const cuartosSinFoto = grupos.filter(
+    (g) => resultados[g.propertyRoomId]?.tipo === 'saltado',
+  ).length;
+
+  if (fase === 'cierre') {
+    return <CierreDeAseo apartamento={apartamento} cuartosSinFoto={cuartosSinFoto} />;
+  }
+
+  if (fase === 'reporte') {
+    return <PasoDeReporte aseoId={aseoId} onTerminar={cerrarElAseo} terminando={cerrando} />;
   }
 
   if (actual === null) return null;
