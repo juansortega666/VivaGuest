@@ -5,10 +5,10 @@ milestone_name: milestone
 current_phase: 05
 current_phase_name: notificaciones-push-e-instalacion-de-la-pwa
 status: executing
-stopped_at: "Fase 05 BLOQUEADA en 15/17. El plan 05-12 espera las 5 capturas de instalacion en public/instalar/ (accion humana, sin sustituto). 05-17 depende de 05-12. Suites: unit 889, integration 163, db:test 229 PASS, build 14 rutas"
-last_updated: "2026-09-12T02:19:32.340Z"
-last_activity: 2026-09-10
-last_activity_desc: discuss-phase 5 cerrado; ROADMAP §Phase 5 actualizado con los criterios 6 y 7
+stopped_at: "Fase 05 cerrada funcionalmente y mergeada a main. 05-12 (wizard de /instalar) y 05-17 (validacion en telefono fisico) DIFERIDOS por decision del desarrollador el 2026-09-12: la instalacion asistida presencial funciona sin ellos. Estan en .planning/BACKLOG.md. Siguiente: Fase 6, PWA del aseador"
+last_updated: "2026-09-12T03:05:00.000Z"
+last_activity: 2026-09-12
+last_activity_desc: Fase 5 mergeada a main, ramas viejas borradas, y multi-tenant para LATAM registrado como milestone v2 en BACKLOG.md
 progress:
   total_phases: 9
   completed_phases: 4

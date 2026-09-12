@@ -134,6 +134,10 @@ Que ningún aseo se pierda: todo checkout detectado en calendario termina en un 
 - **Infraestructura**: free tier de Vercel y Supabase durante todo el desarrollo. El cron de 30 min vive en `pg_cron`, así que el tope de 1 corrida diaria de Vercel Hobby no aplica. Vercel Hobby prohíbe uso comercial: el piloto en operación real obliga a migrar a plan pago
 - **Equipo**: dos personas. El roadmap se ejecuta secuencial, sin aprovechar el grafo de paralelización
 - **Escala**: 34 unidades gestionadas, ~8 aseadores, decenas de aseos por día — no es un problema de escala, es de correctitud operativa
+- **Camino a v2 (decidido 2026-09-12)**: el MVP es **mono-tenant a propósito**, pero las fases que faltan no pueden agravar el retrofit. Tres reglas activas, baratas hoy y caras después:
+  1. **Dinero en unidad mínima de la moneda, más columna de moneda.** `bigint` de pesos enteros sirve para COP, CLP y PYG, pero **no** para MXN, BRL, ARS ni PEN, que tienen centavos. Con 3 columnas cuesta poco; con el histórico financiero de la Fase 7 vivo, cuesta una migración con riesgo. **Supersede la línea de "montos en pesos colombianos enteros" de más arriba, que queda como descripción del MVP y no como regla de diseño.**
+  2. **`today_bog()` recibe la zona horaria como parámetro, con Bogotá por defecto.** Hoy no cambia el comportamiento de nada. Está metida en índices, policies y jobs, así que sacarla después es lo segundo más caro del retrofit.
+  3. **Toda tabla nueva cuelga de `properties` o de `cleanings`.** Así, el día que la raíz gane el dueño, las hijas lo heredan por join en vez de necesitar columna propia. Ya se venía haciendo; a partir de aquí es regla escrita y no suerte.
 - **Orden de trabajo**: schema + migraciones + RLS antes que UI
 
 ## Riesgos Aceptados
@@ -171,6 +175,7 @@ Que ningún aseo se pierda: todo checkout detectado en calendario termina en un 
 | `legal_hold` y `deleted_at` en el schema inicial | Agregarlos después obliga a migrar datos operativos; el job de borrado sí puede llegar al final | — Pending |
 | El scheduler corre en `pg_cron` + `pg_net`, no en Vercel Cron | Aísla feeds caídos por construcción, da historial de corridas gratis y no exige plan Pro | — Pending |
 | Retención de 6 meses con borrado automático, conservando agregados | Controla costo de Storage sin destruir la base del scorecard de desempeño de v2 | — Pending |
+| MVP mono-tenant, multi-tenant y autogestión a v2 | Se midió el schema el 2026-09-12: cero rastro de `tenant_id` en las 23 tablas y la RLS distingue roles, no dueños. Construir la separación entre empresas ahora retrasa el piloto, y el piloto es lo único que dice si el producto sirve. Los aseadores y las propiedades, que parecían el problema, ya son datos. La salida de "una instancia por cliente" se evaluó y se descartó: es incompatible con que sea autogestionable. Alcance completo en `.planning/BACKLOG.md` | — Pending |
 | Cierre de mes excluye solo fines de semana, no festivos | El cálculo es visible en pantalla, nadie tiene que estar disponible ese día; evita mantener tabla de festivos con ley de Emiliani | — Pending |
 
 ## Evolution
