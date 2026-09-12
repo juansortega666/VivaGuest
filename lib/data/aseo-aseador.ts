@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database, Tables } from '@/lib/database.types';
+import type { FilaDeChecklist, FilaDeSkip } from '@/lib/domain/checklist';
 
 /**
  * LA CAPA DE LECTURA DE `/aseos/[id]`, LA PANTALLA A LA QUE ATERRIZA EL AVISO
@@ -59,7 +60,13 @@ export type AseoDelAseador = Pick<
   | 'state'
   | 'is_managed'
   | 'confirmado_at'
-> & { property: ApartamentoDelAseo | null };
+> & {
+  property: ApartamentoDelAseo | null;
+  /** Las tareas del checklist materializado. Vacio si el aseo no se confirmo. */
+  checklist: FilaDeChecklist[];
+  /** Los cuartos cuya evidencia se salto, con su motivo. */
+  skips: FilaDeSkip[];
+};
 
 /**
  * El embed va CALIFICADO con el nombre de la clave foranea a proposito.
@@ -73,8 +80,44 @@ const SELECT_ASEO = `
   state, is_managed, confirmado_at,
   property:properties!cleanings_property_id_fkey (
     id, nombre, cluster, hora_limite
+  ),
+  checklist:cleaning_checklist_items!cleaning_checklist_items_cleaning_id_fkey (
+    id, property_room_id, room_label, task_label, requiere_foto, sort_order, done_at
+  ),
+  skips:cleaning_room_skips!cleaning_room_skips_cleaning_id_fkey (
+    property_room_id, room_label, motivo, nota
   )
 `;
+
+/**
+ * LAS DOS COLECCIONES HIJAS VIAJAN EN LA MISMA CONSULTA, Y ES UNA DECISION.
+ *
+ * PostgREST las trae por embed en un solo viaje, asi que la alternativa
+ * —tres consultas en paralelo— seria mas codigo para el mismo resultado y
+ * ademas abriria la puerta a que las tres vean estados distintos de la base si
+ * alguien marca algo justo en medio.
+ *
+ * ── EL EMBED VA CALIFICADO, MISMO CRITERIO QUE EL DEL APARTAMENTO ──────────
+ *
+ * Hoy hay una sola clave foranea de cada hija hacia `cleanings`, asi que sin
+ * calificar tambien funcionaria. Se califica igual porque el dia que aparezca
+ * una segunda —por ejemplo una columna de "aseo que reemplazo a este"—
+ * PostgREST responde `PGRST201` EN TIEMPO DE EJECUCION, no de compilacion, y el
+ * sintoma seria la pantalla del aseador caida en produccion.
+ *
+ * ── LAS DOS SON DE SOLO LECTURA POR CONSTRUCCION ───────────────────────────
+ *
+ * `authenticated` tiene UNICAMENTE `select` sobre las dos tablas (migraciones 07
+ * y 18). Marcar una tarea o saltar un cuarto pasa forzosamente por un RPC
+ * `security definer`, que es donde vive la autorizacion. O sea que esta capa no
+ * puede escribir ni por accidente.
+ *
+ * ── UN ASEO SIN CONFIRMAR LLEGA CON EL CHECKLIST VACIO, Y NO ES UN ERROR ───
+ *
+ * `confirm_cleaning` es quien materializa las filas (migracion 04). Antes de eso
+ * no existen, y la pantalla tiene que saber decirlo: es el mismo vacio que un
+ * apartamento sin cuartos configurados, y se trata igual.
+ */
 
 /**
  * La forma de un identificador de la base, comprobada ANTES de la consulta.
@@ -137,5 +180,12 @@ export async function leerAseoDelAseador(
   if (data.state === 'cancelada') return null;
   if (data.property === null) return null;
 
-  return data;
+  // Los embed a-muchos llegan como arreglo, pero un embed ausente llega nulo, y
+  // el modulo de dominio recorre. Se normaliza AQUI y no en el componente para
+  // que ningun consumidor tenga que acordarse.
+  return {
+    ...data,
+    checklist: data.checklist ?? [],
+    skips: data.skips ?? [],
+  };
 }

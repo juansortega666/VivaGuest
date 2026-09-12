@@ -15,12 +15,20 @@ import { CodigoDeAcceso } from './CodigoDeAcceso';
  * ── ALCANCE, Y ES UN LIMITE DURO DE LA FASE ────────────────────────────────
  *
  * Renderiza apartamento, cluster, fecha, hora limite, huespedes, instrucciones y
- * el codigo de acceso detras de un boton. NADA MAS. El checklist por cuarto, la
- * camara, las fotos, la cola sin conexion y los tres botones con los que el
- * aseador mueve el estado del aseo son de la Fase 6, y no se anaden aqui "ya que
- * estamos": `05-CONTEXT.md` lo dice literal, *"esta fase entrega el envoltorio
- * instalable, el service worker, el permiso y la pantalla a la que aterriza la
- * notificacion, no el trabajo que se hace dentro"*.
+ * el codigo de acceso detras de un boton. NADA MAS, y el limite sigue en pie: el
+ * checklist, la camara y la barra de accion los monta la PAGINA como hermanos de
+ * esta ficha, no dentro de ella. Esta tarjeta es la cabecera de solo lectura del
+ * aseo y se mantiene reusable como tal.
+ *
+ * ── EL PIE DE COMPROMISO SE RETIRO EN LA FASE 6, Y CONVIENE SABER POR QUE ──
+ *
+ * Hasta esta fase la ficha cerraba con una linea que le anunciaba al aseador que
+ * marcar el aseo y subir fotos llegaban despues. **No era relleno**: sin ella,
+ * quien aterrizaba desde un aviso buscaba el boton de arranque, no lo encontraba
+ * y concluia que la aplicacion estaba rota; la linea convertia un fallo aparente
+ * en una espera. Ahora el trabajo existe y esta justo debajo, asi que esa linea
+ * pasaria a ser la unica afirmacion falsa de la pantalla. Se va por la misma
+ * razon por la que se puso: no engañar a quien esta de pie frente a una puerta.
  *
  * ── EL BADGE DE ESTADO SE MONTA AQUI Y NO SE IMPORTA DE `(admin)` ──────────
  *
@@ -57,10 +65,6 @@ const ICONOS: Record<IconoEstadoAseo, LucideIcon> = {
   CircleSlash,
   CircleDashed,
 };
-
-/** El copy de compromiso de §9.1. Ver la razon donde se renderiza. */
-const PIE_DE_ALCANCE =
-  'Marcar el aseo como empezado y subir las fotos llega en la próxima versión de la app.';
 
 const ROTULO_INSTRUCCIONES = 'Instrucciones';
 const SIN_DATO = '—';
@@ -142,14 +146,6 @@ export function TarjetaAseo({ aseo }: { aseo: AseoDelAseador }) {
       )}
 
       <CodigoDeAcceso aseoId={aseo.id} fechaAseo={aseo.scheduled_date} />
-
-      {/*
-        ES UN COMPROMISO, NO RELLENO. Sin esta linea, quien aterriza desde un
-        aviso busca el boton con el que se arranca el trabajo, no lo encuentra y
-        concluye que la aplicacion esta rota. Decirle que llega en la proxima
-        version convierte un fallo aparente en una espera.
-      */}
-      <p className="text-micro-movil text-muted-foreground">{PIE_DE_ALCANCE}</p>
     </Card>
   );
 }

@@ -1,8 +1,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
+import { BarraAccionAseo } from '@/app/(cleaner)/_components/BarraAccionAseo';
+import {
+  ChecklistPorCuarto,
+  ProgresoDelAseo,
+} from '@/app/(cleaner)/_components/ChecklistPorCuarto';
 import { TarjetaAseo } from '@/app/(cleaner)/_components/TarjetaAseo';
 import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
 import { leerAseoDelAseador } from '@/lib/data/aseo-aseador';
 import { createClient } from '@/lib/supabase/server';
 
@@ -24,18 +30,30 @@ export const metadata: Metadata = {
  * por mucho que el envio funcionara. No estaba en el alcance original; el
  * contrato de UI la metio en la fase justamente por esto.
  *
- * ── EL ALCANCE ES DE SOLO LECTURA, MAS EL CODIGO ──────────────────────────
+ * ── LA FASE 6 LA AMPLIO: AHORA AQUI SE TRABAJA ────────────────────────────
  *
- * Lo que esta pantalla NO lleva, y que es trabajo de la Fase 6: el checklist por
- * cuarto, la camara, las fotos, la cola de mutaciones sin conexion y los tres
- * botones con los que el aseador mueve el estado del aseo (`Empecé`, `Terminé`
- * y `No puedo`). `05-CONTEXT.md` lo fija literal: *"esta fase entrega el
- * envoltorio instalable, el service worker, el permiso y la pantalla a la que
- * aterriza la notificacion, no el trabajo que se hace dentro"*.
+ * La Fase 5 la dejo de SOLO LECTURA a proposito, con un pie que le prometia al
+ * aseador que marcar el aseo y subir fotos llegaban despues. Esta fase cumple esa
+ * promesa, asi que **el pie se retiro**: era el compromiso, y mantenerlo con el
+ * checklist justo debajo lo convertiria en la unica afirmacion falsa de la
+ * pantalla. La razon larga esta en `TarjetaAseo.tsx`, que es de donde salio.
  *
- * Esto queda escrito aqui para que nadie los anada "ya que estamos": el copy del
- * pie de la ficha ES el compromiso con el aseador de que llegan, y anadir medio
- * flujo seria peor que no tener ninguno.
+ * ── EL ORDEN VERTICAL, Y NO ES ARBITRARIO (§7.1) ──────────────────────────
+ *
+ *   1. la ficha de la Fase 5, con el codigo de acceso: es lo que el aseador vino
+ *      a buscar cuando toco el aviso, de pie frente a una puerta cerrada
+ *   2. un separador
+ *   3. el checklist por cuarto
+ *   4. la barra de accion, FIJA y fuera del flujo de lectura
+ *
+ * El codigo va arriba y el trabajo abajo porque ese es el orden real: primero se
+ * entra, despues se limpia.
+ *
+ * ── LO QUE TODAVIA NO ESTA, Y DE QUE PLAN ES ──────────────────────────────
+ *
+ * El asistente de evidencia con la camara (plan 06-08) y el paso de reporte
+ * (06-09). Hasta entonces la barra termina el aseo directamente; la costura
+ * exacta esta marcada en `BarraAccionAseo.tsx`.
  *
  * ── EL ESTADO VACIO ES EL MISMO PARA LOS CASOS QUE NO SE DEBEN DISTINGUIR ──
  *
@@ -90,5 +108,38 @@ export default async function AseoDelAseadorPage({
     );
   }
 
-  return <TarjetaAseo aseo={aseo} />;
+  /**
+   * EL CHECKLIST SE MARCA SOLO CON EL ASEO EN CURSO.
+   *
+   * Los otros dos estados se llega a ellos DE VERDAD, tocando un aviso viejo, y
+   * hasta esta fase no estaban definidos en ningun sitio:
+   *
+   *   · `pendiente`  -> el checklist se ve, no se marca, y la barra dice
+   *     `Comenzar aseo`. Ver el checklist antes de empezar no es un adorno: es
+   *     como la aseadora sabe cuanto trabajo hay y si le alcanza el tiempo.
+   *   · `completada` -> el checklist se ve, no se marca, y NO HAY BARRA. No hay
+   *     ninguna accion que ofrecer sobre un aseo terminado, y un boton que no
+   *     lleva a nada es peor que la ausencia del boton.
+   */
+  const enCurso = aseo.state === 'en_curso';
+  const terminado = aseo.state === 'completada';
+
+  return (
+    <ProgresoDelAseo filas={aseo.checklist} skips={aseo.skips} soloLectura={!enCurso}>
+      {/*
+        EL RELLENO INFERIOR RESERVA EL ALTO DE LA BARRA (§7.4). Sin esto la
+        ultima tarea del checklist queda debajo de una barra opaca y literalmente
+        nadie la ve: no es que se lea mal, es que no existe en pantalla.
+      */}
+      <div className={terminado ? 'flex flex-col gap-lg' : 'flex flex-col gap-lg pb-barra-aseo'}>
+        <TarjetaAseo aseo={aseo} />
+
+        <Separator />
+
+        <ChecklistPorCuarto />
+      </div>
+
+      {!terminado && <BarraAccionAseo aseoId={aseo.id} modo={enCurso ? 'terminar' : 'comenzar'} />}
+    </ProgresoDelAseo>
+  );
 }

@@ -76,6 +76,18 @@ function filaCompleta(sobrescribir: Record<string, unknown> = {}) {
       cluster: 'Chapinero',
       hora_limite: '11:30:00',
     },
+    checklist: [
+      {
+        id: '44444444-4444-4444-8444-444444444444',
+        property_room_id: '55555555-5555-4555-8555-555555555555',
+        room_label: 'Baño principal',
+        task_label: 'Lavar el sanitario',
+        requiere_foto: true,
+        sort_order: 100,
+        done_at: null,
+      },
+    ],
+    skips: [],
     ...sobrescribir,
   };
 }
@@ -207,5 +219,96 @@ describe('el resto', () => {
     const c = clienteQueDevuelve({ data: null, error: { message: 'conexion caida' } });
 
     await expect(leerAseoDelAseador(c as ClienteFalso, ASEO_ID)).rejects.toThrow('conexion caida');
+  });
+});
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// 4. LAS DOS COLECCIONES HIJAS — Fase 6
+// ════════════════════════════════════════════════════════════════════════════
+
+describe('el checklist y los cuartos saltados', () => {
+  it('los pide en la MISMA consulta, no en tres viajes', async () => {
+    // Tres consultas en paralelo darian el mismo resultado con mas codigo, y
+    // abririan la puerta a que las tres vean estados distintos de la base si
+    // alguien marca algo justo en medio.
+    const c = clienteQueDevuelve({ data: filaCompleta(), error: null });
+    await leerAseoDelAseador(c as ClienteFalso, ASEO_ID);
+
+    expect(c.select).toHaveBeenCalledTimes(1);
+    expect(c.from).toHaveBeenCalledTimes(1);
+  });
+
+  it('califica los dos embed con el nombre de su clave foranea', async () => {
+    // Hoy hay una sola clave de cada hija hacia `cleanings`, asi que sin
+    // calificar tambien funcionaria. Se califica porque el dia que aparezca una
+    // segunda, PostgREST responde `PGRST201` en TIEMPO DE EJECUCION: el sintoma
+    // seria la pantalla del aseador caida en produccion, no un fallo de compilar.
+    const c = clienteQueDevuelve({ data: filaCompleta(), error: null });
+    await leerAseoDelAseador(c as ClienteFalso, ASEO_ID);
+
+    const columnas: string = c.select.mock.calls[0][0];
+
+    expect(columnas).toContain('cleaning_checklist_items!cleaning_checklist_items_cleaning_id_fkey');
+    expect(columnas).toContain('cleaning_room_skips!cleaning_room_skips_cleaning_id_fkey');
+  });
+
+  it('pide del checklist los siete campos que la proyeccion pura consume', async () => {
+    const c = clienteQueDevuelve({ data: filaCompleta(), error: null });
+    await leerAseoDelAseador(c as ClienteFalso, ASEO_ID);
+
+    const columnas: string = c.select.mock.calls[0][0];
+
+    for (const campo of [
+      'property_room_id',
+      'room_label',
+      'task_label',
+      'requiere_foto',
+      'sort_order',
+      'done_at',
+    ]) {
+      expect(columnas).toContain(campo);
+    }
+    // El motivo del salto, que es lo que la cabecera del cuarto pinta.
+    expect(columnas).toContain('motivo');
+  });
+
+  it('devuelve arreglos vacios cuando los embed llegan nulos', async () => {
+    // Un embed a-muchos ausente llega nulo, y el modulo de dominio RECORRE. Sin
+    // normalizar aqui, la pantalla del aseador se cae leyendo `.length` de null.
+    const c = clienteQueDevuelve({
+      data: filaCompleta({ checklist: null, skips: null }),
+      error: null,
+    });
+
+    const aseo = await leerAseoDelAseador(c as ClienteFalso, ASEO_ID);
+
+    expect(aseo?.checklist).toEqual([]);
+    expect(aseo?.skips).toEqual([]);
+  });
+
+  it('un aseo sin confirmar llega con el checklist vacio, y NO es null', async () => {
+    // `confirm_cleaning` es quien materializa las filas. Antes de eso no
+    // existen, y eso no es un error: es el vacio que la pantalla sabe decir.
+    const c = clienteQueDevuelve({
+      data: filaCompleta({ confirmado_at: null, checklist: [] }),
+      error: null,
+    });
+
+    const aseo = await leerAseoDelAseador(c as ClienteFalso, ASEO_ID);
+
+    expect(aseo).not.toBeNull();
+    expect(aseo?.checklist).toHaveLength(0);
+  });
+
+  it('pasa las tareas tal como vienen, sin reordenarlas ni agruparlas', async () => {
+    // Agrupar es trabajo de `lib/domain/checklist.ts`, y hacerlo tambien aqui
+    // seria el segundo sitio donde el mismo orden puede salir distinto.
+    const c = clienteQueDevuelve({ data: filaCompleta(), error: null });
+
+    const aseo = await leerAseoDelAseador(c as ClienteFalso, ASEO_ID);
+
+    expect(aseo?.checklist).toHaveLength(1);
+    expect(aseo?.checklist[0].room_label).toBe('Baño principal');
   });
 });
