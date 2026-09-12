@@ -9,10 +9,14 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useEstadoDeAvisos } from '@/hooks/usarEstadoDeAvisos';
 import type { ClaveEstadoAvisos, IconoEstadoAvisos } from '@/lib/domain/avisos';
-import { esNavegadorEmbebido, plataformaVisible } from '@/lib/push/plataforma';
+import {
+  aFormDataDeSuscripcion,
+  esNavegadorEmbebido,
+  plataformaVisible,
+} from '@/lib/push/plataforma';
 import { cn } from '@/lib/utils';
 
-import { BotonActivarAvisos, aFormDataDeSuscripcion } from './BotonActivarAvisos';
+import { BotonActivarAvisos } from './BotonActivarAvisos';
 
 /**
  * EL BANNER DE AVISOS (PWA-03, criterio 4 del ROADMAP, 05-UI-SPEC §7).

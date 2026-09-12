@@ -1,3 +1,5 @@
+import { BellOff } from 'lucide-react';
+
 import { SIN_ASIGNAR, type ChipDeCarga } from '@/lib/data/operacion';
 import { cn } from '@/lib/utils';
 
@@ -24,12 +26,36 @@ import { cn } from '@/lib/utils';
  * aseador esta diferido a v2, asi que pintar de rojo el 5 seria inventar una
  * metrica de desempeno donde solo hay un conteo operativo. El unico chip con color
  * es `Sin asignar`, y ahi el color REFUERZA lo que la etiqueta ya dice.
+ *
+ * ── LA MARCA DE QUIEN SE QUEDO MUDO (D-03, 05-UI-SPEC §11.2) ───────────────
+ * Esta es la superficie de vistazo de D-03: es donde el admin decide quien hace
+ * que, asi que es donde sirve saber a quien no le va a sonar el telefono.
+ *
+ *   - Solo `Sin avisos`. `Sin probar` NO se marca aqui: la franja es un vistazo de
+ *     diez segundos y dos niveles de advertencia en un chip de 32px la vuelven
+ *     ilegible. Ese matiz vive en la columna `AVISOS` de `/aseadores` (§11.1).
+ *   - EL CHIP CONSERVA SU FONDO `--muted`. El tinte de aviso esta reservado a
+ *     `Sin asignar` (04-UI-SPEC §8.2) y duplicarlo haria que dos hechos distintos
+ *     se vean igual. Solo el icono lleva color.
+ *   - `Sin asignar` nunca lleva campana: no es una persona.
  */
-export function FranjaCarga({ chips }: { chips: ChipDeCarga[] }) {
-  // Si hoy no hay ningun aseo vivo, la franja no se renderiza: no hay carga que
-  // mostrar, y ocho chips en cero son ocho cajas diciendo que no pasa nada.
+export function FranjaCarga({ chips, sinAvisos }: { chips: ChipDeCarga[]; sinAvisos: string[] }) {
+  /**
+   * ── LA CONDICION DE RENDER ES UNA DISYUNCION, Y NO SE SIMPLIFICA ─────────
+   *
+   * Antes: si hoy no habia ningun aseo vivo, la franja no se renderizaba, porque
+   * ocho chips en cero son ocho cajas diciendo que no pasa nada.
+   *
+   * Ahora tambien se renderiza cuando hay al menos un aseador activo sin avisos,
+   * AUNQUE la carga de hoy sea cero entera. Es contraintuitivo y alguien lo va a
+   * querer "limpiar", asi que la razon queda escrita: sin esta segunda rama, el
+   * dia que nadie tenga aseos asignados desaparece la unica superficie del
+   * dashboard donde se ve quien quedo mudo, Y ESE ES JUSTO EL DIA EN QUE HAY
+   * TIEMPO PARA ARREGLARLO (§11.2).
+   */
   const hayCarga = chips.some((chip) => chip.conteo > 0);
-  if (!hayCarga) return null;
+  const hayMudos = sinAvisos.length > 0;
+  if (!hayCarga && !hayMudos) return null;
 
   return (
     <div className="flex flex-wrap items-center gap-sm">
@@ -40,16 +66,41 @@ export function FranjaCarga({ chips }: { chips: ChipDeCarga[] }) {
       <ul className="flex flex-wrap items-center gap-sm">
         {chips.map((chip) => {
           const huerfano = chip.aseadorId === null;
+          // La comprobacion de id nulo va PRIMERO y escrita sobre `chip.aseadorId`
+          // y no sobre `huerfano`: ademas de cerrarle la puerta al chip sin
+          // persona —que nunca lleva campana, porque no es una persona—, es lo que
+          // estrecha el tipo para `includes()`. Con la variable booleana, `tsc` no
+          // lo estrecha.
+          const mudo = chip.aseadorId !== null && sinAvisos.includes(chip.aseadorId);
 
           return (
             <li
               key={chip.aseadorId ?? SIN_ASIGNAR}
+              title={
+                mudo
+                  ? `${chip.nombre} no tiene avisos activos. Si le confirmas un aseo, no le va a sonar el teléfono.`
+                  : undefined
+              }
               className={cn(
                 'flex h-chip items-center gap-sm rounded-md px-md',
                 huerfano ? 'bg-surface-warn text-status-warn' : 'bg-muted text-foreground',
               )}
             >
-              <span className="text-micro">{chip.nombre}</span>
+              {/* El icono y el nombre van en su propio grupo con `gap-xs` (4px,
+                  §11.2). El `gap-sm` del chip es el que separa el nombre del
+                  conteo y no cambia. */}
+              <span className="flex items-center gap-xs">
+                {mudo && (
+                  <BellOff
+                    className="size-3 shrink-0 text-status-warn"
+                    strokeWidth={2}
+                    role="img"
+                    aria-label="Sin avisos activos"
+                  />
+                )}
+                <span className="text-micro">{chip.nombre}</span>
+              </span>
+
               {/* `tabular-nums` (§3): sin el, ocho conteos de ancho variable
                   bailan al actualizarse la pantalla. */}
               <span className="text-micro font-semibold tabular-nums">{chip.conteo}</span>

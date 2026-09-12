@@ -22,10 +22,16 @@ import type { CodigoDePush } from '@/lib/data/push';
  *
  * Mismas palabras y mismo molde que `app/(admin)/operacion/_actions.ts`, con UNA
  * diferencia que hay que leer despacio: aqui el guard es `exigirSesion()` y NO
- * el que ademas exige rol de administrador. Estas tres actions las llama un
- * aseador, no el admin, y el nombre de aquel otro guard no se escribe en este
- * archivo ni en prosa: el criterio que lo vigila es un grep sin filtro de
- * comentarios, igual que los guardarrailes de `scripts/ci/`.
+ * el que ademas exige rol de administrador. El nombre de aquel otro guard no se
+ * escribe en este archivo ni en prosa: el criterio que lo vigila es un grep sin
+ * filtro de comentarios, igual que los guardarrailes de `scripts/ci/`.
+ *
+ * Y esa eleccion de guard NO es un descuido que haya que "endurecer": desde el
+ * plan 05-15, `registrarSuscripcion` la llama TAMBIEN la franja de permiso de
+ * `/operacion` (05-UI-SPEC §13), porque el criterio 3 de NOTIF-02 exige que el
+ * administrador reciba avisos y para eso su navegador tiene que registrarse por
+ * la misma puerta. La action escribe SIEMPRE sobre `user_id = auth.uid()`, asi
+ * que quien la llama solo puede registrar su propio navegador, sea quien sea.
  *
  * Invertir 1 y 3 no es un descuido de estilo: convertiria el registro de
  * suscripciones en un endpoint abierto, y el `endpoint` de una suscripcion es

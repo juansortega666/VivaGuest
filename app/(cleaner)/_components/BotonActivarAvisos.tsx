@@ -5,7 +5,7 @@ import { useState } from 'react';
 
 import { registrarSuscripcion } from '@/app/(cleaner)/_actions';
 import { Button } from '@/components/ui/button';
-import { base64UrlAUint8, soportaDeclarativo } from '@/lib/push/plataforma';
+import { aFormDataDeSuscripcion, base64UrlAUint8 } from '@/lib/push/plataforma';
 
 /**
  * EL UNICO SITIO DEL PROYECTO ENTERO QUE PIDE EL PERMISO DE AVISOS.
@@ -124,21 +124,4 @@ export function BotonActivarAvisos({
       )}
     </Button>
   );
-}
-
-/**
- * El `PushSubscriptionJSON` del navegador, aplanado al `FormData` que espera
- * `registrarSuscripcion`.
- *
- * `soportaDeclarativo()` se evalua aqui y no en el servidor porque es un feature
- * detect DEL NAVEGADOR (D-07): en el servidor no hay nada que detectar.
- */
-export function aFormDataDeSuscripcion(suscripcion: PushSubscriptionJSON): FormData {
-  const f = new FormData();
-  f.set('endpoint', suscripcion.endpoint ?? '');
-  f.set('p256dh', suscripcion.keys?.p256dh ?? '');
-  f.set('auth', suscripcion.keys?.auth ?? '');
-  f.set('soporta_declarativo', soportaDeclarativo() ? 'true' : 'false');
-  f.set('user_agent', navigator.userAgent);
-  return f;
 }

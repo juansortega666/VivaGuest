@@ -115,3 +115,48 @@ export async function leerEstadoDeAvisosPorAseador(
 
   return indice;
 }
+
+/**
+ * El endpoint que el servidor tiene registrado para ESTE usuario, o `null`.
+ *
+ * Vive aqui y no repetida en cada layout porque la consumen DOS arboles: el
+ * shell del aseador (`app/(cleaner)/layout.tsx`, banner de §7) y la franja de
+ * permiso del admin de `/operacion` (§13). Dos copias del mismo `select` serian
+ * dos sitios donde cambiar la forma del dato, que es exactamente la razon por la
+ * que existe este modulo.
+ *
+ * ── PARA QUE SIRVE, Y POR QUE NO ES OPCIONAL ───────────────────────────────
+ *
+ * Es contra esto que el hook compara la suscripcion viva del navegador. Sin este
+ * dato el hook no tendria con que comparar y REPARARIA EN SILENCIO EN CADA
+ * ARRANQUE, rotando el endpoint y dejando huerfanos los avisos ya encolados al
+ * anterior.
+ *
+ * ── NO ES UNA CREDENCIAL QUE SE FILTRE A NADIE ─────────────────────────────
+ *
+ * Es el endpoint del PROPIO navegador del PROPIO usuario. La policy
+ * `push_subs_own_all` de la migracion 08 ya acota la consulta a sus filas; el
+ * `.eq('user_id', ...)` es la segunda capa. Esto NO contradice que el admin no
+ * pueda ver los endpoints AJENOS: para eso sigue existiendo el agregado de
+ * arriba, que es lo que cierra T-05-07.
+ *
+ * DEUDA DECLARADA, heredada del plan 05-10: se toma UNA suscripcion, la viva mas
+ * reciente. Un usuario con DOS navegadores vivos haria que el segundo no
+ * coincidiera y se reparase en cada arranque. El hook recibe un endpoint y no un
+ * conjunto, y ampliarlo seria una modificacion de aquel modulo.
+ */
+export async function leerEndpointDePushPropio(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from('push_subscriptions')
+    .select('endpoint')
+    .eq('user_id', userId)
+    .is('revoked_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return data?.endpoint ?? null;
+}

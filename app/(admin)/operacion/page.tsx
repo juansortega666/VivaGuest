@@ -3,7 +3,11 @@ import { redirect } from 'next/navigation';
 
 import { NoAutorizado, exigirAdmin } from '@/lib/auth/guards';
 import { listarApartamentos } from '@/lib/data/apartamentos';
-import { SIN_AVISOS_REGISTRADOS, leerEstadoDeAvisosPorAseador } from '@/lib/data/avisos';
+import {
+  SIN_AVISOS_REGISTRADOS,
+  leerEndpointDePushPropio,
+  leerEstadoDeAvisosPorAseador,
+} from '@/lib/data/avisos';
 import {
   agruparPorDia,
   bandejaSinConfirmar,
@@ -25,6 +29,7 @@ import {
 } from '@/lib/domain/alertas';
 import { estadoDeAvisosDeAseador } from '@/lib/domain/avisos';
 import { formatFechaBog } from '@/lib/domain/dates';
+import { publicEnv } from '@/lib/env';
 
 import { BandejaSinConfirmar } from './_components/BandejaSinConfirmar';
 import { BloqueDia } from './_components/BloqueDia';
@@ -34,6 +39,7 @@ import { FranjaCarga } from './_components/FranjaCarga';
 import type { ContextoDeAcciones } from './_components/MenuAseo';
 import { PanelAlertas } from './_components/PanelAlertas';
 import { SincronizacionEnVivo } from './_components/SincronizacionEnVivo';
+import { TiraAvisosAdmin } from './_components/TiraAvisosAdmin';
 
 export const metadata: Metadata = {
   title: 'Operación · VivaGuest',
@@ -194,8 +200,15 @@ export default async function OperacionPage({
 
   // En paralelo: son consultas independientes contra la misma sesion, y
   // encadenarlas con `await` seguidos sumaria todas las latencias por nada.
-  const [operacion, aseadores, apartamentos, notificaciones, ultimoExito, avisos] =
-    await Promise.all([
+  const [
+    operacion,
+    aseadores,
+    apartamentos,
+    notificaciones,
+    ultimoExito,
+    avisos,
+    endpointDelAdmin,
+  ] = await Promise.all([
       leerOperacion(supabase, ahoraMs),
       leerAseadoresActivos(supabase),
       listarApartamentos(supabase),
@@ -208,6 +221,10 @@ export default async function OperacionPage({
       // a las otras cinco no compraría nada. Es UNA llamada para los ocho
       // aseadores, no una por aseador.
       leerEstadoDeAvisosPorAseador(supabase),
+      // NOTIF-02, criterio 3 (§13): el endpoint del propio navegador del propio
+      // admin, contra el que el hook de la franja compara su suscripcion viva.
+      // Sin el, el hook repararia en silencio en cada carga de la pantalla.
+      leerEndpointDePushPropio(supabase, user.id),
     ]);
 
   const bloques = agruparPorDia(operacion.filas, operacion.hoy);
@@ -360,7 +377,17 @@ export default async function OperacionPage({
         {/* Carril ancho. `min-w-0` para que una tabla ancha haga scroll dentro de
             su card en vez de ensanchar la pista de la rejilla. */}
         <div className="flex min-w-0 flex-col gap-lg">
-          <FranjaCarga chips={chips} />
+          {/*
+            §13.2: debajo de la cabecera de pagina y ENCIMA de la franja de
+            carga, dentro del carril ancho. No es sticky y no empuja el carril
+            lateral, que conserva su presupuesto de altura cerrado.
+          */}
+          <TiraAvisosAdmin
+            clavePublica={publicEnv().NEXT_PUBLIC_VAPID_PUBLIC_KEY}
+            endpointRegistrado={endpointDelAdmin}
+          />
+
+          <FranjaCarga chips={chips} sinAvisos={aseadoresSinAvisos} />
 
           {/*
             `Hoy` nace expandido; `Manana` y `Siguientes`, colapsados (§8.1). El

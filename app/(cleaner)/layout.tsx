@@ -1,5 +1,6 @@
 import { BannerAvisos } from '@/app/(cleaner)/_components/BannerAvisos';
 import { exigirSesion } from '@/lib/auth/guards';
+import { leerEndpointDePushPropio } from '@/lib/data/avisos';
 import { publicEnv } from '@/lib/env';
 
 /**
@@ -33,28 +34,15 @@ export default async function CleanerLayout({
    *
    * Baja al cliente porque es contra esto que el hook compara la suscripcion
    * viva del navegador: una suscripcion que el navegador rehizo por su cuenta es
-   * exactamente el estado S4. Sin este dato, el hook no tendria con que comparar
-   * y **repararia en silencio en cada arranque de la app**, rotando el endpoint
-   * y dejando huerfanos los avisos ya encolados al anterior.
+   * exactamente el estado S4.
    *
-   * NO es una credencial que se filtre a nadie: es el endpoint del propio
-   * telefono del propio usuario, y la policy `push_subs_own_all` ya acota la
-   * consulta a sus filas. El `.eq('user_id', …)` es la segunda capa.
-   *
-   * DEUDA DECLARADA: se toma UNA suscripcion, la viva mas reciente. Un aseador
-   * con DOS telefonos vivos haria que el segundo no coincidiera y se reparase en
-   * cada arranque. El hook de `hooks/usarEstadoDeAvisos.ts` recibe un endpoint y
-   * no un conjunto, y ampliarlo seria una modificacion de aquel modulo. Con ocho
-   * aseadores de un telefono cada uno, el caso no existe hoy.
+   * La consulta vive en `lib/data/avisos.ts` y no escrita aqui desde el plan
+   * 05-15, cuando la franja de permiso del admin (§13) paso a necesitar la misma
+   * lectura: dos copias del mismo `select` serian dos sitios donde cambiar la
+   * forma del dato. Las razones de por que no es opcional y de por que no filtra
+   * ninguna credencial estan escritas alli.
    */
-  const { data: suscripcion } = await supabase
-    .from('push_subscriptions')
-    .select('endpoint')
-    .eq('user_id', user.id)
-    .is('revoked_at', null)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const endpointRegistrado = await leerEndpointDePushPropio(supabase, user.id);
 
   return (
     <div className="min-h-svh bg-canvas">
@@ -66,7 +54,7 @@ export default async function CleanerLayout({
         */}
         <BannerAvisos
           clavePublica={publicEnv().NEXT_PUBLIC_VAPID_PUBLIC_KEY}
-          endpointRegistrado={suscripcion?.endpoint ?? null}
+          endpointRegistrado={endpointRegistrado}
         />
 
         {children}

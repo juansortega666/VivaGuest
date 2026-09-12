@@ -186,3 +186,28 @@ export function base64UrlAUint8(
 
   return bytes;
 }
+
+/**
+ * El `PushSubscriptionJSON` del navegador, aplanado al `FormData` que espera
+ * `registrarSuscripcion`.
+ *
+ * ── POR QUE VIVE AQUI Y NO JUNTO AL BOTON QUE LA ESTRENO ───────────────────
+ *
+ * Porque LEE EL NAVEGADOR —`navigator.userAgent` y el feature detect del formato
+ * declarativo—, que es la definicion de este modulo, y porque desde el plan 05-15
+ * la llaman DOS arboles: el banner del aseador y la franja de permiso del admin
+ * de `/operacion` (§13). Dejarla en un componente de `app/(cleaner)/` obligaria a
+ * `(admin)` a importar de un arbol que no es el suyo.
+ *
+ * `soportaDeclarativo()` se evalua aqui y no en el servidor porque es un feature
+ * detect DEL NAVEGADOR (D-07): en el servidor no hay nada que detectar.
+ */
+export function aFormDataDeSuscripcion(suscripcion: PushSubscriptionJSON): FormData {
+  const f = new FormData();
+  f.set('endpoint', suscripcion.endpoint ?? '');
+  f.set('p256dh', suscripcion.keys?.p256dh ?? '');
+  f.set('auth', suscripcion.keys?.auth ?? '');
+  f.set('soporta_declarativo', soportaDeclarativo() ? 'true' : 'false');
+  f.set('user_agent', navigator.userAgent);
+  return f;
+}
