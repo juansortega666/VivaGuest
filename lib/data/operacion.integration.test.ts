@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
 import {
+  agruparPorDia,
   leerAlertasDelAdmin,
   leerAseadoresActivos,
   leerOperacion,
@@ -166,8 +167,8 @@ describe('leerOperacion contra PostgREST real', () => {
     expect(enCurso?.aseador?.full_name).toBe('Aseadora A de escenario');
   });
 
-  test('trae los cinco aseos de la ventana, cancelado incluido, y deja fuera el de ayer', async () => {
-    const { filas } = await leerOperacion(clienteConToken(tokenAdmin));
+  test('trae los seis aseos de la ventana, cancelado y el de AYER incluidos (D-08)', async () => {
+    const { filas, hoy } = await leerOperacion(clienteConToken(tokenAdmin));
 
     const delEscenario = new Set(
       filas
@@ -180,6 +181,12 @@ describe('leerOperacion contra PostgREST real', () => {
 
     expect(delEscenario).toEqual(
       new Set([
+        // HASTA D-08 ESTE NO LLEGABA, y esa era la mitad de abajo del defecto: la
+        // ventana cortaba en `hoy`, así que un aseo de ayer vivo y vencido no
+        // podía alertar porque `alertasComputadas()` nunca lo veía. Acá está
+        // terminado, pero lo que se mide es la VENTANA DE LA CONSULTA, que no
+        // sabe de estados. Criterio 7 del ROADMAP.
+        escenario.aseoTerminado, // ayer
         escenario.aseoEnCurso, // hoy
         escenario.aseoCancelado, // hoy, y SE trae: la cabecera del día lo cuenta
         escenario.aseoInerte, // hoy, gestión externa
@@ -188,15 +195,22 @@ describe('leerOperacion contra PostgREST real', () => {
       ]),
     );
 
-    // Control del "no aparece": el aseo terminado de AYER existe de verdad en la
-    // base, así que su ausencia de arriba es la ventana y no un fixture vacío.
+    // Y el de ayer es de ayer de verdad: la aserción de arriba mide la ventana y
+    // no un fixture que hubiera cambiado de fecha por debajo.
     const { data: terminado } = await servicio()
       .from('cleanings')
       .select('id, scheduled_date')
       .eq('id', escenario.aseoTerminado)
       .single();
     expect(terminado?.scheduled_date).toBe(escenario.fechas.ayer);
-    expect(delEscenario.has(escenario.aseoTerminado)).toBe(false);
+
+    // ── Y ACÁ SE VE POR QUÉ SON DOS FILTROS Y NO UNO ────────────────────────
+    // La consulta lo trae; la PROYECCIÓN decide qué hacer con él. Un aseo
+    // terminado de ayer no está atrasado, está cerrado, así que no entra en
+    // `Atrasados` (05-UI-SPEC §12.2). Las dos mitades, medidas juntas y contra
+    // PostgREST de verdad.
+    const bloques = agruparPorDia(filas, hoy);
+    expect(bloques.atrasados.flatMap((g) => g.filas)).toHaveLength(0);
   });
 
   test('las filas de gestión externa vienen en el MISMO conjunto, no en otra consulta', async () => {
@@ -231,10 +245,15 @@ describe('leerOperacion contra PostgREST real', () => {
     expect(delAdmin.some((f) => f.id === escenario.aseoSinConfirmar)).toBe(true);
 
     // `cleanings_cleaner_select` la acota a `aseador_id = auth.uid()`: dentro de
-    // la ventana eso es el aseo en curso de hoy y el pendiente de dentro de tres
-    // días. Ni la fila inerte ni la sin confirmar tienen aseadora.
+    // la ventana eso es el terminado de ayer (que desde D-08 la ventana sí
+    // alcanza), el aseo en curso de hoy y el pendiente de dentro de tres días.
+    // Ni la fila inerte ni la sin confirmar tienen aseadora.
+    //
+    // LO QUE ESTA ASERCIÓN MIDE NO CAMBIÓ CON D-08 y por eso sigue acá: que la
+    // RLS recorte por `aseador_id`. Ampliar la ventana no le dio a la aseadora ni
+    // una fila que no fuera suya.
     expect(new Set(deLaAseadora.map((f) => f.id))).toEqual(
-      new Set([escenario.aseoEnCurso, escenario.aseoPendiente]),
+      new Set([escenario.aseoTerminado, escenario.aseoEnCurso, escenario.aseoPendiente]),
     );
     for (const f of deLaAseadora) expect(f.aseador_id).toBe(escenario.aseadorA);
 
