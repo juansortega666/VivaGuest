@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 05
-current_phase_name: notificaciones-push-e-instalacion-de-la-pwa
-status: executing
-stopped_at: "Fase 05 cerrada funcionalmente y mergeada a main. 05-12 (wizard de /instalar) y 05-17 (validacion en telefono fisico) DIFERIDOS por decision del desarrollador el 2026-09-12: la instalacion asistida presencial funciona sin ellos. Estan en .planning/BACKLOG.md. Siguiente: Fase 6, PWA del aseador"
-last_updated: "2026-09-12T03:05:00.000Z"
+current_phase: 06
+current_phase_name: pwa-del-aseador
+status: planning
+stopped_at: "Fase 6 discutida con el desarrollador el 2026-09-12. 06-CONTEXT.md escrito con D-01 a D-08. ROADMAP corregido: criterio 2 (el skip de evidencia ya no bloquea), criterio 4 (offline DIFERIDO) y criterio 5 (reporte unico clasificado, no-puedo antes de empezar). Siguiente: ui-phase 6"
+last_updated: "2026-09-12T03:40:00.000Z"
 last_activity: 2026-09-12
-last_activity_desc: Fase 5 mergeada a main, ramas viejas borradas, y multi-tenant para LATAM registrado como milestone v2 en BACKLOG.md
+last_activity_desc: Fase 6 definida en conversacion directa: acordeones por cuarto, evidencia al final guiada, skip con motivo, sin offline
 progress:
   total_phases: 9
   completed_phases: 4

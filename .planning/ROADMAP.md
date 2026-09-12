@@ -186,15 +186,15 @@ Plans:
 - [ ] 05-17-PLAN.md — E2E en Chromium, las doce puertas y los procedimientos manuales en iPhone físico
 
 ### Phase 6: PWA del aseador, offline-first
-**Goal**: El aseador ejecuta el aseo completo desde el teléfono, con o sin señal, y nada de lo que hizo en campo se pierde
+**Goal**: El aseador ejecuta el aseo completo desde el teléfono y deja evidencia de lo que hizo. **Corregido 2026-09-12:** el "con o sin señal" sale del alcance, ver criterio 4
 **Depends on**: Fases 2 y 5
 **Requirements**: PWA-01, PWA-04, PWA-05, PWA-06, PWA-07, PWA-08, PWA-09, PWA-10, CHECK-01, CHECK-02, CHECK-03, CHECK-04, REPORT-01, REPORT-02, REPORT-03
 **Success Criteria** (qué debe ser VERDAD):
   1. El aseador ve la lista de sus aseos asignados y abre el detalle con instrucciones y código de acceso
-  2. El aseador marca "Empecé", completa el checklist armado únicamente con los cuartos que ese apartamento tiene, y "Terminé" queda bloqueado mientras falte una tarea o la foto de algún cuarto
+  2. El aseador marca "Empecé", completa el checklist armado únicamente con los cuartos que ese apartamento tiene, y al finalizar el sistema le pide la evidencia cuarto por cuarto. **Corregido 2026-09-12** (`06-CONTEXT.md` D-06): "Terminé" **ya no se bloquea** por falta de foto. El aseador puede saltar un cuarto eligiendo un motivo de una lista cerrada, y entonces el aseo queda marcado **sin evidencia completa** y eso le sale al admin. Se evaluó bloquear y se eligió marcar: un bloqueo deja al aseador atrapado en campo, y una lista de motivos además se puede contar
   3. Las fotos se comprimen a ~200 KB con lado largo de 1280 px y pierden el EXIF en el dispositivo antes de subirse, conservando solo la corrección de orientación
-  4. El aseador completa un aseo entero en modo avión, cierra la app, y al recuperar señal todo sube sin duplicarse ni perderse, con el contador de acciones pendientes visible mientras tanto
-  5. El aseador reporta daños con foto y descripción, gastos con foto del recibo y faltantes desde la lista base más "Otros", y pulsa "no puedo" para devolver el aseo a Pendiente sin asignar
+  4. ~~El aseador completa un aseo entero en modo avión y todo sube al recuperar señal.~~ **DIFERIDO 2026-09-12** por decisión explícita del desarrollador (`06-CONTEXT.md` D-08). Era ~la mitad del trabajo de la fase. Riesgo aceptado y registrado en `.planning/BACKLOG.md`: si se cae la señal a mitad del aseo se pierde el trabajo de campo, y las fotos son justo lo que falla con mala señal
+  5. El aseador reporta con **un solo campo libre clasificado** en daño, gasto o faltante, y **el gasto lleva monto** para que el cierre mensual de la Fase 7 lo pueda sumar (`06-CONTEXT.md` D-07). El "no puedo" **no es un botón dentro del aseo**: es la segunda opción al tocar la tarjeta, antes de empezar, y devuelve el aseo a Pendiente sin asignar avisando al admin (D-02)
 **Plans**: TBD
 **UI hint**: yes
 
