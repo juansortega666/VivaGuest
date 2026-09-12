@@ -70,23 +70,23 @@
 - [ ] **PWA-04**: Aseador pulsa "Empecé" y queda registrada la fecha/hora, sin que eso bloquee ninguna otra acción
 - [ ] **PWA-05**: Aseador pulsa "no puedo" y el aseo vuelve a Pendiente sin asignar, notificando al admin
 - [ ] **PWA-06**: Aseador pulsa "Terminé" y queda registrada la fecha/hora, notificando al admin
-- [ ] **PWA-07**: "Terminé" queda bloqueado mientras falte alguna tarea del checklist o la evidencia de algún cuarto
-- [ ] **PWA-08**: Aseador completa el aseo sin conexión y las acciones se encolan localmente
-- [ ] **PWA-09**: Las acciones encoladas suben al recuperar conexión sin duplicarse ni perderse
-- [ ] **PWA-10**: Aseador ve cuántas acciones tiene pendientes por subir
+- [ ] **PWA-07**: Al terminar, el sistema pide la evidencia cuarto por cuarto. **CORREGIDO 2026-09-12** (`06-CONTEXT.md` D-06): "Terminé" **ya no se bloquea**. El aseador puede saltar un cuarto eligiendo un motivo de una lista cerrada, y el aseo queda marcado **sin evidencia completa**, visible para el admin. Razón: un bloqueo deja al aseador atrapado en campo y termina en una llamada telefónica, que es justo lo que el producto elimina
+- [ ] ~~**PWA-08**: Aseador completa el aseo sin conexión y las acciones se encolan localmente~~ → **DIFERIDO a v2 el 2026-09-12** (`06-CONTEXT.md` D-08). Riesgo aceptado en `.planning/BACKLOG.md`
+- [ ] ~~**PWA-09**: Las acciones encoladas suben al recuperar conexión sin duplicarse ni perderse~~ → **DIFERIDO a v2 el 2026-09-12** (D-08)
+- [ ] ~~**PWA-10**: Aseador ve cuántas acciones tiene pendientes por subir~~ → **DIFERIDO a v2 el 2026-09-12** (D-08). `06-UI-SPEC.md` §11.4 lo convierte en prohibición activa: **ninguna pantalla puede mostrar contador de pendientes**, porque sugerir que se guardó en el dispositivo cuando no es cierto es peor que no tener offline
 
 ### Checklist y evidencia
 
 - [ ] **CHECK-01**: El checklist se arma con los cuartos que tiene ese apartamento y no muestra cuartos que no existen
 - [ ] **CHECK-02**: Aseador marca las tareas de cada cuarto al final del aseo
-- [ ] **CHECK-03**: Aseador adjunta evidencia fotográfica de cada cuarto en el mismo paso del checklist
+- [ ] **CHECK-03**: Aseador adjunta evidencia fotográfica de cada cuarto. **CORREGIDO 2026-09-12** (`06-CONTEXT.md` D-05): **no** en el mismo paso del checklist, sino al final, en un asistente guiado cuarto por cuarto. Se planteó el riesgo (fotografiar desde el pasillo cuando ya salió) y se aceptó a cambio de un flujo más simple
 - [ ] **CHECK-04**: Las fotos se comprimen en el dispositivo a ~200 KB con lado largo de 1280 px y se les elimina el EXIF antes de subirse
 
 ### Reportes de campo
 
 - [ ] **REPORT-01**: Aseador reporta un daño con foto y descripción libre, y el admin recibe notificación inmediata
 - [ ] **REPORT-02**: Aseador reporta un gasto con foto del recibo
-- [ ] **REPORT-03**: Aseador reporta faltantes desde la lista base del apartamento más un campo "Otros", y el admin recibe notificación
+- [ ] **REPORT-03**: Aseador reporta faltantes y el admin recibe notificación. **CORREGIDO 2026-09-12** (`06-CONTEXT.md` D-07): **no** desde la lista base del apartamento, sino con un campo libre clasificado como faltante, igual que el daño y el gasto. Un solo formulario con tres categorías en vez de tres formularios distintos
 - [x] **REPORT-04**: Los daños reportados quedan en el historial del apartamento
 
 ### Notificaciones
@@ -221,17 +221,17 @@
 | PWA-04 | Fase 6 | Pending |
 | PWA-05 | Fase 6 | Pending |
 | PWA-06 | Fase 6 | Pending |
-| PWA-07 | Fase 6 | Pending |
-| PWA-08 | Fase 6 | Pending |
-| PWA-09 | Fase 6 | Pending |
-| PWA-10 | Fase 6 | Pending |
+| PWA-07 | Fase 6 | Pending (corregido 2026-09-12) |
+| PWA-08 | v2 | Deferred |
+| PWA-09 | v2 | Deferred |
+| PWA-10 | v2 | Deferred |
 | CHECK-01 | Fase 6 | Pending |
 | CHECK-02 | Fase 6 | Pending |
-| CHECK-03 | Fase 6 | Pending |
+| CHECK-03 | Fase 6 | Pending (corregido 2026-09-12) |
 | CHECK-04 | Fase 6 | Pending |
 | REPORT-01 | Fase 6 | Pending |
 | REPORT-02 | Fase 6 | Pending |
-| REPORT-03 | Fase 6 | Pending |
+| REPORT-03 | Fase 6 | Pending (corregido 2026-09-12) |
 | REPORT-04 | Fase 4 | Complete |
 | NOTIF-01 | Fase 5 | Pending |
 | NOTIF-02 | Fase 5 | Pending |

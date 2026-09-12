@@ -5,10 +5,10 @@ milestone_name: milestone
 current_phase: 06
 current_phase_name: pwa-del-aseador
 status: planning
-stopped_at: "Fase 6: 06-CONTEXT.md y 06-UI-SPEC.md listos. UI-SPEC aprobado 6/6 tras corregir dos FLAG (faltaba punto focal por pantalla y la proporcion 60/30/10). Instala accordion y radio-group, que disparan la regla del ancho. Siguiente: plan-phase 6"
-last_updated: "2026-09-12T04:20:00.000Z"
+stopped_at: "Fase 6 planeada: 10 planes en 7 waves, 06-VALIDATION.md aprobado. Hallazgo: el backend ya existia casi entero (start_cleaning, toggle_checklist_item, finish_cleaning), lo unico que estorbaba era el bloqueo de PWA-07 que D-06 derogo. REQUIREMENTS.md propagado: PWA-07 y CHECK-03 corregidos, REPORT-03 simplificado, PWA-08/09/10 diferidos a v2. Siguiente: execute-phase 6"
+last_updated: "2026-09-12T05:10:00.000Z"
 last_activity: 2026-09-12
-last_activity_desc: ui-phase 6 cerrado: contrato visual de la PWA del aseador aprobado 6/6
+last_activity_desc: plan-phase 6 cerrado: 10 planes, y seis requisitos propagados desde las decisiones de la conversacion
 progress:
   total_phases: 9
   completed_phases: 4

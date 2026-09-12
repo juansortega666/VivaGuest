@@ -195,8 +195,26 @@ Plans:
   3. Las fotos se comprimen a ~200 KB con lado largo de 1280 px y pierden el EXIF en el dispositivo antes de subirse, conservando solo la corrección de orientación
   4. ~~El aseador completa un aseo entero en modo avión y todo sube al recuperar señal.~~ **DIFERIDO 2026-09-12** por decisión explícita del desarrollador (`06-CONTEXT.md` D-08). Era ~la mitad del trabajo de la fase. Riesgo aceptado y registrado en `.planning/BACKLOG.md`: si se cae la señal a mitad del aseo se pierde el trabajo de campo, y las fotos son justo lo que falla con mala señal
   5. El aseador reporta con **un solo campo libre clasificado** en daño, gasto o faltante, y **el gasto lleva monto** para que el cierre mensual de la Fase 7 lo pueda sumar (`06-CONTEXT.md` D-07). El "no puedo" **no es un botón dentro del aseo**: es la segunda opción al tocar la tarjeta, antes de empezar, y devuelve el aseo a Pendiente sin asignar avisando al admin (D-02)
-**Plans**: TBD
+**Plans:** 10 plans en 7 waves
 **UI hint**: yes
+
+Plans:
+- [ ] 06-01-PLAN.md — Migración 18: derogar el bloqueo de "Terminé" (D-06), tabla de cuartos saltados con motivo, y moneda en `expenses`
+- [ ] 06-02-PLAN.md — Migración 19: los tres RPC de reporte, cada uno con su notificación al admin. Cobra la promesa de D-04 de la Fase 5
+- [ ] 06-03-PLAN.md — Lógica pura: armado del checklist, progreso, evidencia incompleta, motivos y esquema del reporte
+- [ ] 06-04-PLAN.md — La cadena de la foto: compresión con borrado de EXIF, ruta decidida por el servidor y registro idempotente
+- [ ] 06-05-PLAN.md — `accordion` y `radio-group` saneadas de la trampa del ancho, más los seis tokens de la fase
+- [ ] 06-06-PLAN.md — El home con sus tarjetas y la hoja de dos opciones: comenzar o reportar que no puede
+- [ ] 06-07-PLAN.md — El checklist en acordeón con marcado optimista y la barra fija de acción
+- [ ] 06-08-PLAN.md — El asistente de evidencia, con cámara nativa y skip con motivo de lista cerrada
+- [ ] 06-09-PLAN.md — El reporte clasificado con monto, y la pantalla de cierre
+- [ ] 06-10-PLAN.md — La señal en el dashboard del admin, el test de paridad SQL/TypeScript, el E2E y el recorrido en teléfono real
+
+**Hallazgo de planeación (2026-09-12):** el backend de esta fase **ya existía casi entero**.
+`start_cleaning`, `toggle_checklist_item` y `finish_cleaning` están construidos desde la Fase 1, y
+`confirm_cleaning` ya materializa el checklist al confirmar. Lo único que estorbaba era que
+`finish_cleaning` rechazaba con `P0001 checklist_incompleto`, que es justo lo que D-06 derogó. Por eso
+la fase son 10 planes y no 20.
 
 ### Phase 7: Financiero
 **Goal**: El admin ve cuánto deja cada aseo y cuánto le debe a cada aseador al cierre de mes
