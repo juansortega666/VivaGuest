@@ -86,4 +86,5 @@ respeten. Ver ahí su forma vigente.
 | Validación en teléfono físico (plan 05-17) | Fase 5 | Depende del wizard y de exponer la app por HTTPS |
 | Enviar una prueba de aviso desde `/aseadores` | Fase 5, deuda §20.6 | Un aseador puede quedarse en `Sin probar` para siempre y el admin no tiene cómo forzarle una prueba |
 | Modo oscuro en el árbol del aseador | Fase 5, deuda §20.2 | El aseador abre la app a las 6 de la mañana con el sistema en oscuro y recibe una pantalla blanca |
+| **PWA offline-first: cola de mutaciones en IndexedDB** | Fase 6, decisión del desarrollador el 2026-09-12 | Es ~la mitad del trabajo de la Fase 6. Se difiere para sacar la app del aseador antes. **Riesgo aceptado:** si se cae la señal a mitad del aseo se pierde el trabajo de campo, y las fotos son justo lo que falla con mala señal. **Lo detonaría:** una aseadora que pierda un aseo completo en el piloto. Contradice la restricción de `PROJECT.md` que lo daba por sentado desde el día uno |
 | Exportación o vista imprimible del cierre mensual | PROJECT.md §Riesgos | El cálculo es visible en pantalla y el snapshot persiste |
