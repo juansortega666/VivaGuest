@@ -5,7 +5,7 @@ milestone_name: milestone
 current_phase: 06
 current_phase_name: pwa-del-aseador
 status: planning
-stopped_at: "Fase 6 planeada: 10 planes en 7 waves, 06-VALIDATION.md aprobado. Hallazgo: el backend ya existia casi entero (start_cleaning, toggle_checklist_item, finish_cleaning), lo unico que estorbaba era el bloqueo de PWA-07 que D-06 derogo. REQUIREMENTS.md propagado: PWA-07 y CHECK-03 corregidos, REPORT-03 simplificado, PWA-08/09/10 diferidos a v2. Siguiente: execute-phase 6"
+stopped_at: "2026-09-12. AUDITORIA DE COORDINACION. Fase 6 mergeada a main (10/10). Fase 5 mergeada INCOMPLETA: 15/17, sin VERIFICATION.md, y sus 7 criterios sin verificar. Defecto vivo: /instalar no existe y los cuatro enlaces del banner del aseador caen en 404 (PWA-02 sin cumplir). HALLAZGO: la suite e2e se estaba corriendo contra OTRO proyecto (Playwright usa el puerto 3000 con reuseExistingServer, y ahi corre Alfa-MVP con Next 15.5.18). Los rojos e2e atribuidos a la Fase 5 son falsos rojos de esa confusion de puerto. Correr siempre con PLAYWRIGHT_PORT en un puerto libre."
 last_updated: "2026-09-12T05:10:00.000Z"
 last_activity: 2026-09-12
 last_activity_desc: plan-phase 6 cerrado: 10 planes, y seis requisitos propagados desde las decisiones de la conversacion

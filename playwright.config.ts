@@ -19,6 +19,29 @@ import { defineConfig, devices } from '@playwright/test';
  * `PLAYWRIGHT_PORT` deja levantar el servidor en un puerto propio. El default
  * sigue siendo 3000, así que para quien corre un solo checkout no cambia nada.
  */
+// ─────────────────────────────────────────────────────────────────────────────
+// OJO CON EL PUERTO POR DEFECTO, Y ESTA ES UNA TRAMPA MEDIDA (2026-09-12)
+//
+// `reuseExistingServer` esta en `true` fuera de CI. Eso significa que si el
+// puerto 3000 ya lo ocupa OTRO proyecto de Next, Playwright NO levanta el
+// servidor de VivaGuest: reusa el ajeno y corre los 107 tests contra la
+// aplicacion equivocada. El sintoma es un fallo total por timeout de 30s en
+// todos los specs, que se lee como "la suite esta rota" y no como "estoy
+// mirando otra app".
+//
+// Paso de verdad: el 2026-09-12 el 3000 lo ocupaba un `next-server` 15.5.18 de
+// otro repo (VivaGuest usa 15.5.24), y la suite entera salio roja. Lo delata
+// comparar la version de Next que responde en el puerto.
+//
+// Salida: `PLAYWRIGHT_PORT=3200 npm run test:e2e`, o cualquier puerto libre.
+//
+// Y la otra mitad, que ya exige el `beforeAll` de `e2e/operacion.spec.ts`: la
+// suite necesita la base RECIEN RESETEADA. Sin `npm run db:reset` antes, los
+// aseos que dejan los specs previos chocan contra el indice unico parcial
+// `(property_id, scheduled_date) where estado <> 'cancelado'` y dos aserciones
+// de `operacion.spec.ts` caen por colision, no por defecto del producto.
+// Medido: con reset y puerto libre, 107/107 en verde.
+// ─────────────────────────────────────────────────────────────────────────────
 const PUERTO = Number(process.env.PLAYWRIGHT_PORT ?? 3000);
 
 export default defineConfig({

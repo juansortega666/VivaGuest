@@ -152,6 +152,7 @@ Plans:
 **Costura conocida:** al confirmar, el aseo queda asignado pero **no se notifica a nadie** hasta que exista la Fase 5. El evento se escribe en la cola de notificaciones y se drena cuando el worker exista. Es intencional, no un olvido.
 
 ### Phase 5: Notificaciones push e instalación de la PWA
+**Status**: **INCOMPLETA — 15/17 planes**, mergeada a `main` el 2026-09-12 sin verificación. Faltan **05-12** (`/instalar`: bloqueado esperando las cinco capturas reales; mientras tanto los cuatro enlaces del banner del aseador caen en 404, PWA-02 sin cumplir) y **05-17** (E2E de la fase, las doce puertas y la validación en teléfono físico). No existe `VERIFICATION.md`: los siete criterios de éxito **no se han verificado formalmente**
 **Goal**: El aseador instala la PWA y recibe en el teléfono cada aseo que se le asigna; el admin recibe cada evento de campo
 **Depends on**: Fase 2
 **Requirements**: NOTIF-01, NOTIF-02, NOTIF-03, NOTIF-04, PWA-02, PWA-03
@@ -167,22 +168,22 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 05-01-PLAN.md — Compuerta de legitimidad de paquetes, dependencias, par VAPID y contrato de entorno
-- [ ] 05-02-PLAN.md — Migración 16: columnas de verificación en `push_subscriptions`, grants por columna y la función agregada que ve el admin (cierra la compuerta §20.10 del UI-SPEC)
-- [ ] 05-03-PLAN.md — Migración 17: dispatcher del outbox, trigger `AFTER INSERT` y cron de 60 s, con la aserción pgTAP de que un rollback revierte el disparo
-- [ ] 05-04-PLAN.md — `lib/push/errores.ts` y `lib/push/colapso.ts`: la decisión de error y la clave de colapso, con la auditoría emisor por emisor de D-05
-- [ ] 05-05-PLAN.md — `lib/push/payload.ts` y `lib/push/envio.ts`: las dos envolturas de D-07 y la firma VAPID, sin ranura para el código de acceso (D-06)
-- [ ] 05-06-PLAN.md — `POST /api/push/drain`: el worker que drena `notifications`, idempotente y con una sola puerta de revocación
-- [ ] 05-07-PLAN.md — Integración del drenaje contra un push service falso: las siete propiedades de la capa 3
-- [ ] 05-08-PLAN.md — Serwist, `app/sw.ts`, manifest e iconos. El handler que decide si un aseador conserva su canal, probado fuera del service worker
-- [ ] 05-09-PLAN.md — Tokens de `@theme`, registro en `cn()`, `lib/domain/avisos.ts` y la detección de plataforma
-- [ ] 05-10-PLAN.md — Banner de avisos (PWA-03), Server Actions de suscripción con allowlist anti-SSRF y guardarraíl de la escala móvil
-- [ ] 05-11-PLAN.md — El aviso de prueba: las tres actions del asistente y el paso 4 con sus dos grados (contrato de D-02)
+- [x] 05-01-PLAN.md — Compuerta de legitimidad de paquetes, dependencias, par VAPID y contrato de entorno
+- [x] 05-02-PLAN.md — Migración 16: columnas de verificación en `push_subscriptions`, grants por columna y la función agregada que ve el admin (cierra la compuerta §20.10 del UI-SPEC)
+- [x] 05-03-PLAN.md — Migración 17: dispatcher del outbox, trigger `AFTER INSERT` y cron de 60 s, con la aserción pgTAP de que un rollback revierte el disparo
+- [x] 05-04-PLAN.md — `lib/push/errores.ts` y `lib/push/colapso.ts`: la decisión de error y la clave de colapso, con la auditoría emisor por emisor de D-05
+- [x] 05-05-PLAN.md — `lib/push/payload.ts` y `lib/push/envio.ts`: las dos envolturas de D-07 y la firma VAPID, sin ranura para el código de acceso (D-06)
+- [x] 05-06-PLAN.md — `POST /api/push/drain`: el worker que drena `notifications`, idempotente y con una sola puerta de revocación
+- [x] 05-07-PLAN.md — Integración del drenaje contra un push service falso: las siete propiedades de la capa 3
+- [x] 05-08-PLAN.md — Serwist, `app/sw.ts`, manifest e iconos. El handler que decide si un aseador conserva su canal, probado fuera del service worker
+- [x] 05-09-PLAN.md — Tokens de `@theme`, registro en `cn()`, `lib/domain/avisos.ts` y la detección de plataforma
+- [x] 05-10-PLAN.md — Banner de avisos (PWA-03), Server Actions de suscripción con allowlist anti-SSRF y guardarraíl de la escala móvil
+- [x] 05-11-PLAN.md — El aviso de prueba: las tres actions del asistente y el paso 4 con sus dos grados (contrato de D-02)
 - [ ] 05-12-PLAN.md — `/instalar`: el asistente de cuatro pasos con capturas reales y los tres modos de entrada
-- [ ] 05-13-PLAN.md — `/aseos/[id]`: la pantalla de aterrizaje y el código de acceso auditado
-- [ ] 05-14-PLAN.md — D-03 en `/aseadores`: columna `AVISOS`, chip de estado y link de instalación
-- [ ] 05-15-PLAN.md — D-03 en `/operacion`: advertencia antes de asignar, franja del admin y la inversión del test de copy
-- [ ] 05-16-PLAN.md — D-08: los dos filtros de fecha, el bloque `Atrasados` y la señal de hora límite vencida
+- [x] 05-13-PLAN.md — `/aseos/[id]`: la pantalla de aterrizaje y el código de acceso auditado
+- [x] 05-14-PLAN.md — D-03 en `/aseadores`: columna `AVISOS`, chip de estado y link de instalación
+- [x] 05-15-PLAN.md — D-03 en `/operacion`: advertencia antes de asignar, franja del admin y la inversión del test de copy
+- [x] 05-16-PLAN.md — D-08: los dos filtros de fecha, el bloque `Atrasados` y la señal de hora límite vencida
 - [ ] 05-17-PLAN.md — E2E en Chromium, las doce puertas y los procedimientos manuales en iPhone físico
 
 ### Phase 6: PWA del aseador, offline-first
