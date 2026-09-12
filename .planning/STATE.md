@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 05
 current_phase_name: notificaciones-push-e-instalacion-de-la-pwa
 status: executing
-stopped_at: "Fase 05 en ejecucion: waves 1-6 completas (12/17 planes). Suites: unit 829, integration 163, db:test 229 PASS, build 14 rutas. Siguiente: wave 7, planes 05-11 y 05-15"
-last_updated: "2026-09-11T23:44:59.955Z"
+stopped_at: "Fase 05 en ejecucion: waves 1-7 completas (14/17 planes). Suites: unit 876, integration 163, db:test 229 PASS, build 14 rutas. Siguiente: wave 8, plan 05-16 y luego 05-12 (checkpoint humano bloqueante: 5 capturas de instalacion)"
+last_updated: "2026-09-12T00:25:29.204Z"
 last_activity: 2026-09-10
 last_activity_desc: discuss-phase 5 cerrado; ROADMAP §Phase 5 actualizado con los criterios 6 y 7
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 65
-  completed_plans: 60
+  completed_plans: 62
   percent: 44
 ---
 
@@ -265,8 +265,8 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-11T23:44:59.948Z
-Stopped at: Fase 05 en ejecucion: waves 1-6 completas (12/17 planes). Suites: unit 829, integration 163, db:test 229 PASS, build 14 rutas. Siguiente: wave 7, planes 05-11 y 05-15
+Last session: 2026-09-12T00:25:29.194Z
+Stopped at: Fase 05 en ejecucion: waves 1-7 completas (14/17 planes). Suites: unit 876, integration 163, db:test 229 PASS, build 14 rutas. Siguiente: wave 8, plan 05-16 y luego 05-12 (checkpoint humano bloqueante: 5 capturas de instalacion)
 
 **Sin bloqueos activos.** El stack local de Supabase esta arriba y sano (12 contenedores), la
 migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` **29 archivos / 548 tests**,
@@ -299,4 +299,4 @@ migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` **29 ar
    segundos, `db:test` 2,3 s y la integracion completa 9,7 s.
 
 Siguiente: la wave 6 de la Fase 4 (04-10, 04-11, 04-12).
-Resume file: .planning/phases/05-notificaciones-push-e-instalaci-n-de-la-pwa/05-11-PLAN.md
+Resume file: .planning/phases/05-notificaciones-push-e-instalaci-n-de-la-pwa/05-16-PLAN.md
