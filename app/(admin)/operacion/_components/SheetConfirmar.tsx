@@ -26,6 +26,7 @@ import type { ResultadoAccion } from '@/lib/domain/acciones';
 import { formatFechaBog, formatHoraLimite } from '@/lib/domain/dates';
 
 import { confirmarAseo } from '../_actions';
+import { AvisoAseadorSinPush } from './AvisoAseadorSinPush';
 
 /**
  * El `Sheet` de confirmación encadenada (ASEO-02, ASEO-03, 04-UI-SPEC.md §10).
@@ -54,10 +55,14 @@ import { confirmarAseo } from '../_actions';
  * pantalla: para pintarlo habría que ir a buscarlo a propósito. Queda escrito
  * para que nadie lo añada "por comodidad".
  *
- * ── NINGÚN COPY DICE QUE SE LE AVISÓ AL ASEADOR ────────────────────────────
- * Confirmar asigna EN FIRME y escribe la fila en `notifications`, pero nadie la
- * drena hasta la Fase 5. `Queda asignado a María` es cierto; `Se le notificó a
- * María` sería mentira. Es prohibición de producto (§18.1), no de estilo.
+ * ── NINGÚN COPY AFIRMA QUE EL AVISO LLEGÓ (05-UI-SPEC §11.4) ───────────────
+ * Desde la Fase 5 la cola SÍ se drena, así que la regla vieja —"ni nombrar el
+ * canal"— quedó al revés y está superseded. La que rige ahora distingue dos
+ * cosas que se parecen y no lo son: se puede afirmar la AUSENCIA de canal, que
+ * es un hecho conocido al escribir (cero suscripciones vivas), y NO se puede
+ * afirmar la ENTREGA, porque el drenaje es asíncrono y fire-and-forget y nadie
+ * de este lado sabe si sonó un teléfono. `Queda asignado a María` sigue siendo
+ * cierto; `María ya sabe` seguiría siendo mentira.
  *
  * ── LA TRAMPA DE FOCO Y EL `Esc` LOS DA BASE UI ────────────────────────────
  * No se reimplementan con un `useEffect` de `keydown` (§16.3). Lo único que este
@@ -119,12 +124,21 @@ function BotonConfirmar({
 export function SheetConfirmar({
   filas,
   responsables,
+  responsableSinAvisos,
   onCerrar,
 }: {
   /** La tanda, ya ordenada por `bandejaSinConfirmar()` y recortada al aseo pulsado. */
   filas: FilaDeOperacion[];
   /** `property_id` → nombre del responsable fijo, o `null` si no tiene. */
   responsables: Record<string, string | null>;
+  /**
+   * `property_id` → el responsable fijo de ese apartamento se quedó sin canal
+   * (D-03, §11.3). Llega como mapa por apartamento y no como lista de aseadores
+   * porque la línea `Queda asignado a {responsable}` de este panel se resuelve
+   * por apartamento y NO tiene a mano el id del responsable: `responsables` solo
+   * trae su nombre. El cruce lo hace el RSC, que sí tiene los dos lados.
+   */
+  responsableSinAvisos: Record<string, boolean>;
   onCerrar: () => void;
 }) {
   const router = useRouter();
@@ -162,6 +176,19 @@ export function SheetConfirmar({
   const esElUltimo = indice === total - 1;
   const responsable = aseo ? responsables[aseo.property_id] : null;
   const sinResponsable = !responsable;
+
+  /**
+   * §11.3. SOLO cambia lo que se PINTA; NO toca `sinResponsable`, que es lo
+   * único que deshabilita el botón de este panel y sigue exactamente igual.
+   *
+   * La asimetría es la del contrato y conviene leerla despacio: sin responsable
+   * la RPC lanza `P0001 sin_responsable` y confirmar es imposible, así que
+   * bloquear es evitarle al admin un error seguro. Acá la RPC funciona y el aseo
+   * queda asignado y correcto; lo único que no sale es el aviso, y bloquear
+   * sería castigar al admin por el teléfono de otra persona (T-05-52).
+   */
+  const nombreDelMudo =
+    aseo && responsable && responsableSinAvisos[aseo.property_id] === true ? responsable : null;
 
   /**
    * El cierre, con el ÚNICO toast de toda la tanda.
@@ -322,6 +349,11 @@ export function SheetConfirmar({
             ) : (
               <p className="text-body text-foreground">Queda asignado a {responsable}</p>
             )}
+
+            {/* Justo DEBAJO de la línea de arriba y dentro del mismo bloque de
+                contexto (§11.3): el hecho pertenece a la persona que la línea
+                anterior acaba de nombrar. No añade ningún paso a la tanda. */}
+            {nombreDelMudo !== null && <AvisoAseadorSinPush nombre={nombreDelMudo} />}
           </div>
 
           {/*

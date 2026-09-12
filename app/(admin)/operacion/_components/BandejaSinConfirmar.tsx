@@ -51,11 +51,17 @@ import { SheetConfirmar } from './SheetConfirmar';
 export function BandejaSinConfirmar({
   filas,
   responsables,
+  responsableSinAvisos,
 }: {
   /** Ya filtradas y ordenadas por `bandejaSinConfirmar()` de `lib/data/operacion`. */
   filas: FilaDeOperacion[];
   /** `property_id` → nombre del responsable fijo del apartamento, o `null`. */
   responsables: Record<string, string | null>;
+  /**
+   * `property_id` → el responsable fijo se quedó sin canal (D-03, §11.3).
+   * Atraviesa este componente sin que lo use: el consumidor es el `Sheet`.
+   */
+  responsableSinAvisos: Record<string, boolean>;
 }) {
   const [tanda, setTanda] = useState<{ desde: number; sesion: number } | null>(null);
   const idTitulo = useId();
@@ -170,6 +176,7 @@ export function BandejaSinConfirmar({
           key={tanda.sesion}
           filas={filas.slice(tanda.desde)}
           responsables={responsables}
+          responsableSinAvisos={responsableSinAvisos}
           onCerrar={() => setTanda(null)}
         />
       )}

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 
 import { NoAutorizado, exigirAdmin } from '@/lib/auth/guards';
 import { listarApartamentos } from '@/lib/data/apartamentos';
+import { SIN_AVISOS_REGISTRADOS, leerEstadoDeAvisosPorAseador } from '@/lib/data/avisos';
 import {
   agruparPorDia,
   bandejaSinConfirmar,
@@ -22,6 +23,7 @@ import {
   type AseoParaAlertas,
   type NotificacionParaAlertas,
 } from '@/lib/domain/alertas';
+import { estadoDeAvisosDeAseador } from '@/lib/domain/avisos';
 import { formatFechaBog } from '@/lib/domain/dates';
 
 import { BandejaSinConfirmar } from './_components/BandejaSinConfirmar';
@@ -192,15 +194,21 @@ export default async function OperacionPage({
 
   // En paralelo: son consultas independientes contra la misma sesion, y
   // encadenarlas con `await` seguidos sumaria todas las latencias por nada.
-  const [operacion, aseadores, apartamentos, notificaciones, ultimoExito] = await Promise.all([
-    leerOperacion(supabase, ahoraMs),
-    leerAseadoresActivos(supabase),
-    listarApartamentos(supabase),
-    verAtendidas
-      ? leerAlertasAtendidas(supabase, user.id, ahoraMs)
-      : leerAlertasDelAdmin(supabase, user.id),
-    leerUltimoExitoDeSync(supabase),
-  ]);
+  const [operacion, aseadores, apartamentos, notificaciones, ultimoExito, avisos] =
+    await Promise.all([
+      leerOperacion(supabase, ahoraMs),
+      leerAseadoresActivos(supabase),
+      listarApartamentos(supabase),
+      verAtendidas
+        ? leerAlertasAtendidas(supabase, user.id, ahoraMs)
+        : leerAlertasDelAdmin(supabase, user.id),
+      leerUltimoExitoDeSync(supabase),
+      // D-03 (§11.2 y §11.3). Va en el mismo `Promise.all` y no encadenada: es
+      // una consulta independiente sobre la misma sesión, y sumarle su latencia
+      // a las otras cinco no compraría nada. Es UNA llamada para los ocho
+      // aseadores, no una por aseador.
+      leerEstadoDeAvisosPorAseador(supabase),
+    ]);
 
   const bloques = agruparPorDia(operacion.filas, operacion.hoy);
   const chips = cargaPorAseador(operacion.filas, operacion.hoy, aseadores);
@@ -211,6 +219,47 @@ export default async function OperacionPage({
   // `P0001 sin_responsable`.
   const responsables = Object.fromEntries(
     apartamentos.map((a) => [a.id, a.responsableNombre]),
+  );
+
+  /**
+   * ── QUIÉN SE QUEDÓ SIN CANAL (D-03, criterio 6) ──────────────────────────
+   *
+   * La derivación NO se hace acá: se llama a `estadoDeAvisosDeAseador()`, que es
+   * la misma función que pinta la columna `AVISOS` de `/aseadores`. Un `if` sobre
+   * `suscripciones_vivas === 0` escrito en esta página sería una segunda verdad
+   * sobre el mismo dato, y la que se quedara atrás lo haría en silencio.
+   *
+   * El aseador que NO sale del agregado se resuelve como CERO suscripciones y no
+   * como dato ausente: ese cero ES el estado `Sin avisos`, que es justo el que
+   * esta pantalla existe para hacer visible.
+   *
+   * `Sin probar` NO entra en esta lista. La franja de carga marca solo a los
+   * mudos (§11.2): dos niveles de advertencia en un chip de 32px lo vuelven
+   * ilegible, y ese matiz vive en `/aseadores`.
+   *
+   * Sale como ARRAY de ids y no como `Set` porque cruza la frontera al cliente,
+   * donde un `Set` no sobrevive a la serialización.
+   */
+  const aseadoresSinAvisos = aseadores
+    .filter(
+      (a) =>
+        estadoDeAvisosDeAseador({
+          is_active: a.is_active,
+          ...(avisos.get(a.id) ?? SIN_AVISOS_REGISTRADOS),
+        }).clave === 'sin_avisos',
+    )
+    .map((a) => a.id);
+
+  /**
+   * `property_id` → el responsable fijo de ese apartamento está mudo.
+   *
+   * El cruce se hace acá y no en el `Sheet` porque este es el único sitio con
+   * los dos lados a la vez: `responsables` lleva el NOMBRE del responsable, no
+   * su id, y `aseadoresSinAvisos` está indexado por id.
+   */
+  const mudos = new Set(aseadoresSinAvisos);
+  const responsableSinAvisos = Object.fromEntries(
+    apartamentos.map((a) => [a.id, a.responsable_id !== null && mudos.has(a.responsable_id)]),
   );
 
   // El combobox de `Crear aseo` no autoriza nada —`create_manual_cleaning`
@@ -237,6 +286,8 @@ export default async function OperacionPage({
   const acciones: ContextoDeAcciones = {
     aseadores,
     responsables,
+    responsableSinAvisos,
+    aseadoresSinAvisos,
     hoy: operacion.hoy,
   };
 
@@ -406,7 +457,11 @@ export default async function OperacionPage({
           aria-label="Pendientes y alertas"
           className="flex flex-col gap-lg max-xl:order-first xl:sticky xl:top-barra xl:h-[calc(100svh-var(--spacing-barra)-var(--spacing-xl))]"
         >
-          <BandejaSinConfirmar filas={sinConfirmar} responsables={responsables} />
+          <BandejaSinConfirmar
+            filas={sinConfirmar}
+            responsables={responsables}
+            responsableSinAvisos={responsableSinAvisos}
+          />
 
           {/* Bloque inferior: se lleva el `flex-1` que sobra del carril, tenga
               treinta alertas o ninguna. El panel NO desaparece cuando esta vacio,

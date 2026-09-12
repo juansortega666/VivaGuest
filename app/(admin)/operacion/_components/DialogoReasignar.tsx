@@ -28,6 +28,7 @@ import type { AseadorActivo } from '@/lib/data/operacion';
 import type { ResultadoAccion } from '@/lib/domain/acciones';
 
 import { reasignarAseo } from '../_actions';
+import { AvisoAseadorSinPush } from './AvisoAseadorSinPush';
 
 /**
  * Reasignación de UN aseo (ASEO-04, 04-UI-SPEC.md §12.1).
@@ -96,12 +97,21 @@ function BotonReasignar() {
 export function DialogoReasignar({
   aseo,
   aseadores,
+  aseadoresSinAvisos,
   abierto,
   onAbiertoChange,
 }: {
   aseo: AseoParaReasignar;
   /** Solo aseadores activos, ya ordenados por nombre desde `leerAseadoresActivos()`. */
   aseadores: AseadorActivo[];
+  /**
+   * Los ids de los aseadores activos que se quedaron sin canal (D-03, §11.3).
+   *
+   * Viaja como lista de ids y NO como `Set`: cruza la frontera del RSC al
+   * cliente, y un `Set` no sobrevive a esa serialización. Son ocho personas, así
+   * que la búsqueda lineal cuesta menos que construir el índice.
+   */
+  aseadoresSinAvisos: string[];
   abierto: boolean;
   onAbiertoChange: (abierto: boolean) => void;
 }) {
@@ -190,6 +200,16 @@ export function DialogoReasignar({
 
   const nombreElegido = aseadores.find((a) => a.id === aseadorId)?.full_name ?? '';
 
+  /**
+   * §11.3: la advertencia aparece AL ELEGIR, no antes.
+   *
+   * Con el `Select` en su placeholder no hay nadie sobre quien advertir, y una
+   * línea ámbar colgando de un campo vacío se leería como un problema del
+   * diálogo. Por eso la condición incluye que `aseadorId` ya tenga un destino
+   * elegido, y no solo que la lista de mudos no esté vacía.
+   */
+  const destinoMudo = aseadorId !== null && aseadoresSinAvisos.includes(aseadorId);
+
   return (
     <Dialog open={abierto} onOpenChange={alCambiarApertura}>
       <DialogContent className="sm:max-w-dialogo">
@@ -255,6 +275,11 @@ export function DialogoReasignar({
 
             {errorLocal && <FieldError id={idError}>{errorLocal}</FieldError>}
           </Field>
+
+          {/* Debajo del selector, y solo con un destino ya elegido. No
+              deshabilita `Reasignar` ni cambia su copy: la RPC funciona y el
+              aseo queda bien asignado; lo único que no sale es el aviso. */}
+          {destinoMudo && <AvisoAseadorSinPush nombre={nombreElegido} />}
 
           <DialogFooter>
             {/* `Volver` en outline y con `autoFocus`: nunca dos rellenos

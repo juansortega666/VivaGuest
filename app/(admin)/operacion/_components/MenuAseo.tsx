@@ -105,6 +105,13 @@ export interface ContextoDeAcciones {
   aseadores: AseadorActivo[];
   /** `property_id` -> nombre del responsable fijo, o `null`. Lo pide `SheetConfirmar`. */
   responsables: Record<string, string | null>;
+  /**
+   * `property_id` -> el responsable fijo se quedó sin canal (D-03, 05-UI-SPEC
+   * §11.3). Lo pide `SheetConfirmar` para pintar la advertencia inline.
+   */
+  responsableSinAvisos: Record<string, boolean>;
+  /** Ids de los aseadores activos sin canal. Lo pide `DialogoReasignar`. */
+  aseadoresSinAvisos: string[];
   /** El día de negocio de Bogotá, del servidor. Es el `min` del campo de fecha. */
   hoy: string;
 }
@@ -266,6 +273,9 @@ export function MenuAseo({
           key={sesionConfirmar}
           filas={[fila]}
           responsables={{ [fila.property_id]: acciones.responsables[fila.property_id] ?? null }}
+          responsableSinAvisos={{
+            [fila.property_id]: acciones.responsableSinAvisos[fila.property_id] === true,
+          }}
           onCerrar={() => setConfirmando(false)}
         />
       )}
@@ -274,6 +284,7 @@ export function MenuAseo({
         <DialogoReasignar
           aseo={{ id: fila.id, apartamento: nombre, aseadorActualId: fila.aseador_id }}
           aseadores={acciones.aseadores}
+          aseadoresSinAvisos={acciones.aseadoresSinAvisos}
           abierto
           onAbiertoChange={(a) => !a && setDialogo(null)}
         />
