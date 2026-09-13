@@ -115,7 +115,7 @@ status: complete
 - **Started:** 2026-09-13T12:52:00Z
 - **Completed:** 2026-09-13T14:00:00Z
 - **Tasks:** 2 de 2
-- **Files modified:** 4 (1 modificado, 3 creados)
+- **Files modified:** 5 (2 modificados, 3 creados)
 
 ## Accomplishments
 
@@ -131,6 +131,14 @@ status: complete
 
 1. **Task 1: Sembrador de periodo cerrado para E2E** — `55af3f1` (test)
 2. **Task 2: `finanzas.spec.ts` y `mis-pagos.spec.ts`, en rojo** — `590025d` (test)
+3. **Task 2 (continuación): los ids de los tres pagos en el escenario** — `ccc9bed` (test)
+
+**Metadata del plan:** `7291031` (docs)
+
+_Nota: `ccc9bed` es la extensión de `EscenarioFinanciero` que `mis-pagos.spec.ts`
+consume. Se quedó fuera de `590025d` por un descuido al preparar el índice, y se
+commiteó aparte en vez de enmendar: la historia de lo que pasó de verdad vale más
+que una historia limpia._
 
 ## Files Created/Modified
 
@@ -240,6 +248,6 @@ Wave 0 cerrada por este lado. Los planes 07-04 a 07-09 pueden construir el schem
 Comprobado el 2026-09-13 contra el disco y contra `git log`:
 
 - Los cinco archivos declarados existen.
-- Los dos commits (`55af3f1`, `590025d`) están en la historia.
+- Los cuatro commits (`55af3f1`, `590025d`, `ccc9bed`, `7291031`) están en la historia.
 - Los conteos por archivo son los que dice la tabla: 15 casos en `finanzas.spec.ts` y 7 en `mis-pagos.spec.ts`, 22 en total.
 - `npx tsc --noEmit | grep "^e2e/"` devuelve cero líneas.
