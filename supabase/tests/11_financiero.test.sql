@@ -1,0 +1,1215 @@
+-- ============================================================================
+-- 11_financiero.test.sql — el contrato ejecutable de la Fase 7
+--
+-- NACE EN ROJO, Y ESO ES EL ÉXITO. Wave 0 del plan 07-01, igual que hizo el
+-- plan 01-02 de este repo. Un `db:test` en verde al terminar 07-01 significaría
+-- que estas aserciones no están midiendo nada.
+--
+-- ---------------------------------------------------------------------------
+-- POR QUÉ ESTE ARCHIVO EXISTE, Y ES LA LECCIÓN MÁS CARA DEL REPO:
+--
+--   Un grant por columna, una policy o un trigger SOLO se prueban ejecutando la
+--   escritura contra Postgres. El registro de push llevó semanas roto, fallando
+--   siempre con 42501, con todos sus tests unitarios en verde, porque esos
+--   mockean el cliente y solo comprueban la forma del objeto. Toda escritura y
+--   todo grant de esta fase nacen con su aserción pgTAP, y nacen ANTES del
+--   código que los satisface.
+--
+-- ---------------------------------------------------------------------------
+-- QUÉ BLOQUE LO PONE EN VERDE:
+--
+--   A  siembra ................................ verde desde el primer día
+--   B  calendario del cierre .................. 07-04  (migración 23)
+--   C  pertenencia en hora de Bogotá .......... 07-04 + 07-07 (23 y 25)
+--   D  frontera del aseador ................... 07-05 (migración 24) y 07-08
+--   E  el cierre calcula lo que debe .......... 07-07 (migración 25)
+--   F  idempotencia del cierre ................ 07-07 (migración 25)
+--   H  informativos fuera de todo ............. 07-07 + 07-08
+--   I  lo que ve el aseador ................... 07-09 (migración 27)
+--   J  el recibo dura cinco años .............. 07-04 (migración 23)
+--   G  supervivencia al borrado ............... 07-04 (schema) + 07-07
+--
+--   A PARTIR DE QUE UN BLOQUE SE PONE EN VERDE, UN `not ok` SUYO ES UNA
+--   REGRESIÓN, no un pendiente. La línea base con la que se mide: los once
+--   archivos pgTAP anteriores suman 275 aserciones y las 275 están en verde.
+--
+-- ---------------------------------------------------------------------------
+-- DOS ASERCIONES NACEN ROJAS POR UN DEFECTO VIVO, NO POR ESTAR ADELANTADAS:
+--
+--   Las de la sección D marcadas como FUGA MEDIDA. El Hallazgo 1 del research
+--   midió que una aseadora autenticada lee `cleanings.tarifa_huesped` y
+--   `properties.tarifa_huesped` por PostgREST, porque los dos grants de la
+--   migración 07 son de TABLA y no por columna. Con la siembra de este archivo
+--   la fuga vale 90000 pesos por apartamento, y el TAP lo va a imprimir en el
+--   `have` cuando falle. Las cierra el plan 07-05.
+--
+-- ---------------------------------------------------------------------------
+-- CONTRATO DE NOMBRES. Esto es normativo para 07-04, 07-07, 07-08 y 07-09:
+-- si un nombre cambia, cambia AQUÍ primero y después en la migración.
+--
+--   public.ultimo_dia_habil_del_mes(date) -> date            [immutable]
+--   public.dia_bog(timestamptz) -> date                      [stable]
+--   public.periodo_de_cierre(date) -> table(periodo_desde date, periodo_hasta date)
+--   public.foto_vencida(text, timestamptz) -> boolean
+--
+--   public.payout_periods
+--     periodo_desde date PK · periodo_hasta date · cerrado_at timestamptz
+--     cerrado_por uuid · aseos_no_computados int · moneda text
+--
+--   public.cleaner_payouts
+--     id uuid PK · periodo_desde date · periodo_hasta date
+--     aseador_id uuid · aseador_nombre text
+--     monto_aseos bigint · monto_gastos bigint · monto_total bigint
+--     cantidad_aseos int · cantidad_gastos int
+--     pagado_at timestamptz · pagado_por uuid · moneda text
+--     unique (periodo_desde, aseador_id)
+--
+--   public.cleaner_payout_lines
+--     id uuid PK · payout_id uuid (cascade DENTRO del snapshot)
+--     tipo text in ('aseo','gasto')
+--     cleaning_id uuid · expense_id uuid · property_id uuid   [SIN FK, a propósito]
+--     property_nombre text · concepto text · monto bigint · moneda text
+--     fecha_programada date · fecha_ejecucion date
+--     evidencia_bucket text · evidencia_path text · orden int
+--
+--   public.cerrar_periodo(date, date) -> int
+--   public.rentabilidad_aseos(date, date, uuid, uuid, text)
+--     -> ... property_id, property_nombre, fecha_programada, fecha_ejecucion,
+--            cobrado, pagado, margen, tiene_gasto, tiene_dano
+--   public.resumen_financiero(date, date)
+--     -> ... aseos_hechos, aseos_con_gastos, aseos_con_danos, ...
+--   public.tarifas_de_apartamentos(uuid[])
+--   public.mis_pagos_cerrados()
+--     -> periodo_desde, periodo_hasta, monto_aseos, monto_gastos, monto_total,
+--        moneda, pagado_at        [CERO columnas de cifra de huésped]
+--   public.detalle_de_mi_pago(uuid)
+--     -> tipo, property_nombre, concepto, fecha_programada, fecha_ejecucion,
+--        monto, moneda, evidencia_bucket, evidencia_path
+--
+-- ---------------------------------------------------------------------------
+-- DOS TRAMPAS DE pgTAP MEDIDAS EN ESTE REPO, Y LAS DOS MUERDEN AQUÍ:
+--
+--   1. Una escritura dentro de la subconsulta de una aserción NO LA VE esa
+--      aserción: el `select` externo lee el snapshot anterior. La escritura va
+--      en su propia sentencia, antes. Costó una corrida roja en
+--      `07_push.test.sql`. Aplica al bloque G.
+--
+--   2. Un objeto que todavía no existe aborta la TRANSACCIÓN ENTERA si se
+--      nombra en SQL estático, y entonces el archivo produce UN fallo en vez de
+--      cincuenta `not ok` diagnosticables. Por eso casi todas las aserciones de
+--      aquí pasan por los arneses `pg_temp.escalar` / `pg_temp.valor_como` /
+--      `pg_temp.intento_como`: el `execute` dinámico dentro de un bloque con
+--      manejador convierte el 42P01 y el 42883 en un VALOR, y el rojo queda
+--      acotado a la aserción que corresponde. Es la misma técnica con la que
+--      `10_reportes.test.sql` nació en rojo en la Fase 6.
+--
+-- ---------------------------------------------------------------------------
+-- ORDEN DE LOS BLOQUES: el bloque G va AL FINAL aunque su letra sea anterior.
+-- G borra un aseo y un gasto de la siembra a propósito, y cualquier bloque que
+-- corriera después leería un fixture mutilado y fallaría por la razón
+-- equivocada. El orden real es A B C D E F H I J G.
+-- ============================================================================
+
+begin;
+select plan(52);
+
+-- ---------------------------------------------------------------------------
+-- Limpieza del seed, en orden inverso de FK. El rollback la deshace.
+-- ---------------------------------------------------------------------------
+delete from public.cleaning_photos;
+delete from public.cleaning_room_skips;
+delete from public.cleaning_checklist_items;
+delete from public.cleaning_state_transitions;
+delete from public.access_code_reads;
+delete from public.notifications;
+delete from public.missing_item_lines;
+delete from public.missing_item_reports;
+delete from public.expenses;
+delete from public.damages;
+delete from public.cleanings;
+delete from public.calendar_reservations;
+delete from public.calendar_feeds;
+delete from public.property_rooms;
+delete from public.checklist_tasks;
+delete from public.room_types;
+delete from public.property_secrets;
+delete from public.properties;
+delete from public.profiles;
+delete from auth.users;
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- EL ARNÉS
+-- ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Copiado LITERAL de `10_reportes.test.sql` líneas 49-68, con el mismo nombre.
+ * Es el patrón de impersonación que la Fase 6 ya validó. Devuelve 'sin_error' o
+ * el SQLSTATE, sin que el archivo reviente.
+ */
+create function pg_temp.intento_como(p_uid uuid, p_consulta text) returns text
+language plpgsql as $fn$
+declare
+  v_estado text;
+begin
+  begin
+    perform set_config('role', 'authenticated', true);
+    perform set_config('request.jwt.claims',
+      json_build_object('sub', p_uid::text, 'role', 'authenticated')::text, true);
+    execute p_consulta;
+    perform set_config('role', 'postgres', true);
+    perform set_config('request.jwt.claims', '', true);
+    return 'sin_error';
+  exception when others then
+    get stacked diagnostics v_estado = returned_sqlstate;
+    perform set_config('role', 'postgres', true);
+    perform set_config('request.jwt.claims', '', true);
+    return v_estado;
+  end;
+end;
+$fn$;
+
+/**
+ * Como el anterior, pero devuelve EL VALOR que la sesión impersonada consigue
+ * leer, o 'ERROR:<sqlstate>' si no pudo. Existe por una razón de diagnóstico:
+ * en las dos aserciones de la fuga medida, el TAP imprime en el `have` la cifra
+ * exacta que se está escapando al teléfono de la aseadora. Con `intento_como`
+ * el fallo diría solo 'sin_error', que no enseña nada.
+ */
+create function pg_temp.valor_como(p_uid uuid, p_consulta text) returns text
+language plpgsql as $fn$
+declare
+  v_out    text;
+  v_estado text;
+begin
+  begin
+    perform set_config('role', 'authenticated', true);
+    perform set_config('request.jwt.claims',
+      json_build_object('sub', p_uid::text, 'role', 'authenticated')::text, true);
+    execute p_consulta into v_out;
+    perform set_config('role', 'postgres', true);
+    perform set_config('request.jwt.claims', '', true);
+    return coalesce(v_out, '<nulo>');
+  exception when others then
+    get stacked diagnostics v_estado = returned_sqlstate;
+    perform set_config('role', 'postgres', true);
+    perform set_config('request.jwt.claims', '', true);
+    return 'ERROR:' || v_estado;
+  end;
+end;
+$fn$;
+
+/**
+ * Lectura escalar como `postgres`, tolerante a que el objeto todavía no exista.
+ * Es lo que convierte "la tabla no existe" en un `not ok` de UNA aserción en
+ * vez de en un aborto del archivo entero (trampa 2 de la cabecera).
+ */
+create function pg_temp.escalar(p_consulta text) returns text
+language plpgsql as $fn$
+declare
+  v_out    text;
+  v_estado text;
+begin
+  execute p_consulta into v_out;
+  return coalesce(v_out, '<nulo>');
+exception when others then
+  get stacked diagnostics v_estado = returned_sqlstate;
+  return 'ERROR:' || v_estado;
+end;
+$fn$;
+
+/**
+ * Escritura como `postgres`, tolerante. Devuelve 'sin_error' o el SQLSTATE.
+ * OJO AL USARLO (trampa 1): la escritura que hace NO la ve la aserción que lo
+ * invoca; la ven las sentencias POSTERIORES. Por eso en el bloque G el borrado
+ * y la relectura del pago son dos sentencias distintas.
+ */
+create function pg_temp.correr(p_consulta text) returns text
+language plpgsql as $fn$
+declare
+  v_estado text;
+begin
+  execute p_consulta;
+  return 'sin_error';
+exception when others then
+  get stacked diagnostics v_estado = returned_sqlstate;
+  return v_estado;
+end;
+$fn$;
+
+/**
+ * El día de cierre calculado POR FUERZA BRUTA, recorriendo el mes día a día.
+ * Es el patrón oro contra el que se compara la forma cerrada de
+ * `public.ultimo_dia_habil_del_mes` en los 36 meses del bloque B. Deliberadamente
+ * ineficiente y deliberadamente obvio: si los dos cálculos coinciden en 36
+ * meses seguidos, el de producción está bien.
+ * Sin festivos, por decisión explícita del ROADMAP.
+ */
+create function pg_temp.cierre_ref(p_dia date) returns date
+language sql stable as $fn$
+  select max(g.d)::date
+    from generate_series(
+           date_trunc('month', p_dia)::date,
+           (date_trunc('month', p_dia) + interval '1 month - 1 day')::date,
+           interval '1 day') g(d)
+   where extract(isodow from g.d) < 6;
+$fn$;
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- A. LA SIEMBRA DEL ESCENARIO FINANCIERO (1 aserción)
+--
+-- Las fechas son fijas y de 2026 a propósito: el cierre de un periodo solo se
+-- puede pedir cuando su día de cierre YA PASÓ, así que el escenario vive en
+-- julio y agosto de 2026 y el archivo sigue siendo válido corriéndolo en
+-- cualquier momento posterior.
+--
+--   Cierre de mayo 2026 ....... 2026-05-29  (el 31 cae en domingo)
+--   Cierre de junio 2026 ...... 2026-06-30
+--   Cierre de julio 2026 ...... 2026-07-31  (viernes)
+--   Cierre de agosto 2026 ..... 2026-08-31
+--
+--   Periodo de JULIO  = 2026-07-01 .. 2026-07-31
+--   Periodo de AGOSTO = 2026-08-01 .. 2026-08-31
+--   Periodo de JUNIO  = 2026-05-30 .. 2026-06-30   <- no empieza el día 1
+-- ═══════════════════════════════════════════════════════════════════════════
+
+insert into auth.users (id, email) values
+  ('ad700000-0000-0000-0000-000000000001', 'admin7@vg.co'),
+  ('a7000000-0000-0000-0000-00000000000a', 'aseadora7-a@vg.co'),
+  ('a7000000-0000-0000-0000-00000000000b', 'aseadora7-b@vg.co'),
+  ('a7000000-0000-0000-0000-00000000000c', 'aseadora7-baja@vg.co');
+
+-- `deactivated_at` no es opcional cuando `is_active` es falso: lo impone
+-- `profiles_deactivation_coherent`.
+insert into public.profiles (id, role, full_name, is_active, deactivated_at) values
+  ('ad700000-0000-0000-0000-000000000001', 'admin',   'Admin 7',            true,  null),
+  ('a7000000-0000-0000-0000-00000000000a', 'aseador', 'Aseadora 7A',        true,  null),
+  ('a7000000-0000-0000-0000-00000000000b', 'aseador', 'Aseadora 7B',        true,  null),
+  ('a7000000-0000-0000-0000-00000000000c', 'aseador', 'Aseadora 7C DE BAJA', false, now())
+on conflict (id) do update
+  set role           = excluded.role,
+      full_name      = excluded.full_name,
+      is_active      = excluded.is_active,
+      deactivated_at = excluded.deactivated_at;
+
+-- Dos apartamentos gestionados con tarifas DISTINTAS (para que un total mal
+-- agrupado no cuadre por casualidad) y uno de gestión externa, que es contra
+-- lo que se mide FIN-05.
+insert into public.properties
+  (id, nombre, cluster, gestion_vivaguest, hora_limite,
+   tarifa_huesped, pago_aseador, responsable_id, contacto_externo, is_active) values
+  ('b7000000-0000-0000-0000-000000000001', 'Apto 7A (fixture)', 'Cluster 7',
+   true,  '11:30',  90000::bigint, 40000::bigint,
+   'a7000000-0000-0000-0000-00000000000a', null, true),
+  ('b7000000-0000-0000-0000-000000000002', 'Apto 7B (fixture)', 'Cluster 7',
+   true,  '10:00', 150000::bigint, 55000::bigint,
+   'a7000000-0000-0000-0000-00000000000b', null, true),
+  -- Gestión externa: sin tarifas y sin responsable. `props_active_requires_rates`
+  -- y `props_active_requires_owner` solo aplican a las gestionadas, así que
+  -- esta unidad puede estar activa y seguir siendo inerte.
+  ('b7000000-0000-0000-0000-000000000003', 'Apto 7X EXTERNO',   'Cluster 7',
+   false, '11:30', null, null, null, 'Administra Doña Rosa', true);
+
+-- ---------------------------------------------------------------------------
+-- Los aseos. `state = 'completada'` directo en el INSERT es legal: la guarda de
+-- transiciones de `tg_cleanings_snapshot()` solo corre en UPDATE, y el CHECK
+-- `cl_completada_shape` exige `started_at`, `finished_at` y que el segundo no
+-- sea anterior al primero. Se respetan los tres.
+--
+-- Las tarifas NO se pasan: las copia el trigger desde el apartamento (FIN-01).
+-- ---------------------------------------------------------------------------
+insert into public.cleanings
+  (id, property_id, scheduled_date, tipo, origin, aseador_id, confirmado_at,
+   state, started_at, finished_at) values
+
+  -- J1 — fecha programada y fecha de ejecución DISTINTAS a propósito: es lo
+  --      único que demuestra que el desglose guarda dos columnas de verdad y no
+  --      la misma fecha dos veces (D7-8).
+  ('f7000000-0000-0000-0000-000000000101', 'b7000000-0000-0000-0000-000000000001',
+   date '2026-07-09', 'normal', 'manual', 'a7000000-0000-0000-0000-00000000000a', now(),
+   'completada',
+   (timestamp '2026-07-10 08:00') at time zone 'America/Bogota',
+   (timestamp '2026-07-10 14:00') at time zone 'America/Bogota'),
+
+  -- J2 — el que se borra a mano en el bloque G.
+  ('f7000000-0000-0000-0000-000000000102', 'b7000000-0000-0000-0000-000000000001',
+   date '2026-07-20', 'normal', 'manual', 'a7000000-0000-0000-0000-00000000000a', now(),
+   'completada',
+   (timestamp '2026-07-20 08:00') at time zone 'America/Bogota',
+   (timestamp '2026-07-20 14:00') at time zone 'America/Bogota'),
+
+  -- J3 — de la otra aseadora, en el otro apartamento. Existe para que un
+  --      agrupamiento mal escrito sume las dos personas en una sola fila.
+  ('f7000000-0000-0000-0000-000000000103', 'b7000000-0000-0000-0000-000000000002',
+   date '2026-07-15', 'normal', 'manual', 'a7000000-0000-0000-0000-00000000000b', now(),
+   'completada',
+   (timestamp '2026-07-15 08:00') at time zone 'America/Bogota',
+   (timestamp '2026-07-15 14:00') at time zone 'America/Bogota'),
+
+  -- JB — LA FRONTERA. Terminado a las 23:30 de Bogotá DEL DÍA DEL CIERRE.
+  --      En tiempo universal ese instante ya es 2026-08-01 04:30, así que una
+  --      conversión a día hecha sin zona lo manda al periodo de agosto. Como un
+  --      periodo cerrado no se recalcula nunca (D7-3), ese error sería
+  --      permanente y le cambiaría el pago a una persona.
+  ('f7000000-0000-0000-0000-000000000104', 'b7000000-0000-0000-0000-000000000001',
+   date '2026-07-31', 'normal', 'manual', 'a7000000-0000-0000-0000-00000000000a', now(),
+   'completada',
+   (timestamp '2026-07-31 20:00') at time zone 'America/Bogota',
+   (timestamp '2026-07-31 23:30') at time zone 'America/Bogota'),
+
+  -- A1 — el complemento. EMPIEZA el 31 de julio a las 23:50 y TERMINA el 1 de
+  --      agosto a las 00:30, las dos horas de Bogotá. Pertenece a AGOSTO, porque
+  --      D7-8 dice que un aseo pertenece al periodo en que SE COMPLETÓ, no en el
+  --      que empezó ni en el que estaba programado.
+  ('f7000000-0000-0000-0000-000000000201', 'b7000000-0000-0000-0000-000000000001',
+   date '2026-08-01', 'normal', 'manual', 'a7000000-0000-0000-0000-00000000000a', now(),
+   'completada',
+   (timestamp '2026-07-31 23:50') at time zone 'America/Bogota',
+   (timestamp '2026-08-01 00:30') at time zone 'America/Bogota'),
+
+  -- SC — un aseo completado en el periodo EN CURSO, que nadie ha cerrado ni
+  --      puede cerrar todavía. Es contra lo que se mide D7-4: el aseador NO ve
+  --      el periodo en curso. Va con fecha relativa para que siga siendo "el
+  --      periodo en curso" el día que alguien corra esto en 2027.
+  ('f7000000-0000-0000-0000-000000000301', 'b7000000-0000-0000-0000-000000000001',
+   public.today_bog() - 3, 'normal', 'manual', 'a7000000-0000-0000-0000-00000000000a', now(),
+   'completada',
+   ((public.today_bog() - 3)::text || ' 08:00')::timestamp at time zone 'America/Bogota',
+   ((public.today_bog() - 3)::text || ' 14:00')::timestamp at time zone 'America/Bogota'),
+
+  -- VD — el aseo VIVO de hoy de la aseadora 7A. Es el que la mete en la ventana
+  --      de `private.my_cleaning_ids()` y a su apartamento en la de
+  --      `private.my_property_ids()`, que es la superficie exacta del Hallazgo 1.
+  ('f7000000-0000-0000-0000-000000000302', 'b7000000-0000-0000-0000-000000000001',
+   public.today_bog(), 'normal', 'manual', 'a7000000-0000-0000-0000-00000000000a', now(),
+   'pendiente', null, null),
+
+  -- JP — gestionado, dentro del periodo de julio, y SIN completar. Es el que
+  --      alimenta el contador de aseos no computados de la cabecera del periodo.
+  ('f7000000-0000-0000-0000-000000000106', 'b7000000-0000-0000-0000-000000000002',
+   date '2026-07-25', 'normal', 'manual', null, null,
+   'pendiente', null, null);
+
+-- JX — informativo. Va en su propio INSERT porque `cl_unmanaged_is_inert` exige
+--      que TODO lo demás sea nulo, y el trigger le pone `state = null`.
+insert into public.cleanings
+  (id, property_id, scheduled_date, tipo, origin) values
+  ('f7000000-0000-0000-0000-000000000105', 'b7000000-0000-0000-0000-000000000003',
+   date '2026-07-12', 'normal', 'manual');
+
+-- ---------------------------------------------------------------------------
+-- Gastos. Uno por aseadora, en periodos distintos de apartamento, con montos
+-- distintos entre sí y distintos de los pagos, para que ninguna suma cuadre por
+-- coincidencia.
+-- ---------------------------------------------------------------------------
+insert into public.expenses
+  (id, cleaning_id, property_id, concepto, monto, moneda, reported_by) values
+  ('e7000000-0000-0000-0000-000000000001', 'f7000000-0000-0000-0000-000000000101',
+   'b7000000-0000-0000-0000-000000000001', 'Detergente', 12000::bigint, 'COP',
+   'a7000000-0000-0000-0000-00000000000a'),
+  ('e7000000-0000-0000-0000-000000000002', 'f7000000-0000-0000-0000-000000000103',
+   'b7000000-0000-0000-0000-000000000002', 'Bolsas de basura', 8000::bigint, 'COP',
+   'a7000000-0000-0000-0000-00000000000b');
+
+-- La foto del recibo del gasto. D7-2 exige poder llegar desde cada gasto a la
+-- evidencia que lo sustenta, y D7-6 corregida le da cinco años de vida. La ruta
+-- sigue la convención {cleaning_id}/{kind}/{uuid}.{ext}, que es lo que las
+-- policies de Storage autorizan.
+insert into public.cleaning_photos
+  (id, cleaning_id, kind, expense_id, storage_bucket, storage_path,
+   mime_type, bytes, uploaded_by) values
+  ('c7000000-0000-0000-0000-000000000001', 'f7000000-0000-0000-0000-000000000101',
+   'gasto', 'e7000000-0000-0000-0000-000000000001', 'evidencia',
+   'f7000000-0000-0000-0000-000000000101/gasto/c7000000-0000-0000-0000-000000000001.jpg',
+   'image/jpeg', 148231, 'a7000000-0000-0000-0000-00000000000a');
+
+-- Un daño, para el conteo del bloque 2 del Resumen.
+insert into public.damages
+  (id, cleaning_id, property_id, descripcion, reported_by) values
+  ('da700000-0000-0000-0000-000000000001', 'f7000000-0000-0000-0000-000000000103',
+   'b7000000-0000-0000-0000-000000000002', 'Rejilla del sifon partida',
+   'a7000000-0000-0000-0000-00000000000b');
+
+
+-- 1  La siembra es lo que el resto del archivo asume. Esta aserción está VERDE
+--    desde el primer día y ese es su trabajo: demuestra que el arnés funciona y
+--    que el rojo de más abajo es del schema que falta, no del fixture.
+--    6 completados gestionados = J1 J2 J3 JB A1 SC · 1 informativo = JX
+--    · 20000 en gastos = 12000 + 8000.
+select is(
+  pg_temp.escalar($q$
+    select (select count(*) from public.cleanings
+             where is_managed and state = 'completada')::text
+        || '|' || (select count(*) from public.cleanings where not is_managed)::text
+        || '|' || (select sum(e.monto) from public.expenses e)::text
+  $q$),
+  '6|1|20000',
+  'siembra: seis aseos completados gestionados, uno informativo y veinte mil pesos en gastos');
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- B. EL CALENDARIO DEL CIERRE (FIN-03, D7-5) — 6 aserciones
+--    Lo pone en verde: 07-04, migración 23.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- 2  Los 36 meses de 2026-01 a 2028-12, contra el recorrido día a día del mes.
+--    UNA aserción y no treinta y seis casos escogidos a mano: una lista literal
+--    de fechas prueba que alguien supo copiar un calendario, no que la forma
+--    cerrada sea correcta. El resultado se escribe como coincidencias/total para
+--    que una función que devuelva nulo dé '0/36' y no pase por vacuidad.
+select is(
+  pg_temp.escalar($q$
+    select count(*) filter (
+             where public.ultimo_dia_habil_del_mes(g.m::date) = pg_temp.cierre_ref(g.m::date)
+           )::text || '/' || count(*)::text
+      from generate_series(date '2026-01-01', date '2028-12-01', interval '1 month') g(m)
+  $q$),
+  '36/36',
+  'FIN-03 el dia de cierre coincide con el calculo por fuerza bruta en los 36 meses de 2026 a 2028');
+
+-- 3  Un mes que NO termina en fin de semana: julio de 2026 acaba el viernes 31,
+--    así que su periodo va del 1 al 31.
+select is(
+  pg_temp.escalar($q$
+    select p.periodo_desde::text || '..' || p.periodo_hasta::text
+      from public.periodo_de_cierre(date '2026-07-15') p
+  $q$),
+  '2026-07-01..2026-07-31',
+  'D7-5 un mes que termina en dia habil: el periodo de julio va del 1 al 31');
+
+-- 4  Un mes cuyo mes ANTERIOR termina en fin de semana: mayo de 2026 acaba en
+--    domingo, así que cierra el viernes 29 y el periodo de junio empieza el 30
+--    de MAYO. Esto es D7-5 entero: el periodo va de cierre a cierre y NO del
+--    día 1 a fin de mes calendario.
+select is(
+  pg_temp.escalar($q$
+    select p.periodo_desde::text || '..' || p.periodo_hasta::text
+      from public.periodo_de_cierre(date '2026-06-15') p
+  $q$),
+  '2026-05-30..2026-06-30',
+  'D7-5 un mes que sigue a un cierre en fin de semana: el periodo de junio empieza el 30 de mayo');
+
+-- 5  Contigüidad mayo -> junio: el inicio del segundo es el fin del primero más
+--    un día. Es la mitad del valor de D7-8: si no son contiguos, hay días en los
+--    que un aseo terminado no pertenece a ningún periodo y nadie lo paga.
+select is(
+  pg_temp.escalar($q$
+    select case
+             when (select periodo_desde from public.periodo_de_cierre(date '2026-06-15'))
+                = (select periodo_hasta from public.periodo_de_cierre(date '2026-05-15')) + 1
+             then 'contiguo' else 'HUECO' end
+  $q$),
+  'contiguo',
+  'D7-8 los periodos de mayo y junio son contiguos: no hay dias huerfanos entre ellos');
+
+-- 6  Y no se solapan, mirado desde el otro lado: julio -> agosto.
+select is(
+  pg_temp.escalar($q$
+    select case
+             when (select periodo_desde from public.periodo_de_cierre(date '2026-08-15'))
+                = (select periodo_hasta from public.periodo_de_cierre(date '2026-07-15')) + 1
+             then 'contiguo' else 'SOLAPADO' end
+  $q$),
+  'contiguo',
+  'D7-8 los periodos de julio y agosto son contiguos y no se solapan');
+
+-- 7  Un día POSTERIOR al cierre de su propio mes cae en el periodo del mes
+--    SIGUIENTE. El 30 de mayo de 2026 es el día después del cierre de mayo, y
+--    pertenece al periodo de junio. Sin esta regla, los días entre el cierre y
+--    el fin de mes calendario no pertenecerían a ningún periodo, que es
+--    exactamente el agujero que D7-5 existe para cerrar.
+select is(
+  pg_temp.escalar($q$
+    select p.periodo_desde::text || '..' || p.periodo_hasta::text
+      from public.periodo_de_cierre(date '2026-05-30') p
+  $q$),
+  '2026-05-30..2026-06-30',
+  'D7-5 un dia posterior al cierre de su mes pertenece al periodo del mes siguiente');
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- SE CIERRAN LOS DOS PERIODOS. Es una ESCRITURA, y va en sus propias
+-- sentencias: lo que se escriba aquí no lo vería una aserción que lo invocara
+-- en la misma sentencia (trampa 1 de la cabecera).
+--
+-- El periodo EN CURSO no se cierra, ni se puede: su día de cierre no ha pasado.
+-- Esa ausencia es el fixture del bloque I.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+select pg_temp.correr($q$select public.cerrar_periodo(date '2026-07-01', date '2026-07-31')$q$)
+  as cierre_julio \gset
+select pg_temp.correr($q$select public.cerrar_periodo(date '2026-08-01', date '2026-08-31')$q$)
+  as cierre_agosto \gset
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- C. LA PERTENENCIA AL PERIODO SE DECIDE EN HORA DE BOGOTÁ (D7-8) — 5 aserciones
+--
+--    ESTE ES EL BLOQUE QUE MÁS VALE DEL ARCHIVO. `finished_at` es un instante y
+--    la pertenencia a un periodo es una pregunta sobre días de negocio. Tomarle
+--    la fecha sin convertir la resuelve en tiempo universal, y TODO aseo
+--    terminado entre las 19:00 y la medianoche de Bogotá se va al día siguiente.
+--    Con aseos que se cierran al final de la tarde eso no es un caso raro: es
+--    todos los días. Al cruzar un cierre, ese aseo cae en el periodo equivocado,
+--    y como un periodo cerrado no se recalcula nunca (D7-3) el error es
+--    permanente y le cambia el pago a una persona.
+--
+--    SEÑUELO DECLARADO: quitarle la conversión de zona a `public.dia_bog` tiene
+--    que poner estas cinco en rojo. Se ejerce en el plan 07-14.
+--
+--    Lo pone en verde: 07-04 (la función) y 07-07 (que la use al cerrar).
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- 8  Las 23:30 de Bogotá del día del cierre son, en tiempo universal, las 04:30
+--    del día siguiente. El día de negocio sigue siendo el 31 de julio.
+select is(
+  pg_temp.escalar($q$
+    select public.dia_bog((timestamp '2026-07-31 23:30') at time zone 'America/Bogota')::text
+  $q$),
+  '2026-07-31',
+  'D7-8 las 23:30 de Bogota del dia del cierre siguen siendo ese dia de negocio y no el siguiente');
+
+-- 9  Y su complemento por el otro lado de la medianoche.
+select is(
+  pg_temp.escalar($q$
+    select public.dia_bog((timestamp '2026-08-01 00:30') at time zone 'America/Bogota')::text
+  $q$),
+  '2026-08-01',
+  'D7-8 las 00:30 de Bogota del dia siguiente al cierre son ya el dia siguiente');
+
+-- 10 JB, terminado a las 23:30 del día del cierre, tiene línea en el periodo de
+--    JULIO.
+select is(
+  pg_temp.escalar($q$
+    select count(*)::text
+      from public.cleaner_payout_lines l
+      join public.cleaner_payouts p on p.id = l.payout_id
+     where l.cleaning_id = 'f7000000-0000-0000-0000-000000000104'
+       and p.periodo_desde = date '2026-07-01'
+  $q$),
+  '1',
+  'D7-8 el aseo terminado a las 23:30 del dia del cierre se paga en ESE periodo');
+
+-- 11 Y NO tiene línea en el de agosto. Sin esta, un cálculo que metiera el aseo
+--    en los dos periodos pasaría la aserción anterior y pagaría dos veces.
+select is(
+  pg_temp.escalar($q$
+    select count(*)::text
+      from public.cleaner_payout_lines l
+      join public.cleaner_payouts p on p.id = l.payout_id
+     where l.cleaning_id = 'f7000000-0000-0000-0000-000000000104'
+       and p.periodo_desde = date '2026-08-01'
+  $q$),
+  '0',
+  'D7-8 y ese mismo aseo NO aparece tambien en el periodo siguiente');
+
+-- 12 A1 EMPEZÓ el 31 de julio a las 23:50 y TERMINÓ el 1 de agosto a las 00:30.
+--    Pertenece a AGOSTO: D7-8 dice que un aseo pertenece al periodo en que se
+--    COMPLETÓ, no al que estaba programado ni a aquel en que empezó.
+select is(
+  pg_temp.escalar($q$
+    select count(*)::text
+      from public.cleaner_payout_lines l
+      join public.cleaner_payouts p on p.id = l.payout_id
+     where l.cleaning_id = 'f7000000-0000-0000-0000-000000000201'
+       and p.periodo_desde = date '2026-08-01'
+  $q$),
+  '1',
+  'D7-8 un aseo que empieza antes del cierre y termina despues se paga en el periodo SIGUIENTE');
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- D. LA FRONTERA DEL ASEADORA, POR LAS DOS VÍAS DEL HALLAZGO 1 (D7-7) — 10 aserciones
+--
+--    Cita literal del dueño: "no, la aseadora no debe saber nada de nuestros
+--    cobros". Se cierran LAS DOS superficies medidas, no solo la barata.
+--
+--    Lo pone en verde: 07-05 (migración 24, los grants por columna y la vía del
+--    admin) y 07-08 (las dos funciones de lectura con guarda).
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- 13 y 14: FUGA MEDIDA. ESTAS DOS FALLAN HOY CONTRA `main` POR UN DEFECTO VIVO,
+--          NO POR ESTAR ADELANTADAS.
+--
+--    La migración 07 otorga `select` de TABLA sobre `cleanings` y sobre
+--    `properties` al rol `authenticated`, y en Supabase el admin y la aseadora
+--    COMPARTEN ese rol de Postgres. La policy acota las FILAS que ve cada
+--    quien, pero no las COLUMNAS: dentro de su propia ventana, la aseadora lee
+--    la tarifa que se le cobra al huésped por las dos vías.
+--
+--    Con esta siembra la fuga vale 90000 pesos, y el arnés `valor_como` está
+--    puesto justo para que el TAP lo imprima en el `have` cuando falle. El
+--    plan 07-05 revoca el grant de tabla y otorga por columna enumerada; a
+--    partir de ahí la lectura devuelve 42501 y estas dos se ponen en verde.
+
+-- 13
+select is(
+  pg_temp.valor_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select max(c.tarifa_huesped)::text from public.cleanings c$q$),
+  'ERROR:42501',
+  'D7-7 FUGA: una aseadora NO puede leer cleanings.tarifa_huesped por PostgREST');
+
+-- 14
+select is(
+  pg_temp.valor_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select max(p.tarifa_huesped)::text from public.properties p$q$),
+  'ERROR:42501',
+  'D7-7 FUGA: una aseadora NO puede leer properties.tarifa_huesped en su ventana');
+
+-- 15 y 16: EL COMPLEMENTO QUE IMPIDE CERRAR LA PUERTA TUMBANDO LA CASA.
+--    La aseadora SIGUE leyendo todo lo que su PWA necesita. Sin estas dos, el
+--    plan 07-05 podría "pasar" revocando el grant entero y dejando la app del
+--    aseador sin datos, que es la forma más fácil de aprobar una aserción de
+--    seguridad rompiendo el producto.
+
+-- 15
+select is(
+  pg_temp.valor_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select p.nombre || '|' || p.cluster || '|' || p.hora_limite::text
+         from public.properties p
+        where p.id = 'b7000000-0000-0000-0000-000000000001'$q$),
+  'Apto 7A (fixture)|Cluster 7|11:30:00',
+  'D7-7 la aseadora SI sigue leyendo nombre, cluster y hora limite de su apartamento');
+
+-- 16
+select is(
+  pg_temp.valor_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select c.scheduled_date::text || '|' || c.state::text
+         || '|' || coalesce(c.num_huespedes::text, '<nulo>')
+         || '|' || coalesce(c.instrucciones, '<nulo>')
+         from public.cleanings c
+        where c.id = 'f7000000-0000-0000-0000-000000000302'$q$),
+  public.today_bog()::text || '|pendiente|<nulo>|<nulo>',
+  'D7-7 la aseadora SI sigue leyendo fecha, estado, numero de huespedes e instrucciones de su aseo');
+
+-- 17, 18, 19: las tres vías de función. Una función `security definer` propiedad
+--    del superusuario SALTA la seguridad a nivel de fila entera, así que sin
+--    guarda de rol en la primera línea del cuerpo le entrega el catálogo de
+--    márgenes a cualquiera. Es la lección que la migración 16 ya escribió.
+--    Hoy las tres devuelven 42883 (la función no existe): rojo correcto.
+
+select is(
+  pg_temp.intento_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select * from public.rentabilidad_aseos(
+         date '2026-07-01', date '2026-07-31', null::uuid, null::uuid, 'todos')$q$),
+  '42501',
+  'FIN-02 una aseadora que llama a rentabilidad_aseos recibe 42501');
+
+select is(
+  pg_temp.intento_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select * from public.resumen_financiero(date '2026-07-01', date '2026-07-31')$q$),
+  '42501',
+  'D7-7 una aseadora que llama a resumen_financiero recibe 42501');
+
+select is(
+  pg_temp.intento_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select * from public.tarifas_de_apartamentos(null::uuid[])$q$),
+  '42501',
+  'D7-7 una aseadora que llama a tarifas_de_apartamentos recibe 42501');
+
+-- 20, 21, 22: y el admin SÍ obtiene fila de las tres. Una guarda escrita al
+--    revés (que deniegue a todo el mundo) pasaría las tres anteriores.
+
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001',
+    $q$select (count(*) > 0)::text from public.rentabilidad_aseos(
+         date '2026-07-01', date '2026-07-31', null::uuid, null::uuid, 'todos')$q$),
+  'true',
+  'FIN-02 el admin SI obtiene filas de rentabilidad_aseos');
+
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001',
+    $q$select (count(*) > 0)::text
+         from public.resumen_financiero(date '2026-07-01', date '2026-07-31')$q$),
+  'true',
+  'FIN-02 el admin SI obtiene fila de resumen_financiero');
+
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001',
+    $q$select (count(*) > 0)::text from public.tarifas_de_apartamentos(null::uuid[])$q$),
+  'true',
+  'D7-7 el admin SI obtiene filas de tarifas_de_apartamentos, que es su via propia');
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- E. EL CIERRE CALCULA LO QUE DEBE (FIN-03, D7-2) — 8 aserciones
+--
+--    La cuenta, escrita para que se pueda auditar a mano:
+--      Aseadora 7A: J1 + J2 + JB = 3 x 40000 = 120000 en aseos
+--                   G1 = 12000 en gastos            -> total 132000
+--      Aseadora 7B: J3 = 55000 en aseos
+--                   G2 = 8000 en gastos             -> total  63000
+--    Los montos son distintos entre sí a propósito: con 40000 y 40000 una suma
+--    mal agrupada cuadraría por casualidad.
+--
+--    Lo pone en verde: 07-07, migración 25.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- 23
+select is(
+  pg_temp.escalar($q$
+    select count(*)::text from public.payout_periods
+     where periodo_desde = date '2026-07-01' and periodo_hasta = date '2026-07-31'
+  $q$),
+  '1',
+  'FIN-03 el cierre deja UNA cabecera de periodo con sus dos fechas reales');
+
+-- 24 Una fila de pago por cada aseadora con aseos completados en el rango, y NO
+--    una por cada aseadora del sistema: la 7C está de baja y no trabajó.
+select is(
+  pg_temp.escalar($q$
+    select string_agg(p.aseador_nombre, ' + ' order by p.aseador_nombre)
+      from public.cleaner_payouts p where p.periodo_desde = date '2026-07-01'
+  $q$),
+  'Aseadora 7A + Aseadora 7B',
+  'FIN-03 el cierre deja una fila de pago por cada aseadora con aseos en el rango, y solo esas');
+
+-- 25 LAS DOS PARTIDAS POR SEPARADO. Es D7-2 en el schema, y no es cosmética:
+--    con un total plano el desglose no sobrevive al borrado, porque no hay forma
+--    de reconstruir cuánto vino de aseos y cuánto de gastos.
+select is(
+  pg_temp.escalar($q$
+    select 'aseos=' || p.monto_aseos || ' gastos=' || p.monto_gastos
+        || ' total=' || p.monto_total
+      from public.cleaner_payouts p
+     where p.periodo_desde = date '2026-07-01'
+       and p.aseador_id = 'a7000000-0000-0000-0000-00000000000a'
+  $q$),
+  'aseos=120000 gastos=12000 total=132000',
+  'D7-2 el pago de 7A guarda aseos y gastos por separado ademas del total');
+
+-- 26
+select is(
+  pg_temp.escalar($q$
+    select 'aseos=' || p.monto_aseos || ' gastos=' || p.monto_gastos
+        || ' total=' || p.monto_total
+      from public.cleaner_payouts p
+     where p.periodo_desde = date '2026-07-01'
+       and p.aseador_id = 'a7000000-0000-0000-0000-00000000000b'
+  $q$),
+  'aseos=55000 gastos=8000 total=63000',
+  'D7-2 el pago de 7B guarda aseos y gastos por separado ademas del total');
+
+-- 27 Una línea por aseo y una línea por gasto. Ni un resumen por apartamento ni
+--    una línea por día.
+select is(
+  pg_temp.escalar($q$
+    select 'aseo=' || count(*) filter (where l.tipo = 'aseo')
+        || ' gasto=' || count(*) filter (where l.tipo = 'gasto')
+      from public.cleaner_payout_lines l
+      join public.cleaner_payouts p on p.id = l.payout_id
+     where p.periodo_desde = date '2026-07-01'
+       and p.aseador_id = 'a7000000-0000-0000-0000-00000000000a'
+  $q$),
+  'aseo=3 gasto=1',
+  'D7-2 el desglose de 7A tiene tres lineas de aseo y una de gasto');
+
+-- 28 Cada línea lleva el nombre del apartamento COPIADO COMO TEXTO, el monto y
+--    LAS DOS FECHAS. J1 se sembró con fecha programada 2026-07-09 y ejecución
+--    2026-07-10 justamente para que una implementación que copie la misma fecha
+--    dos veces no pueda pasar esta aserción.
+select is(
+  pg_temp.escalar($q$
+    select l.property_nombre || '|' || l.monto
+        || '|' || l.fecha_programada::text || '|' || l.fecha_ejecucion::text
+      from public.cleaner_payout_lines l
+     where l.cleaning_id = 'f7000000-0000-0000-0000-000000000101' and l.tipo = 'aseo'
+  $q$),
+  'Apto 7A (fixture)|40000|2026-07-09|2026-07-10',
+  'D7-2 y D7-8 la linea de aseo lleva nombre copiado, monto y LAS DOS fechas');
+
+-- 29 Y la línea de gasto lleva la ruta de la evidencia copiada. D7-2 exige poder
+--    llegar desde cada gasto a la foto que lo sustenta.
+select is(
+  pg_temp.escalar($q$
+    select l.concepto || '|' || l.monto || '|' || l.evidencia_bucket
+        || '|' || l.evidencia_path
+      from public.cleaner_payout_lines l
+     where l.expense_id = 'e7000000-0000-0000-0000-000000000001'
+  $q$),
+  'Detergente|12000|evidencia|'
+  || 'f7000000-0000-0000-0000-000000000101/gasto/c7000000-0000-0000-0000-000000000001.jpg',
+  'D7-2 la linea de gasto lleva concepto, monto y la ruta de la evidencia copiada');
+
+-- 30 EL TIPO, no solo el valor. La suma sobre `bigint` devuelve `numeric`, que
+--    supabase-js entrega como CADENA para no perder precisión, y eso rompe la
+--    aritmética en TypeScript en silencio: '132000' + 1 da '1320001'. La columna
+--    tiene que ser `bigint`, y la aserción se hace sobre el catálogo de tipos.
+select is(
+  pg_temp.escalar($q$
+    select string_agg(a.atttypid::regtype::text, ',' order by a.attname)
+      from pg_catalog.pg_attribute a
+     where a.attrelid = 'public.cleaner_payouts'::regclass
+       and a.attname in ('monto_aseos', 'monto_gastos', 'monto_total')
+  $q$),
+  'bigint,bigint,bigint',
+  'las tres partidas del pago son bigint y no numeric: numeric llega a TypeScript como cadena');
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- F. LA IDEMPOTENCIA (FIN-03, D7-3) — 3 aserciones
+--
+--    "Un mes cerrado no se vuelve a tocar." Es el número que una persona ya
+--    cobró: un histórico que cambia solo es un histórico en el que nadie puede
+--    confiar.
+--
+--    SEÑUELO DECLARADO: quitar la guarda contra el cierre doble tiene que poner
+--    estas tres en rojo. Se ejerce en el plan 07-14.
+--
+--    Lo pone en verde: 07-07, migración 25.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- Segunda corrida sobre el MISMO periodo. Escritura, en su propia sentencia.
+select pg_temp.correr($q$select public.cerrar_periodo(date '2026-07-01', date '2026-07-31')$q$)
+  as segunda_corrida \gset
+
+-- 31
+select is(
+  pg_temp.escalar($q$
+    select count(*)::text || '|' || sum(p.monto_total)::text
+      from public.cleaner_payouts p where p.periodo_desde = date '2026-07-01'
+  $q$),
+  '2|195000',
+  'D7-3 dos corridas del cierre no pagan dos veces: mismas filas y mismos montos');
+
+-- Se edita la tarifa del apartamento DESPUÉS de cerrar, que es el caso que el
+-- dueño planteó con todas las letras, y se vuelve a correr el cierre.
+select pg_temp.correr($q$
+  update public.properties
+     set tarifa_huesped = 200000::bigint, pago_aseador = 99000::bigint
+   where id = 'b7000000-0000-0000-0000-000000000001'
+$q$) as tarifa_editada \gset
+
+select pg_temp.correr($q$select public.cerrar_periodo(date '2026-07-01', date '2026-07-31')$q$)
+  as tercera_corrida \gset
+
+-- 32 Si el cierre recalculara, 7A pasaría de 132000 a 3 x 99000 + 12000 = 309000.
+select is(
+  pg_temp.escalar($q$
+    select p.monto_total::text from public.cleaner_payouts p
+     where p.periodo_desde = date '2026-07-01'
+       and p.aseador_id = 'a7000000-0000-0000-0000-00000000000a'
+  $q$),
+  '132000',
+  'D7-3 corregir la tarifa del apartamento despues de cerrar NO mueve el pago ya cerrado');
+
+-- Y entra un aseo NUEVO al periodo ya cerrado, terminado dentro del rango. Pasa
+-- de verdad: un aseo de fin de mes que el admin cierra a mano días después.
+select pg_temp.correr($q$
+  insert into public.cleanings
+    (id, property_id, scheduled_date, tipo, origin, aseador_id, confirmado_at,
+     state, started_at, finished_at)
+  values ('f7000000-0000-0000-0000-000000000107',
+          'b7000000-0000-0000-0000-000000000002',
+          date '2026-07-05', 'normal', 'manual',
+          'a7000000-0000-0000-0000-00000000000a', now(), 'completada',
+          (timestamp '2026-07-05 08:00') at time zone 'America/Bogota',
+          (timestamp '2026-07-05 14:00') at time zone 'America/Bogota')
+$q$) as aseo_tardio \gset
+
+select pg_temp.correr($q$select public.cerrar_periodo(date '2026-07-01', date '2026-07-31')$q$)
+  as cuarta_corrida \gset
+
+-- 33 Un periodo cerrado NO SE RECALCULA NUNCA. El aseo tardío no entra, y eso es
+--    correcto: el número ya se pagó. Si algún día se decide compensarlo, es un
+--    concepto nuevo (un ajuste), no una reapertura.
+select is(
+  pg_temp.escalar($q$
+    select count(*)::text || '|' || sum(p.monto_total)::text
+      from public.cleaner_payouts p where p.periodo_desde = date '2026-07-01'
+  $q$),
+  '2|195000',
+  'D7-3 un aseo que entra al periodo despues de cerrado tampoco mueve el pago');
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- H. LOS INFORMATIVOS, FUERA DE TODO (FIN-05) — 4 aserciones
+--
+--    "Los aseos informativos quedan fuera de TODO cálculo y de TODA métrica."
+--    Eso incluye los enteros, no solo los pesos. El filtro de gestión propia
+--    tiene que ser EXPLÍCITO y no implícito por nulo (Pitfall 8 del research):
+--    apoyarse en que el CHECK deja las tarifas en nulo funciona hasta el día en
+--    que alguien agregue una columna con default.
+--
+--    SEÑUELO DECLARADO: quitar el filtro de gestión externa del núcleo tiene que
+--    poner estas cuatro en rojo. Se ejerce en el plan 07-14.
+--
+--    Lo pone en verde: 07-07 (el cierre) y 07-08 (las lecturas).
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- 34
+select is(
+  pg_temp.escalar($q$
+    select count(*)::text
+      from public.cleaner_payout_lines l
+     where l.property_id = 'b7000000-0000-0000-0000-000000000003'
+        or l.cleaning_id = 'f7000000-0000-0000-0000-000000000105'
+  $q$),
+  '0',
+  'FIN-05 el aseo de gestion externa no aparece en NINGUNA linea del desglose');
+
+-- 35 LA QUE MUERDE. El contador de aseos no computados de la cabecera vale UNO
+--    (JP, gestionado y sin completar) y no DOS. El informativo JX está
+--    programado dentro del rango y tampoco está completado, así que un contador
+--    escrito sin el filtro de gestión propia daría 2 y le pondría al admin una
+--    alerta por un aseo que nunca fue suyo.
+select is(
+  pg_temp.escalar($q$
+    select pp.aseos_no_computados::text from public.payout_periods pp
+     where pp.periodo_desde = date '2026-07-01'
+  $q$),
+  '1',
+  'FIN-05 el contador de aseos no computados cuenta el pendiente gestionado y NO el informativo');
+
+-- 36 `rentabilidad_aseos` devuelve filas, y ninguna es del apartamento externo.
+--    Se escribe como "hay filas | filas externas" para que una función que
+--    devuelva el conjunto vacío no pase por vacuidad.
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001',
+    $q$select (count(*) > 0)::text || '|'
+         || count(*) filter (
+              where r.property_id = 'b7000000-0000-0000-0000-000000000003')::text
+         from public.rentabilidad_aseos(
+                date '2026-07-01', date '2026-07-31',
+                null::uuid, null::uuid, 'todos') r$q$),
+  'true|0',
+  'FIN-05 rentabilidad_aseos devuelve filas y ninguna es del apartamento de gestion externa');
+
+-- 37 Los tres conteos del bloque 2 del Resumen, con la aritmética a la vista:
+--      aseos hechos ....... J1 J2 J3 JB + el tardio del bloque F  = 5
+--      aseos con gastos ... J1 (Detergente) y J3 (Bolsas)         = 2
+--      aseos con danos .... J3 (rejilla partida)                  = 1
+--    CONTRATO: `resumen_financiero` cuenta aseos GESTIONADOS Y COMPLETADOS cuyo
+--    dia de ejecucion en Bogota cae en el rango. Es lectura viva, no snapshot,
+--    asi que si ve el aseo tardio del bloque F: eso NO contradice D7-3, que solo
+--    congela el PAGO.
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001',
+    $q$select s.aseos_hechos::text || '|' || s.aseos_con_gastos::text
+         || '|' || s.aseos_con_danos::text
+         from public.resumen_financiero(date '2026-07-01', date '2026-07-31') s$q$),
+  '5|2|1',
+  'FIN-05 los tres conteos del Resumen excluyen el informativo');
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- I. LO QUE VE EL ASEADOR, Y SOBRE TODO LO QUE NO (D7-4, D7-7) — 6 aserciones
+--    Lo pone en verde: 07-09, migración 27.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * El identificador del pago de la compañera hay que resolverlo COMO POSTGRES.
+ * Resolverlo dentro de la sesión impersonada sería un autoengaño: la aseadora no
+ * tiene grant sobre la tabla de pagos, así que la subconsulta fallaría con 42501
+ * y la aserción pasaría sin haber llegado nunca a llamar la función.
+ * El uuid de ceros es el relleno para cuando la tabla todavía no existe.
+ */
+create function pg_temp.uuid_o_cero(p_txt text) returns text
+language sql immutable as $fn$
+  select case when p_txt ~ '^[0-9a-f]{8}-[0-9a-f]{4}-' then p_txt
+              else '00000000-0000-0000-0000-000000000000' end;
+$fn$;
+
+select pg_temp.uuid_o_cero(pg_temp.escalar($q$
+  select p.id::text from public.cleaner_payouts p
+   where p.periodo_desde = date '2026-07-01'
+     and p.aseador_id = 'a7000000-0000-0000-0000-00000000000b'
+$q$)) as pago_de_7b \gset
+
+-- 38 Solo SUS periodos cerrados. 7A cobró en julio y en agosto.
+select is(
+  pg_temp.valor_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select string_agg(m.periodo_desde::text, ',' order by m.periodo_desde)
+         from public.mis_pagos_cerrados() m$q$),
+  '2026-07-01,2026-08-01',
+  'D7-4 mis_pagos_cerrados devuelve los periodos cerrados de la aseadora que llama');
+
+-- 39 Y NO EL PERIODO EN CURSO. El aseo SC de la siembra está completado dentro
+--    del periodo vigente y nadie lo ha cerrado ni puede cerrarlo todavía. El
+--    acumulado del periodo en curso se mueve, y puede BAJAR si se cancela un
+--    aseo ya contado; un número que baja en el teléfono de quien lo va a cobrar
+--    es una conversación que nadie quiere tener.
+--    Se escribe como "total | posteriores a agosto" para que una función que
+--    devuelva cero filas no pase por vacuidad.
+select is(
+  pg_temp.valor_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select count(*)::text || '|'
+         || count(*) filter (where m.periodo_desde > date '2026-08-31')::text
+         from public.mis_pagos_cerrados() m$q$),
+  '2|0',
+  'D7-4 mis_pagos_cerrados NO devuelve el periodo en curso, que nadie ha cerrado');
+
+-- 40 Y la compañera ve lo suyo, que es distinto. El filtro por dueño va DENTRO
+--    de la función, contra el identificador de la sesión: una pantalla que
+--    filtra es una pantalla que se puede saltar.
+select is(
+  pg_temp.valor_como('a7000000-0000-0000-0000-00000000000b',
+    $q$select string_agg(m.periodo_desde::text, ',' order by m.periodo_desde)
+         from public.mis_pagos_cerrados() m$q$),
+  '2026-07-01',
+  'D7-4 la otra aseadora ve SUS periodos y no los de su companera');
+
+-- 41 Una aseadora no ve el pago de otra. Se afirma `42501` y no "cero filas" a
+--    propósito: pedir el desglose de un pago ajeno es un intento de acceso, no
+--    una consulta vacía, y la diferencia importa el día que alguien mire los
+--    logs.
+select is(
+  pg_temp.intento_como('a7000000-0000-0000-0000-00000000000a',
+    format($q$select * from public.detalle_de_mi_pago(%L::uuid)$q$, :'pago_de_7b')),
+  '42501',
+  'D7-4 una aseadora que pide el detalle del pago de otra recibe 42501');
+
+-- 42 La aseadora DESACTIVADA no obtiene nada, aunque su sesión siga viva. La
+--    guarda tiene que ser `private.is_active_cleaner()`, que consulta el perfil
+--    en vivo, y nunca un claim del token: un token ya emitido sigue siendo
+--    válido hasta que expire.
+select is(
+  pg_temp.intento_como('a7000000-0000-0000-0000-00000000000c',
+    $q$select * from public.mis_pagos_cerrados()$q$),
+  '42501',
+  'D7-4 una aseadora desactivada no obtiene sus pagos aunque su sesion siga viva');
+
+-- 43 SOBRE EL CATÁLOGO, NO SOBRE LA FILA. Ninguna de las dos funciones del
+--    aseador DECLARA una columna de cifra de huésped, de margen o de cobrado.
+--    Se comprueba contra el `returns table` en `pg_proc` porque el dato viaja al
+--    teléfono aunque la pantalla no lo pinte, y porque una siembra donde la
+--    cifra fuera nula haría pasar una aserción sobre la fila sin demostrar nada.
+--    Se escribe como "funciones encontradas | funciones que declaran cifra" para
+--    que no pase por vacuidad mientras las funciones no existan.
+select is(
+  pg_temp.escalar($q$
+    select count(*)::text || '|'
+        || count(*) filter (
+             where pg_catalog.pg_get_function_result(p.oid)
+                   ~* '(huesped|margen|cobrado|tarifa)')::text
+      from pg_catalog.pg_proc p
+      join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.proname in ('mis_pagos_cerrados', 'detalle_de_mi_pago')
+  $q$),
+  '2|0',
+  'D7-7 las dos funciones del aseador existen y NINGUNA declara una cifra de huesped');
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- J. EL RECIBO DURA CINCO AÑOS (D7-6, corregida por la DEFINICION §4) — 3 aserciones
+--
+--    D7-2 exige poder llegar desde cada gasto a la foto que lo sustenta. Con la
+--    política de fotos vigente, ese enlace está roto al mes siguiente. Los
+--    recibos son una fracción marginal del volumen, así que la excepción es
+--    barata; lo que llena el almacenamiento son las fotos de checklist.
+--
+--    Esta función existe PARA LA FASE 9. Si no existiera, quien escriba la purga
+--    borraría los recibos sin saber que está rompiendo un requisito de la Fase 7.
+--
+--    Lo pone en verde: 07-04, migración 23.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- 44
+select is(
+  pg_temp.escalar($q$select public.foto_vencida('checklist', now() - interval '31 days')::text$q$),
+  'true',
+  'D7-6 una foto de checklist de 31 dias ya vencio');
+
+-- 45 La misma antigüedad, otra clase de foto, otra respuesta. Es la excepción
+--    entera en una aserción.
+select is(
+  pg_temp.escalar($q$select public.foto_vencida('gasto', now() - interval '31 days')::text$q$),
+  'false',
+  'D7-6 un recibo de gasto de 31 dias NO ha vencido: tiene politica propia');
+
+-- 46 Pero no es eterno: pasados los cinco años, vence.
+select is(
+  pg_temp.escalar($q$
+    select public.foto_vencida('gasto', now() - interval '5 years 1 day')::text
+  $q$),
+  'true',
+  'D7-6 un recibo de gasto de mas de cinco anos si vencio');
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- G. LA SUPERVIVENCIA AL BORRADO (FIN-04, criterio del ROADMAP) — 6 aserciones
+--
+--    VA AL FINAL AUNQUE SU LETRA SEA ANTERIOR: destruye parte de la siembra a
+--    propósito, y cualquier bloque posterior leería un fixture mutilado y
+--    fallaría por la razón equivocada.
+--
+--    El ROADMAP describe este criterio palabra por palabra, así que se escribe
+--    palabra por palabra: cerrar el periodo, BORRAR A MANO un aseo de ese
+--    periodo, y volver a leer el pago.
+--
+--    LA TRAMPA 1 DE LA CABECERA MUERDE JUSTO AQUÍ: el borrado va en su propia
+--    sentencia, ANTES de la aserción que lee. Una escritura dentro de la
+--    subconsulta de una aserción no la ve esa aserción.
+--
+--    SEÑUELO DECLARADO: poner las líneas del desglose en cascada hacia el mundo
+--    vivo tiene que poner esto en rojo. Se ejerce en el plan 07-14.
+--
+--    Lo pone en verde: 07-04 (la ausencia de clave foránea) y 07-07 (el texto
+--    copiado en vez de punteros).
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- 47 El borrado NO FALLA. Si fallara con 23503, la purga de la Fase 9 se quedaría
+--    atascada para siempre y la retención de seis meses no se cumpliría nunca.
+--    Esta es la sentencia de escritura; las cuatro aserciones que siguen leen.
+select is(
+  pg_temp.correr($q$
+    delete from public.cleanings where id = 'f7000000-0000-0000-0000-000000000102'
+  $q$),
+  'sin_error',
+  'FIN-04 borrar a mano un aseo de un periodo ya cerrado NO falla');
+
+-- 48
+select is(
+  pg_temp.escalar($q$
+    select count(*)::text from public.payout_periods
+     where periodo_desde = date '2026-07-01'
+  $q$),
+  '1',
+  'FIN-04 la cabecera del periodo sigue ahi despues de borrar el aseo');
+
+-- 49 EL MISMO TOTAL. No un total recalculado a 92000 por haberse ido un aseo:
+--    el pago es un documento contable, no una vista sobre el mundo vivo.
+select is(
+  pg_temp.escalar($q$
+    select p.monto_total::text from public.cleaner_payouts p
+     where p.periodo_desde = date '2026-07-01'
+       and p.aseador_id = 'a7000000-0000-0000-0000-00000000000a'
+  $q$),
+  '132000',
+  'FIN-04 el pago de la aseadora sigue ahi y con el MISMO total');
+
+-- 50 Y la línea del aseo borrado sigue siendo LEGIBLE: nombre del apartamento y
+--    monto. No un identificador suelto apuntando a nada. D7-2 pedía desglose, no
+--    punteros rotos.
+select is(
+  pg_temp.escalar($q$
+    select l.property_nombre || '|' || l.monto::text
+      from public.cleaner_payout_lines l
+     where l.cleaning_id = 'f7000000-0000-0000-0000-000000000102'
+  $q$),
+  'Apto 7A (fixture)|40000',
+  'FIN-04 la linea del aseo borrado conserva nombre de apartamento y monto legibles');
+
+-- 51 Y lo mismo por el lado del gasto. Escritura primero, en su propia sentencia.
+select is(
+  pg_temp.correr($q$
+    delete from public.expenses where id = 'e7000000-0000-0000-0000-000000000001'
+  $q$),
+  'sin_error',
+  'FIN-04 borrar a mano un gasto de un periodo ya cerrado NO falla');
+
+-- 52
+select is(
+  pg_temp.escalar($q$
+    select l.concepto || '|' || l.monto::text
+      from public.cleaner_payout_lines l
+     where l.expense_id = 'e7000000-0000-0000-0000-000000000001'
+  $q$),
+  'Detergente|12000',
+  'FIN-04 la linea del gasto borrado conserva concepto y monto');
+
+
+select * from finish();
+rollback;
