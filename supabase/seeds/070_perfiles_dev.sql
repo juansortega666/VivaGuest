@@ -71,13 +71,23 @@ begin
      'admin@vivaguest.test', v_hash, now(), now(), now(),
      '{"provider":"email","providers":["email"],"role":"admin"}'::jsonb, '{}'::jsonb,
      '', '', '', ''),
+    -- ── `role` VA EN `raw_app_meta_data` TAMBIEN PARA LAS ASEADORAS ──────────
+    -- Sin esta clave el login funciona y la sesion se crea, pero el middleware
+    -- lee `user.app_metadata.role`, lo encuentra `undefined`, y devuelve a
+    -- `/login` en bucle: se ve como "el boton Entrar no hace nada", que es
+    -- exactamente como se reporto el 2026-09-12 desde un iPhone.
+    --
+    -- El `update` de `profiles` de mas abajo NO alcanza: `profiles` es la
+    -- autoridad para RLS y para la desactivacion, pero el ruteo del middleware
+    -- sale del JWT, y son dos sitios distintos. El alta real de un aseador
+    -- (Fase 2) escribe los dos; esta semilla escribia solo uno.
     (v_maria, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
      'maria@vivaguest.test', v_hash, now(), now(), now(),
-     '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb,
+     '{"provider":"email","providers":["email"],"role":"aseador"}'::jsonb, '{}'::jsonb,
      '', '', '', ''),
     (v_luz,   '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
      'luz@vivaguest.test', v_hash, now(), now(), now(),
-     '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb,
+     '{"provider":"email","providers":["email"],"role":"aseador"}'::jsonb, '{}'::jsonb,
      '', '', '', '')
   on conflict (id) do nothing;
 
