@@ -12,15 +12,13 @@
  * árbol que solo quiera dos letras, y además la hace imposible de probar sin
  * montar un componente.
  *
- * ── DUPLICACIÓN TRANSITORIA, DECLARADA ────────────────────────────────────
+ * ── LA DUPLICACIÓN TRANSITORIA YA SE CERRÓ ────────────────────────────────
  *
- * Hoy la función está DOS VECES: aquí y en `TopNav.tsx`. Es deliberado y tiene
- * fecha de caducidad: **el plan 07-10 cambia la barra superior para que importe
- * esta y borra la definición vieja.** Se hace así para que 07-06 y 07-10 no se
- * peleen por el mismo archivo corriendo en waves distintas.
- *
- * Si estás leyendo esto y `TopNav.tsx` ya importa de aquí, la nota sobra y se
- * borra. Si todavía define la suya, ese es el trabajo pendiente.
+ * Durante una wave la función estuvo DOS VECES, aquí y en `TopNav.tsx`, para que
+ * 07-06 y 07-10 no se pelearan por el mismo archivo corriendo en paralelo. El
+ * plan 07-10 borró la definición vieja: hoy este módulo es el único sitio del
+ * repo donde se calculan las iniciales, y `CirculoIniciales` es el único que lo
+ * consume.
  * ════════════════════════════════════════════════════════════════════════════
  */
 

@@ -13,18 +13,36 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 
+import { CirculoIniciales } from './CirculoIniciales';
+
 /**
  * Barra superior del admin (UI-SPEC §6.1).
  *
  * Es Client Component por UNA sola razon: `usePathname()`, que es lo que decide
- * cual de los tres links esta activo. El resto del shell se queda en servidor. La
+ * cual de los cuatro links esta activo. El resto del shell se queda en servidor. La
  * alternativa (convertir `layout.tsx` entero en cliente) arrastraria al bundle el
  * guard y la fabrica de Supabase de servidor, que ni siquiera pueden viajar al
  * navegador porque declaran `server-only`.
  */
 
 /**
- * Los tres links del admin, en este orden (04-UI-SPEC.md §6.3).
+ * Los CUATRO links del admin, en este orden (07-UI-SPEC.md §5.1).
+ *
+ * ── LA FASE 7 ANADE `Finanzas`, Y VA ULTIMO ────────────────────────────────
+ * El orden es de frecuencia de uso y la operacion del dia manda: el dinero se
+ * consulta, no se coordina. Ponerlo primero desplazaria a la derecha la pantalla
+ * de trabajo, que es la que el admin abre decenas de veces al dia.
+ *
+ * Y va aqui, en la barra principal, y no dentro de `Operacion`, porque D7-1
+ * decide que el dinero vive en su propia seccion: la pantalla operativa se
+ * comparte, y con ella se compartirian los margenes.
+ *
+ * La logica de activacion de abajo ya marca el link en todas las subrutas
+ * (`/finanzas/aseos`, `/finanzas/pagos`, `/finanzas/aseadoras/[id]`), asi que no
+ * hubo que tocarla.
+ *
+ * ── EL CONTRATO ANTERIOR, QUE SIGUE VIGENTE EN TODO LO DEMAS ───────────────
+ * Lo que la Fase 4 dejo escrito sobre los tres primeros (04-UI-SPEC.md §6.3):
  *
  * ── SUPERSEDE DE `02-UI-SPEC.md` §6.1 ───────────────────────────────────────
  * Aquel contrato anticipaba que la Fase 4 anadiria `Dia`, `Sin confirmar` y
@@ -43,23 +61,8 @@ const ENLACES = [
   { href: '/operacion', etiqueta: 'Operación' },
   { href: '/apartamentos', etiqueta: 'Apartamentos' },
   { href: '/aseadores', etiqueta: 'Aseadores' },
+  { href: '/finanzas', etiqueta: 'Finanzas' },
 ] as const;
-
-/**
- * Iniciales para el circulo del menu de usuario.
- *
- * Dos letras como maximo: con tres, el circulo de 28px se queda sin aire y el
- * texto de 12px empieza a recortarse.
- */
-export function iniciales(nombre: string): string {
-  const palabras = nombre.trim().split(/\s+/).filter(Boolean);
-  if (palabras.length === 0) return '?';
-  return palabras
-    .slice(0, 2)
-    .map((p) => p[0] ?? '')
-    .join('')
-    .toUpperCase();
-}
 
 export function TopNav({ nombre }: { nombre: string }) {
   const ruta = usePathname();
@@ -123,12 +126,12 @@ export function TopNav({ nombre }: { nombre: string }) {
         <div className="ml-auto">
           <DropdownMenu>
             <DropdownMenuTrigger className="transicion flex items-center gap-sm rounded-md px-sm py-xs text-body text-foreground hover:bg-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-              <span
-                aria-hidden="true"
-                className="flex size-avatar shrink-0 items-center justify-center rounded-full bg-muted text-micro font-semibold text-foreground"
-              >
-                {iniciales(nombre)}
-              </span>
+              {/*
+                El circulo vive en `CirculoIniciales` desde la Fase 7: el bloque
+                por aseadora, la ficha y la tabla de pagos pintan el mismo, y
+                cuatro copias se desincronizan en el primer retoque.
+              */}
+              <CirculoIniciales nombre={nombre} />
               <span>{nombre}</span>
               <ChevronDown className="size-3.5" strokeWidth={2} aria-hidden="true" />
             </DropdownMenuTrigger>
