@@ -1611,6 +1611,34 @@ export type Database = {
         Args: { p_cleaning: string; p_motivo: string }
         Returns: undefined
       }
+      detalle_de_mi_pago: {
+        Args: { p_payout: string }
+        Returns: {
+          concepto: string
+          evidencia_bucket: string
+          evidencia_path: string
+          fecha_ejecucion: string
+          fecha_programada: string
+          moneda: string
+          monto: number
+          property_nombre: string
+          tipo: string
+        }[]
+      }
+      detalle_de_pago: {
+        Args: { p_payout: string }
+        Returns: {
+          concepto: string
+          evidencia_bucket: string
+          evidencia_path: string
+          fecha_ejecucion: string
+          fecha_programada: string
+          moneda: string
+          monto: number
+          property_nombre: string
+          tipo: string
+        }[]
+      }
       dia_bog: { Args: { p_instante: string }; Returns: string }
       dispatch_feed_syncs: { Args: never; Returns: number }
       dispatch_push_notifications: { Args: never; Returns: number }
@@ -1647,6 +1675,55 @@ export type Database = {
           property_nombre: string
         }[]
       }
+      marcar_pago_pagado: {
+        Args: { p_payout: string }
+        Returns: {
+          aseador_nombre: string
+          moneda: string
+          monto_total: number
+          pagado_at: string
+          payout_id: string
+        }[]
+      }
+      mis_pagos_cerrados: {
+        Args: never
+        Returns: {
+          moneda: string
+          monto_aseos: number
+          monto_gastos: number
+          monto_total: number
+          pagado_at: string
+          payout_id: string
+          periodo_desde: string
+          periodo_hasta: string
+        }[]
+      }
+      pagos_de_aseadora: {
+        Args: { p_aseador: string }
+        Returns: {
+          moneda: string
+          monto_aseos: number
+          monto_gastos: number
+          monto_total: number
+          pagado_at: string
+          payout_id: string
+          periodo_desde: string
+          periodo_hasta: string
+        }[]
+      }
+      pagos_del_periodo: {
+        Args: { p_desde: string }
+        Returns: {
+          aseador_nombre: string
+          cantidad_aseos: number
+          moneda: string
+          monto_aseos: number
+          monto_gastos: number
+          monto_total: number
+          pagado_at: string
+          payout_id: string
+        }[]
+      }
       periodo_de_cierre: {
         Args: { p_dia: string }
         Returns: {
@@ -1659,6 +1736,18 @@ export type Database = {
         Returns: {
           periodo_desde: string
           periodo_hasta: string
+        }[]
+      }
+      periodos_de_pago: {
+        Args: never
+        Returns: {
+          aseos_no_computados: number
+          faltan_por_pagar: number
+          moneda: string
+          monto_total: number
+          periodo_desde: string
+          periodo_hasta: string
+          personas: number
         }[]
       }
       reassign_cleaning: {
