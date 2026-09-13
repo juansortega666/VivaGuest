@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
-import { test as base, expect, type Page } from '@playwright/test';
+import { chromium, test as base, expect, type Page } from '@playwright/test';
 
 import type { Database, Enums } from '@/lib/database.types';
 
@@ -37,7 +38,7 @@ export function leerCredenciales(): Credenciales {
   return JSON.parse(readFileSync(ARCHIVO_CREDENCIALES, 'utf8')) as Credenciales;
 }
 
-function rutaStorageState(clave: string): string {
+export function rutaStorageState(clave: string): string {
   return resolve(DIR_AUTH, `${clave}.storage.json`);
 }
 
@@ -78,7 +79,15 @@ export async function iniciarSesionPorUI(page: Page, clave: string): Promise<str
   return destino;
 }
 
-async function paginaConSesion(browser: import('@playwright/test').Browser, clave: string) {
+async function paginaConSesion(
+  browser: import('@playwright/test').Browser,
+  clave: string,
+  // Extras del contexto. Hoy solo lo usa el fixture de avisos, para conceder el
+  // permiso de notificaciones ANTES de que exista la página: `grantPermissions`
+  // después de navegar deja a `Notification.permission` valiendo `'default'` en
+  // el documento ya cargado, y el banner mediría el estado equivocado.
+  extra: Parameters<import('@playwright/test').Browser['newContext']>[0] = {},
+) {
   const destino = rutaStorageState(clave);
 
   if (!existsSync(destino)) {
@@ -89,7 +98,7 @@ async function paginaConSesion(browser: import('@playwright/test').Browser, clav
     await contextoLogin.close();
   }
 
-  const contexto = await browser.newContext({ storageState: destino });
+  const contexto = await browser.newContext({ storageState: destino, ...extra });
   return { contexto, pagina: await contexto.newPage() };
 }
 
@@ -100,6 +109,19 @@ interface FixturesVivaGuest {
   paginaAseador: Page;
   /** Rol del usuario semilla secundario, para tests de aislamiento entre aseadores. */
   paginaAseador2: Page;
+  /**
+   * El aseador1, pero con el permiso de avisos YA concedido en el contexto.
+   *
+   * Es lo que hace alcanzable el camino de `BotonActivarAvisos`: sin el permiso
+   * concedido de antemano, `Notification.requestPermission()` abriría un diálogo
+   * del sistema que Playwright no puede tocar, y el test se quedaría colgado en
+   * vez de fallar.
+   *
+   * NO emula `display-mode: standalone`: eso es por página y lo hace
+   * `emularInstalada()`, porque un test que quiera medir el estado S1 (sin
+   * instalar) necesita exactamente este mismo contexto sin esa emulación.
+   */
+  paginaAseadorConAvisos: Page;
 }
 
 export const test = base.extend<FixturesVivaGuest>({
@@ -120,7 +142,163 @@ export const test = base.extend<FixturesVivaGuest>({
     await use(pagina);
     await contexto.close();
   },
+
+  paginaAseadorConAvisos: async ({ browser }, use) => {
+    const { contexto, pagina } = await paginaConSesion(browser, 'aseador1', {
+      permissions: ['notifications'],
+    });
+    await use(pagina);
+    await contexto.close();
+  },
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// UTILIDADES DE SERVICE WORKER Y PWA (plan 05-17)
+//
+// Viven acá y no en el spec de push porque las tres dependen de detalles del
+// runner —la sesión de CDP, el id de registro, la media query emulada— y no del
+// caso que se esté midiendo.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Un contexto de navegador NO INCÓGNITO con la sesión de un rol ya puesta.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * POR QUÉ ESTO EXISTE Y NO SE PUEDE USAR EL FIXTURE NORMAL. MEDIDO.
+ *
+ * Todo contexto de `browser.newContext()` es un contexto de incógnito, y
+ * **Chrome no implementa la API de push en incógnito**. El propio navegador lo
+ * dice por consola: *"Chrome currently does not support the Push API in
+ * incognito mode. There is deliberately no way to feature-detect this, since
+ * incognito mode needs to be undetectable by websites."*
+ *
+ * El síntoma NO dice incógnito por ninguna parte: `pushManager.subscribe()`
+ * rechaza con `AbortError: Registration failed - permission denied`, con el
+ * permiso concedido y visible en `Notification.permission === 'granted'`. Se
+ * lee como un problema de permisos y no lo es.
+ *
+ * Un contexto persistente —el que usa un perfil en disco— no es incógnito, y
+ * ahí la suscripción sale con un endpoint real del servicio de Google.
+ * ════════════════════════════════════════════════════════════════════════════
+ *
+ * La sesión entra por cookies y no repitiendo el login por UI: esas cookies son
+ * exactamente las que produjo el login real de `iniciarSesionPorUI`, así que el
+ * estado es el genuino y la regla del repo —solo el test de login hace login
+ * por UI— sigue en pie.
+ */
+export async function contextoPersistente(
+  browser: import('@playwright/test').Browser,
+  clave: string,
+  baseURL: string,
+  // ── POR QUÉ `chrome` Y NO `chromium`, MEDIDO EL 2026-09-12 ─────────────────
+  // El Chromium que empaqueta Playwright NO lleva las claves de API de Google, y
+  // por eso `pushManager.subscribe()` devuelve un endpoint del servicio ANTIGUO:
+  // `https://jmt17.google.com/fcm/send/…`. Ese host no está en `HOSTS_DE_PUSH`
+  // de `lib/domain/suscripcion.schema.ts`, así que `registrarSuscripcion` lo
+  // rechaza —bien rechazado— y la fila nunca llega a la base.
+  //
+  // Google Chrome sí las lleva y emite `https://fcm.googleapis.com/fcm/send/…`,
+  // que es lo que emite un teléfono de verdad. Requiere `npx playwright install
+  // chrome` una vez en la máquina.
+  canal: 'chrome' | 'chromium' = 'chrome',
+): Promise<{ contexto: import('@playwright/test').BrowserContext; pagina: Page }> {
+  const destino = rutaStorageState(clave);
+
+  if (!existsSync(destino)) {
+    const contextoLogin = await browser.newContext();
+    const paginaLogin = await contextoLogin.newPage();
+    await iniciarSesionPorUI(paginaLogin, clave);
+    await contextoLogin.close();
+  }
+
+  const estado = JSON.parse(readFileSync(destino, 'utf8')) as {
+    cookies: Parameters<import('@playwright/test').BrowserContext['addCookies']>[0];
+  };
+
+  const perfil = mkdtempSync(join(tmpdir(), 'vivaguest-e2e-'));
+  const contexto = await chromium.launchPersistentContext(perfil, {
+    channel: canal,
+    permissions: ['notifications'],
+    baseURL,
+    locale: 'es-CO',
+    timezoneId: 'America/Bogota',
+  });
+  await contexto.addCookies(estado.cookies);
+
+  const pagina = contexto.pages()[0] ?? (await contexto.newPage());
+  return { contexto, pagina };
+}
+
+/**
+ * Hace que la página crea que está instalada en la pantalla de inicio.
+ *
+ * `estaInstalada()` de `lib/push/plataforma.ts` mira `(display-mode: standalone)`,
+ * y un Chromium de escritorio abierto por Playwright siempre responde `browser`.
+ * Sin esta emulación el banner se queda en S1 (`sin_instalar`) y el botón de
+ * activar NO EXISTE en el DOM, así que el camino que este plan mide sería
+ * inalcanzable.
+ *
+ * `page.emulateMedia()` no sirve: su API solo cubre `media`, `colorScheme`,
+ * `reducedMotion`, `contrast` y `forcedColors`. `display-mode` solo se alcanza
+ * por el protocolo de DevTools, con `Emulation.setEmulatedMedia` y su lista de
+ * `features`. Chromium únicamente.
+ */
+export async function emularInstalada(pagina: Page): Promise<void> {
+  const cdp = await pagina.context().newCDPSession(pagina);
+  await cdp.send('Emulation.setEmulatedMedia', {
+    features: [{ name: 'display-mode', value: 'standalone' }],
+  });
+  await cdp.detach();
+}
+
+/**
+ * El identificador de registro del service worker de este origen, que es lo que
+ * `ServiceWorker.deliverPushMessage` exige además del origen y los datos.
+ *
+ * Se obtiene suscribiéndose a `ServiceWorker.workerRegistrationUpdated`, que el
+ * navegador emite al habilitar el dominio con los registros que ya existen. Es
+ * decir: la página tiene que haber registrado ya su worker antes de llamar acá.
+ */
+export async function registroDelWorker(
+  pagina: Page,
+): Promise<{ cdp: import('@playwright/test').CDPSession; registrationId: string; origen: string }> {
+  const cdp = await pagina.context().newCDPSession(pagina);
+
+  const encontrado = new Promise<string>((resolver, rechazar) => {
+    const temporizador = setTimeout(
+      () => rechazar(new Error('El navegador no reportó ningún registro de service worker en 15s')),
+      15_000,
+    );
+    cdp.on('ServiceWorker.workerRegistrationUpdated', (evento) => {
+      const vivo = evento.registrations.find((r) => !r.isDeleted);
+      if (!vivo) return;
+      clearTimeout(temporizador);
+      resolver(vivo.registrationId);
+    });
+  });
+
+  await cdp.send('ServiceWorker.enable');
+  const registrationId = await encontrado;
+
+  const origen = new URL(pagina.url()).origin;
+  return { cdp, registrationId, origen };
+}
+
+/**
+ * Espera a que el service worker esté activo y controlando la página.
+ *
+ * `navigator.serviceWorker.ready` no basta por sí solo en la PRIMERA carga: el
+ * worker puede estar activo sin controlar todavía el documento que lo registró.
+ * Para entregar un push da igual, pero para medir `getNotifications()` desde la
+ * página sí importa que el registro sea el mismo.
+ */
+export async function esperarWorkerListo(pagina: Page): Promise<void> {
+  await pagina.waitForFunction(
+    () => navigator.serviceWorker.controller !== null || undefined,
+    undefined,
+    { timeout: 20_000 },
+  );
+}
 
 export type { RolE2E };
 

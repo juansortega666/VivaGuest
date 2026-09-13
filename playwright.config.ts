@@ -69,7 +69,26 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
 
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        // ── `channel` NO ES COSMÉTICO, Y ESTÁ MEDIDO (2026-09-12) ───────────
+        // Sin él, Playwright lanza `chromium-headless-shell`, una compilación
+        // recortada que NO IMPLEMENTA NOTIFICACIONES: `Notification.permission`
+        // vale `'denied'` incluso con el permiso concedido en el contexto, y no
+        // hay forma de conceder nada. Medido en la 151.0.7922.34: por defecto
+        // `denied`, con `channel: 'chromium'` `granted`.
+        //
+        // Es lo que hace alcanzable `e2e/push-instalacion.spec.ts` entero: con
+        // el permiso denegado, el banner del aseador se queda en el estado
+        // `negado` y el botón de activar no existe en el DOM. El resto de la
+        // suite no nota la diferencia: es el mismo motor, solo que completo.
+        channel: 'chromium',
+      },
+    },
+  ],
 
   globalSetup: './e2e/global-setup.ts',
   globalTeardown: './e2e/global-teardown.ts',
