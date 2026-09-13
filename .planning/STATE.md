@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 07
 current_phase_name: financiero
 status: planning
-stopped_at: Completado 07-03-PLAN.md
-last_updated: "2026-09-13T18:45:14.092Z"
-last_activity: 2026-09-10
-last_activity_desc: discuss-phase 5 cerrado; ROADMAP §Phase 5 actualizado con los criterios 6 y 7
+stopped_at: Completado 07-04-PLAN.md (migracion 23)
+last_updated: "2026-09-13T19:01:36.040Z"
+last_activity: 2026-09-13
+last_activity_desc: "Wave 0 ejecutada: el contrato de la fase existe como aserciones ROJAS antes del schema"
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 89
-  completed_plans: 76
+  completed_plans: 77
   percent: 56
 ---
 
@@ -29,20 +29,30 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 ## Current Position
 
 Phase: 07 (financiero) — EN EJECUCION
-Plan: 3 of 14. Wave 0 cerrada (07-01, 07-02, 07-03, los tres en paralelo)
-Status: Wave 1 en marcha con `07-04` (migracion 23: calendario de cierre, `dia_bog`, las tres tablas del snapshot, recibo a 5 años)
-Last activity: 2026-09-13 - Wave 0 ejecutada: el contrato de la fase existe como aserciones ROJAS antes del schema
+Plan: 4 of 14. Wave 0 cerrada (07-01, 07-02, 07-03) y Wave 1 cerrada (07-04)
+Status: `07-04` ejecutado (migracion 23: calendario de cierre, `dia_bog`, `periodo_de_cierre`,
+`foto_vencida` y las tres tablas del snapshot). Siguiente: Wave 2 con `07-05` (migracion 24,
+cerrar la fuga de la tarifa al huesped por las dos vias)
+Last activity: 2026-09-13 - 07-04 ejecutado: el schema financiero existe y 14 aserciones pasaron de rojo a verde
 
 **La suite esta ROJA a proposito y lo va a estar durante ocho waves.** Es el diseño
 de `07-VALIDATION.md`: los tests se escriben antes del codigo que los satisface.
-El estado al cerrar la Wave 0, medido:
+El estado medido, wave a wave:
 
-| Capa | Estado |
-|---|---|
-| pgTAP | 275 verdes (las de siempre) + **47 rojas de 52** en `11_financiero.test.sql` |
-| Unitarios | 1006 verdes + **83 rojos** en tres archivos de `lib/domain/` |
-| Integracion | **186 verdes** (169 + 17 del sembrador nuevo) + 1 archivo rojo |
-| E2E | 112 pasando y 1 saltado + **22 specs rojos** en dos archivos nuevos |
+| Capa | Al cerrar la Wave 0 | Al cerrar la Wave 1 (07-04) |
+|---|---|---|
+| pgTAP | 275 verdes + **47 rojas de 52** en `11_financiero.test.sql` | 275 verdes + **33 rojas de 52**. 14 nuevas verdes, cero regresiones |
+| Unitarios | 1006 verdes + **83 rojos** en tres archivos de `lib/domain/` | sin cambio: 1006 verdes + 3 archivos rojos |
+| Integracion | **186 verdes** (169 + 17 del sembrador nuevo) + 1 archivo rojo | sin cambio: 186 verdes + 1 archivo rojo |
+| E2E | 112 pasando y 1 saltado + **22 specs rojos** en dos archivos nuevos | no re-corrido: 07-04 no toca interfaz |
+
+Lo que `07-04` cerro, bloque por bloque (el detalle esta en `07-04-SUMMARY.md`):
+**B (calendario del cierre) 6/6** y **J (el recibo dura cinco anos) 3/3**, mas las
+dos aserciones de `dia_bog` del bloque C y la del tipo `bigint` del bloque E. Las
+aserciones 47 y 51 (borrar un aseo y un gasto NO falla) siguen verdes, y ahora por
+**ausencia de cascada** y no por ausencia de tablas, que era el riesgo que 07-01
+habia senalado. **Ojo:** las aserciones 11 y 34 estan verdes **por vacuidad** (las
+tablas existen y estan vacias); solo miden algo cuando 07-07 escriba lineas.
 
 Cada plan de migracion tiene una tarea que anota, bloque por bloque, que paso de
 rojo a verde y que sigue rojo con su plan responsable. Un rojo NUEVO no se puede
@@ -203,6 +213,7 @@ Progress: [██████████] 100%
 | Phase 07 P01 | 62min | 2 tasks | 1 files |
 | Phase 07 P02 | 21min | 3 tasks | 9 files |
 | Phase 07 P03 | 68min | 2 tasks | 4 files |
+| Phase 07 P04 | 25min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -250,6 +261,9 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Fase 7] 07-02: las fechas de una fixture se anclan 45 dias atras y nunca en literales de calendario, o la suite falla sola al ano siguiente y deja fechas en el futuro los dias 1 y 2 de cada mes
 - [Phase 7]: El cierre de un periodo se siembra en E2E invocando cerrar_periodo con una sesion de admin real, no escribiendo el snapshot con la clave de servicio: un periodo cerrado que la funcion nunca produjo haria que las specs afirmaran sobre datos que el sistema no sabe generar
 - [Phase 7]: Toda asercion de no-divulgacion en E2E lleva su control de metodo: si ninguna carga de red trae un dato que el usuario SI puede ver, el interceptor no miro nada y la ausencia del dato prohibido no prueba nada
+- [Phase 7]: 07-04: tres tablas y no dos en el snapshot financiero. payout_periods existe para que un periodo sin ninguna aseadora con aseos deje rastro, y para que la idempotencia de D7-3 sea por PERIODO y no por persona
+- [Phase 7]: 07-04: los punteros de cleaner_payout_lines al mundo vivo (cleaning_id, expense_id, property_id) van SIN clave foranea, ni siquiera debil. Con cascada la purga de la Fase 9 borraria el desglose de un pago ya cobrado; con FK restrictiva la purga fallaria con 23503 y no borraria nunca nada
+- [Phase 7]: 07-04 CONSECUENCIA PARA LA FASE 9: el recibo de gasto dura 1825 dias (app_settings.expense_photo_retention_days) y public.foto_vencida(kind, created_at) es el unico punto que decide si una foto vencio. Purgar por photo_retention_days a secas borra los recibos y rompe D7-2
 
 ### Pending Todos
 
@@ -306,8 +320,8 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-13T18:45:14.085Z
-Stopped at: Completado 07-03-PLAN.md
+Last session: 2026-09-13T19:01:36.032Z
+Stopped at: Completado 07-04-PLAN.md (migracion 23)
 
 **Abierto (unico):** el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real. Los cinco criterios de fallo estan escritos en `06-10-SUMMARY.md`. Nada mas bloquea la fase.
 
