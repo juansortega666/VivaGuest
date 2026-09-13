@@ -59,3 +59,6 @@ next-env.d.ts
 # Los cinco PNG de `public/` SI se versionan: esos son assets de marca.
 public/sw*
 public/swe-worker*
+
+# Cache de las herramientas de investigacion. Es transitorio y por maquina.
+.planning/research/.cache/
