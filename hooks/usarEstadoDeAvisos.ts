@@ -52,8 +52,24 @@ import { base64UrlAUint8, estaInstalada } from '@/lib/push/plataforma';
  *
  * `null` significa "este telefono se quedo sin suscripcion", que es lo que hace que
  * el admin lo vea en `Sin avisos` (§5.2).
+ *
+ * ── DEVUELVE SI EL SERVIDOR LA ACEPTO, Y ESO NO ES COSMETICO ────────────────
+ *
+ * Devolvia `void`, y por eso un rechazo del servidor era INVISIBLE: la
+ * reparacion silenciosa lo daba por bueno, el estado quedaba `activo` y el
+ * banner desaparecia. Medido el 2026-09-12: la action respondia
+ * `{ ok: false, error: 'No tienes permiso para esta operacion.' }` en TODOS los
+ * registros —por el bug de grants que cierra la migracion 22— y la pantalla del
+ * aseador decia que sus avisos estaban al dia. Ese es el peor desenlace posible
+ * de esta fase: no "no llega el aviso", sino "no llega y nadie lo sabe".
+ *
+ * `false` cuando el servidor no la acepto. Quien lo llama decide: en el camino
+ * sano da igual (la fila ya existe y esto solo refrescaba `visto_at`), en la
+ * reparacion es la diferencia entre `activo` y `roto`.
  */
-export type RegistrarSuscripcion = (suscripcion: PushSubscriptionJSON | null) => Promise<void>;
+export type RegistrarSuscripcion = (
+  suscripcion: PushSubscriptionJSON | null,
+) => Promise<boolean>;
 
 export type OpcionesDeEstadoDeAvisos = {
   /** La clave publica VAPID vigente, en base64url. */
@@ -176,6 +192,11 @@ async function medirElNavegador(
     // Camino sano. Se vuelve a registrar igual, y no es redundante: es lo que
     // refresca `visto_at`, que es de donde sale el `Última vez que abrió la app`
     // del `title` de §5.2.
+    //
+    // El resultado se IGNORA a proposito, y es el unico sitio donde se ignora:
+    // la fila ya existe y el endpoint ya coincide, asi que un fallo aqui pierde
+    // la marca de visto y nada mas. Degradar el estado a `roto` por eso pondria
+    // un banner de alarma sobre una suscripcion que funciona.
     await opciones.registrar(actual.toJSON());
     return { ...base, permiso, haySuscripcion: true, endpointCoincide: true, reparacionFallida: false };
   }
@@ -229,8 +250,10 @@ async function repararEnSilencio(
       applicationServerKey: base64UrlAUint8(clavePublica),
     });
 
-    await registrar(nueva.toJSON());
-    return true;
+    // AQUI SI se mira: una suscripcion que el servidor no conoce no recibe
+    // nada, asi que un registro rechazado es una reparacion fallida, no una
+    // reparacion con un detalle pendiente.
+    return await registrar(nueva.toJSON());
   } catch {
     return false;
   }

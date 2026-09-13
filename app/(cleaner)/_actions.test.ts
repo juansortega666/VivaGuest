@@ -25,8 +25,14 @@ vi.mock('@/lib/auth/guards', async (original) => {
 });
 
 // ── El doble de cliente ───────────────────────────────────────────────────────
-// Dos rutas de escritura y ninguna RPC: el `upsert` del registro y el
+// Dos rutas de escritura: la RPC `registrar_suscripcion_push` del alta, y el
 // `update().eq()` de la baja y de la marca de visto.
+//
+// El alta paso a RPC en la migracion 22, y no por gusto: el `upsert` anterior
+// necesitaba UPDATE sobre `user_id`, que la migracion 16 habia revocado, asi que
+// fallaba con 42501 SIEMPRE y ningun aseador quedaba registrado. Este archivo
+// mide la forma de la llamada; que Postgres la acepte se mide contra Postgres en
+// `supabase/tests/07_push.test.sql`.
 
 type RespuestaFalsa = { data?: unknown; error: { code?: string; message?: string; hint?: string } | null };
 
@@ -40,11 +46,10 @@ const eq = vi.fn<(columna: string, valor: string) => Promise<RespuestaFalsa>>(
   async () => respuesta,
 );
 const update = vi.fn<(valores: Record<string, unknown>) => { eq: typeof eq }>(() => ({ eq }));
-const upsert = vi.fn<
-  (valores: Record<string, unknown>, opciones: { onConflict?: string }) => Promise<RespuestaFalsa>
->(async () => respuesta);
-const from = vi.fn(() => ({ update, upsert }));
-const rpc = vi.fn();
+const from = vi.fn(() => ({ update }));
+const rpc = vi.fn<(nombre: string, args: Record<string, unknown>) => Promise<RespuestaFalsa>>(
+  async () => respuesta,
+);
 
 const USUARIO = { id: '11111111-1111-4111-8111-111111111111' };
 
@@ -115,7 +120,7 @@ describe('el guard va antes de tocar la base', () => {
       expect(r.ok).toBe(false);
       expect(r.error).toBe('No tienes permiso para esta operacion.');
       expect(from).not.toHaveBeenCalled();
-      expect(upsert).not.toHaveBeenCalled();
+      expect(rpc).not.toHaveBeenCalled();
       expect(update).not.toHaveBeenCalled();
     },
   );
@@ -142,7 +147,7 @@ describe('un endpoint fuera de la allowlist no llega a la base', () => {
 
     expect(r.ok).toBe(false);
     expect(from).not.toHaveBeenCalled();
-    expect(upsert).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it('las otras dos tampoco aceptan un endpoint arbitrario', async () => {
@@ -167,49 +172,60 @@ describe('un endpoint fuera de la allowlist no llega a la base', () => {
  */
 const EVIDENCIA = ['verificado_at', 'verificacion_grado', 'verificacion_token', 'verificacion_intentos'];
 
-describe('registrarSuscripcion escribe exactamente las columnas que el grant permite', () => {
-  it('el objeto que llega al upsert tiene EXACTAMENTE las claves esperadas', async () => {
+describe('registrarSuscripcion llama a la RPC del alta con exactamente sus argumentos', () => {
+  it('la llamada lleva EXACTAMENTE las claves esperadas', async () => {
     const r = await registrarSuscripcion(null, formRegistro());
 
     expect(r.ok).toBe(true);
-    expect(from).toHaveBeenCalledWith('push_subscriptions');
-    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc.mock.calls[0][0]).toBe('registrar_suscripcion_push');
 
-    const escrito = upsert.mock.calls[0][0];
-    expect(Object.keys(escrito).sort()).toEqual(
+    const enviado = rpc.mock.calls[0][1];
+    expect(Object.keys(enviado).sort()).toEqual(
       [
-        'auth',
-        'endpoint',
-        'p256dh',
-        'soporta_declarativo',
-        'user_agent',
-        'user_id',
-        'visto_at',
+        'p_auth',
+        'p_endpoint',
+        'p_p256dh',
+        'p_soporta_declarativo',
+        'p_user_agent',
       ].sort(),
     );
 
-    expect(escrito.user_id).toBe(USUARIO.id);
-    expect(escrito.endpoint).toBe(ENDPOINT);
-    expect(escrito.soporta_declarativo).toBe(true);
+    expect(enviado.p_endpoint).toBe(ENDPOINT);
+    expect(enviado.p_soporta_declarativo).toBe(true);
   });
 
-  it('NINGUNA de las cuatro columnas de evidencia aparece en el objeto', async () => {
+  /**
+   * El senuelo de la migracion 22: `user_id` NO viaja como argumento. Si alguna
+   * vez vuelve a aparecer aqui, la funcion definer dejaria de ser la unica que
+   * decide el dueno y volveria el camino que la migracion 16 cerro.
+   */
+  it('el dueno NO viaja en la llamada: lo pone la funcion desde la sesion', async () => {
     await registrarSuscripcion(null, formRegistro());
-    const escrito = upsert.mock.calls[0][0];
+    const enviado = rpc.mock.calls[0][1];
+
+    expect(Object.keys(enviado)).not.toContain('user_id');
+    expect(Object.keys(enviado)).not.toContain('p_user_id');
+    expect(Object.values(enviado)).not.toContain(USUARIO.id);
+  });
+
+  it('NINGUNA de las cuatro columnas de evidencia aparece en la llamada', async () => {
+    await registrarSuscripcion(null, formRegistro());
+    const claves = Object.keys(rpc.mock.calls[0][1]).join(' ');
 
     for (const columna of EVIDENCIA) {
-      expect(Object.keys(escrito)).not.toContain(columna);
+      expect(claves).not.toContain(columna);
     }
   });
 
-  it('el upsert va POR ENDPOINT, que es el invariante de la migracion 06', async () => {
+  it('la app NO vuelve a escribir la tabla directamente en el alta', async () => {
     await registrarSuscripcion(null, formRegistro());
-    expect(upsert.mock.calls[0][1]).toEqual({ onConflict: 'endpoint' });
+    expect(from).not.toHaveBeenCalled();
   });
 
-  it('sin user_agent la columna viaja nula, no como cadena vacia', async () => {
+  it('sin user_agent viaja cadena vacia, y la funcion la traduce a nulo', async () => {
     await registrarSuscripcion(null, formRegistro({ user_agent: '' }));
-    expect(upsert.mock.calls[0][0].user_agent).toBeNull();
+    expect(rpc.mock.calls[0][1].p_user_agent).toBe('');
   });
 
   it('un error de la base es un fallo, no un exito silencioso', async () => {
@@ -241,8 +257,7 @@ describe('las otras dos escriben una sola cosa cada una', () => {
     expect(eq).toHaveBeenCalledWith('endpoint', ENDPOINT);
   });
 
-  it('ninguna de las tres usa una RPC', async () => {
-    await registrarSuscripcion(null, formRegistro());
+  it('la baja y la marca de visto NO usan RPC: van por el grant por columna', async () => {
     await revocarSuscripcionPropia(null, fd({ endpoint: ENDPOINT }));
     await marcarVisto(null, fd({ endpoint: ENDPOINT }));
     expect(rpc).not.toHaveBeenCalled();

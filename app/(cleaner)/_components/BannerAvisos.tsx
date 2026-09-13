@@ -193,8 +193,12 @@ function Vista({
   const registrar = useCallback(async (suscripcion: PushSubscriptionJSON | null) => {
     // `null` significa "este telefono se quedo sin suscripcion". La baja la
     // escribe otra action y no este camino; aqui no hay nada que registrar.
-    if (suscripcion === null) return;
-    await registrarSuscripcion(null, aFormDataDeSuscripcion(suscripcion));
+    if (suscripcion === null) return false;
+    const resultado = await registrarSuscripcion(null, aFormDataDeSuscripcion(suscripcion));
+    // SE MIRA EL `ok`, y esa es la mitad de cliente del bug de la migracion 22:
+    // sin esta linea, un rechazo del servidor se presentaba como estado sano y
+    // el aseador veia "todo al dia" sin tener a donde recibir un aviso.
+    return resultado.ok;
   }, []);
 
   const estado = useEstadoDeAvisos({ clavePublica, endpointRegistrado, registrar });

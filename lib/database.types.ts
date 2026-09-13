@@ -1431,6 +1431,16 @@ export type Database = {
         Args: { p_endpoint: string }
         Returns: string
       }
+      registrar_suscripcion_push: {
+        Args: {
+          p_auth: string
+          p_endpoint: string
+          p_p256dh: string
+          p_soporta_declarativo: boolean
+          p_user_agent: string
+        }
+        Returns: undefined
+      }
       report_damage: {
         Args: { p_cleaning: string; p_descripcion: string }
         Returns: string

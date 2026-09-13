@@ -124,20 +124,36 @@ function fallo(error: DbErrorLike): { ok: false; error: string } {
 /**
  * NOTIF-01. Registra el destino de los avisos de ESTE navegador.
  *
- * ── POR QUE EL UPSERT VA `on conflict (endpoint)` Y NO POR `(user_id, endpoint)`
+ * ── POR QUE PASA POR UN RPC Y NO POR UN `upsert` DESDE AQUI ────────────────
+ *
+ * Porque el upsert NO FUNCIONABA, y fallaba en silencio. Medido el 2026-09-12
+ * contra Postgres, en SQL puro:
+ *
+ *   insert … (las 7 columnas del grant)            → INSERT 0 1        OK
+ *   insert … on conflict (endpoint) do update set… → 42501 permission  NO
+ *
+ * PostgREST traduce `upsert(..., { onConflict })` a un `ON CONFLICT DO UPDATE`
+ * que mete TODAS las columnas del payload en el `SET`, `user_id` incluida. La
+ * migracion 16 le quito `user_id` al grant de update a proposito (T-01-36), y
+ * Postgres exige ese privilegio AUNQUE NO HAYA CONFLICTO. O sea: ningun aseador
+ * quedaba registrado NUNCA, y por tanto no habia a donde mandarle un aviso.
+ *
+ * La migracion 22 mueve el alta a `registrar_suscripcion_push`, una funcion
+ * definer que toma el dueno de `auth.uid()` y nunca del argumento. Es lo que la
+ * propia migracion 16 dejo escrito: *"La reasignacion tiene que pasar por una
+ * funcion definer o por el worker, nunca por el navegador."*
+ *
+ * ── POR QUE EL ALTA VA `on conflict (endpoint)` Y NO POR `(user_id, endpoint)`
  *
  * Es el invariante escrito en la migracion 06 (T-01-36): **el endpoint
  * identifica al NAVEGADOR, no a la persona**. El indice unico de esa tabla es
  * global sobre `endpoint` justamente por eso.
  *
  * El caso real que resuelve es el telefono compartido. Si una aseadora entra en
- * el telefono de otra, el navegador devuelve EL MISMO endpoint, y el upsert
+ * el telefono de otra, el navegador devuelve EL MISMO endpoint, y el alta
  * REASIGNA `user_id` en vez de crear una segunda fila. Con unicidad compuesta
  * convivirian dos suscripciones vivas sobre el mismo destino y el aseo de una
  * acabaria sonando en el telefono de la otra (T-05-40).
- *
- * Escribe SOLO las siete columnas que el grant por columna de la migracion 16
- * permite a `authenticated`. Hay un test que cuenta las claves del objeto.
  */
 export async function registrarSuscripcion(
   _prev: ResultadoAccion | null,
@@ -167,22 +183,17 @@ export async function registrarSuscripcion(
   // ── 3. SOLO AHORA, LA BASE, CON EL JWT DEL USUARIO ─────────────────────────
   const { endpoint, keys, soportaDeclarativo } = parseado.data;
 
-  const { error } = await ctx.supabase.from('push_subscriptions').upsert(
-    {
-      user_id: ctx.uid,
-      endpoint,
-      p256dh: keys.p256dh,
-      auth: keys.auth,
-      // `null` y no cadena vacia: el resto del sistema lee la ausencia de dato
-      // como `null`, y una cadena vacia seria un user agent que nadie mando.
-      user_agent: parseado.data.userAgent ?? null,
-      soporta_declarativo: soportaDeclarativo,
-      // Se refresca en cada arranque de la app. Es de donde sale la linea
-      // "Ultima vez que abrio la app" del `title` de §5.2.
-      visto_at: new Date().toISOString(),
-    },
-    { onConflict: 'endpoint' },
-  );
+  const { error } = await ctx.supabase.rpc('registrar_suscripcion_push', {
+    p_endpoint: endpoint,
+    p_p256dh: keys.p256dh,
+    p_auth: keys.auth,
+    // Cadena vacia y no `null`: el tipo generado no expresa que el argumento
+    // admita nulos, y la funcion de la migracion 22 ya traduce el vacio a `null`
+    // antes de escribirlo. El resto del sistema sigue leyendo la ausencia de
+    // dato como `null`, que es lo que importa.
+    p_user_agent: parseado.data.userAgent ?? '',
+    p_soporta_declarativo: soportaDeclarativo,
+  });
   if (error) return fallo(error);
 
   // El copy NO promete una entrega. Registrar significa "hay a donde enviar", y

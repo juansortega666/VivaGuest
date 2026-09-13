@@ -137,7 +137,7 @@
 -- ============================================================================
 
 begin;
-select plan(57);
+select plan(63);
 
 -- ---------------------------------------------------------------------------
 -- Limpieza del seed, en orden inverso de FK. El rollback la deshace.
@@ -771,6 +771,101 @@ select is(
       and i.indexname <> 'notifications_pkey'),
   'notifications_dedupe_idx, notifications_inbox_idx, notifications_outbox_idx',
   'los tres índices de notifications siguen ahí: dedupe, bandeja y outbox');
+
+
+-- ===========================================================================
+-- EL ALTA DE LA SUSCRIPCIÓN, CONTRA POSTGRES DE VERDAD (migración 22)
+--
+-- ── EL BUG QUE ESTAS SEIS ASERCIONES EXISTEN PARA QUE NO VUELVA ─────────────
+--
+-- Hasta la migración 22 el alta era un `upsert on conflict (endpoint)` emitido
+-- desde el cliente. PostgREST mete TODAS las columnas del payload en el `SET`
+-- del `do update`, `user_id` incluida, y la migración 16 le había quitado
+-- `user_id` al grant de update a propósito (T-01-36). Postgres exige ese
+-- privilegio AUNQUE NO HAYA CONFLICTO, así que el alta fallaba con 42501
+-- SIEMPRE: ningún aseador quedaba registrado y no había a dónde mandar un
+-- aviso. Nada lo cazó porque los tests de la action mockean el cliente y aquí no
+-- se probaba el alta, solo las policies de lectura.
+--
+-- La lección, y por eso estas aserciones van contra Postgres y no contra un
+-- doble: un grant por columna solo se puede medir ejecutando la escritura real.
+-- ===========================================================================
+
+-- 58
+select is(
+  pg_temp.intento_como(
+    '0c000000-0000-0000-0000-00000000000c',
+    $q$select public.registrar_suscripcion_push(
+           'https://fcm.googleapis.com/fcm/send/nueva-c',
+           'p256dh-c', 'auth-c', 'Android/C', false)$q$),
+  'sin_error||',
+  'el alta por la función definer NO falla: es el 42501 de la migración 16 que rompía NOTIF-01');
+
+-- 59
+select is(
+  (select count(*)::int from public.push_subscriptions
+    where user_id = '0c000000-0000-0000-0000-00000000000c'),
+  1,
+  'la aseadora que no tenía teléfono quedó con exactamente una suscripción');
+
+-- 60
+select is(
+  pg_temp.intento_como(
+    '0c000000-0000-0000-0000-00000000000c',
+    $q$select public.registrar_suscripcion_push(
+           'https://fcm.googleapis.com/fcm/send/nueva-c',
+           'p256dh-c2', 'auth-c2', 'Android/C2', true)$q$),
+  'sin_error||',
+  'repetir el alta con el MISMO endpoint no falla: la app la llama en cada arranque');
+
+-- 61
+select is(
+  (select count(*)::int from public.push_subscriptions
+    where endpoint = 'https://fcm.googleapis.com/fcm/send/nueva-c'),
+  1,
+  'y sigue habiendo UNA sola fila: el alta es idempotente por endpoint');
+
+-- 62
+--
+-- El invariante de T-01-36 medido de verdad: el teléfono compartido REASIGNA la
+-- fila en vez de duplicarla. Si esto se rompiera, dos suscripciones vivas
+-- apuntarían al mismo destino y el aseo de una sonaría en el teléfono de la otra
+-- (T-05-40).
+--
+-- La escritura va en su PROPIA sentencia, y no como subconsulta de la aserción:
+-- dentro de una misma sentencia el `select` externo lee el snapshot anterior a
+-- la escritura, y la aserción medía el dueño de antes. Costó una corrida roja.
+select pg_temp.intento_como(
+  '0b000000-0000-0000-0000-00000000000b',
+  $q$select public.registrar_suscripcion_push(
+         'https://fcm.googleapis.com/fcm/send/nueva-c',
+         'p256dh-b9', 'auth-b9', 'iPhone/B9', false)$q$);
+
+select is(
+  (select user_id from public.push_subscriptions
+    where endpoint = 'https://fcm.googleapis.com/fcm/send/nueva-c'),
+  '0b000000-0000-0000-0000-00000000000b'::uuid,
+  'otra aseadora en el MISMO teléfono se queda la fila, y no nace una segunda');
+
+-- 63
+--
+-- EL SEÑUELO, Y ES EL CORAZÓN DE LA MIGRACIÓN 22: el camino viejo tiene que
+-- seguir cerrado. Si alguien "arregla" el grant devolviéndole `user_id` a
+-- `authenticated`, esta aserción se pone roja y dice por qué.
+select is(
+  split_part(
+    pg_temp.intento_como(
+      '0a000000-0000-0000-0000-00000000000a',
+      $q$insert into public.push_subscriptions
+           (user_id, endpoint, p256dh, auth, user_agent, soporta_declarativo, visto_at)
+         values ('0a000000-0000-0000-0000-00000000000a',
+                 'https://fcm.googleapis.com/fcm/send/directo',
+                 'p256dh-x', 'auth-x', 'ua', false, now())
+         on conflict (endpoint) do update set
+           user_id = excluded.user_id, p256dh = excluded.p256dh$q$),
+    '|', 1),
+  '42501',
+  'el upsert DIRECTO del cliente sigue prohibido: el alta solo pasa por la función definer');
 
 select * from finish();
 rollback;

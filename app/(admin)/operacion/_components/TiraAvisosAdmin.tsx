@@ -112,8 +112,12 @@ function Vista({
   const registrar = useCallback(async (suscripcion: PushSubscriptionJSON | null) => {
     // `null` significa "este navegador se quedo sin suscripcion". La baja la
     // escribe otra action y no este camino; aqui no hay nada que registrar.
-    if (suscripcion === null) return;
-    await registrarSuscripcion(null, aFormDataDeSuscripcion(suscripcion));
+    if (suscripcion === null) return false;
+    // Se devuelve el `ok` del servidor por la misma razon que en el banner del
+    // aseador: un registro rechazado tiene que verse como estado roto y no como
+    // estado sano. Ver la migracion 22.
+    const resultado = await registrarSuscripcion(null, aFormDataDeSuscripcion(suscripcion));
+    return resultado.ok;
   }, []);
 
   const estado = useEstadoDeAvisos({ clavePublica, endpointRegistrado, registrar });
