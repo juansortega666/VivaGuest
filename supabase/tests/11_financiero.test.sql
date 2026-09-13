@@ -30,6 +30,7 @@
 --   G  supervivencia al borrado ............... 07-04 (schema) + 07-07
 --   K  las dos puertas del cierre ............. 07-07  (añadido por ese plan)
 --   L  las seis lecturas del admin ............ 07-08  (añadido por ese plan)
+--   M  los pagos del admin y la marca ........ 07-09  (añadido por ese plan)
 --
 --   A PARTIR DE QUE UN BLOQUE SE PONE EN VERDE, UN `not ok` SUYO ES UNA
 --   REGRESIÓN, no un pendiente. La línea base con la que se mide: los once
@@ -95,8 +96,25 @@
 --                                     [CERO columnas de ubicación o coordenada]
 --   public.tarifas_de_apartamentos(uuid[])
 --   public.mis_pagos_cerrados()
---     -> periodo_desde, periodo_hasta, monto_aseos, monto_gastos, monto_total,
---        moneda, pagado_at        [CERO columnas de cifra de huésped]
+--     -> payout_id, periodo_desde, periodo_hasta, monto_aseos, monto_gastos,
+--        monto_total, moneda, pagado_at   [CERO columnas de cifra de huésped]
+--        `payout_id` es ADICIÓN DECLARADA del plan 07-09: UI-SPEC §10.3 hace la
+--        tarjeta navegable a /mis-pagos/[id] y el aseador no tiene grant sobre
+--        la tabla de pagos, así que sin él el desglose sería inalcanzable.
+--
+--   public.periodos_de_pago()
+--     -> periodo_desde, periodo_hasta, personas, monto_total, faltan_por_pagar,
+--        aseos_no_computados, moneda
+--   public.pagos_del_periodo(date)
+--     -> payout_id, aseador_nombre, cantidad_aseos, monto_aseos, monto_gastos,
+--        monto_total, moneda, pagado_at
+--   public.pagos_de_aseadora(uuid)          [UN solo argumento, SIN rango]
+--     -> payout_id, periodo_desde, periodo_hasta, monto_aseos, monto_gastos,
+--        monto_total, moneda, pagado_at
+--   public.detalle_de_pago(uuid)
+--     -> LAS MISMAS NUEVE COLUMNAS que detalle_de_mi_pago, ni una más
+--   public.marcar_pago_pagado(uuid)
+--     -> payout_id, aseador_nombre, monto_total, moneda, pagado_at
 --   public.detalle_de_mi_pago(uuid)
 --     -> tipo, property_nombre, concepto, fecha_programada, fecha_ejecucion,
 --        monto, moneda, evidencia_bucket, evidencia_path
@@ -142,7 +160,7 @@
 -- ============================================================================
 
 begin;
-select plan(77);
+select plan(94);
 
 -- ---------------------------------------------------------------------------
 -- Limpieza del seed, en orden inverso de FK. El rollback la deshace.
@@ -1697,6 +1715,362 @@ select is(
   $q$),
   '0',
   'un identificador que no es de ningun perfil devuelve cero filas, no una fila inventada');
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- M. LOS PAGOS DEL ADMIN Y LA MARCA DE PAGADO — 17 aserciones
+--
+--    Lo pone en verde: 07-09, migración 27.
+--
+--    AÑADIDO POR EL PLAN 07-09 Y AL FINAL, por la regla de la cabecera: pgTAP
+--    numera por orden de ejecución y meter un bloque en su sitio alfabético
+--    correría los números de H, I, J, G, K y L, que están citados por número en
+--    este archivo y en el plan 07-14.
+--
+--    POR QUÉ EXISTE ESTE BLOQUE Y NO BASTABA EL BLOQUE I. El bloque I mide la
+--    frontera del aseador, que es la mitad de la migración 27. La otra mitad
+--    (las cinco lecturas de Pagos y la marca de pagado) no tenía NINGUNA
+--    aserción, y una de sus filas del mapa de verificación de 07-VALIDATION.md
+--    está escrita con todas las letras: «Marcar pagado deja fecha y autor, y no
+--    se puede marcar dos veces · E2E + pgTAP · ambos». El E2E la cubre desde la
+--    pantalla; esta es la mitad de base, que es la que sigue valiendo cuando
+--    alguien llame el RPC sin pasar por la pantalla.
+--
+--    LEEN EL FIXTURE YA MUTILADO POR G, igual que L. Las cifras, para que se
+--    puedan auditar a mano, son LAS DEL SNAPSHOT y no las del mundo vivo: el
+--    cierre corrió ANTES de que G borrara el aseo J2 y el gasto del Detergente,
+--    y un periodo cerrado no se recalcula nunca (D7-3). Por eso siguen ahí:
+--
+--      Periodo de julio (2026-07-01 .. 2026-07-31), cerrado:
+--        Aseadora 7A · J1 + J2 + JB = 3 x 40000 = 120000 · gasto 12000 · 132000
+--        Aseadora 7B · J3           = 1 x 55000 =  55000 · gasto  8000 ·  63000
+--        2 personas · 195000 en total · 1 aseo no computado (JP, que quedó
+--        pendiente y estaba programado dentro del rango)
+--
+--      Periodo de agosto (2026-08-01 .. 2026-08-31), cerrado:
+--        Aseadora 7A · A1 = 1 x 40000 = 40000 · sin gastos · 40000
+--        1 persona · 40000 en total · 0 aseos no computados
+--
+--      El aseo tardío 107 y la tarifa editada del bloque F NO aparecen en
+--      ninguna de estas cifras, y esa es la mitad del valor del bloque: si
+--      alguna de estas lecturas se apoyara en el mundo vivo en vez de en el
+--      snapshot, julio daría otra cosa.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * El identificador del pago de julio de la aseadora 7A, resuelto COMO POSTGRES
+ * y por la misma razón que `pago_de_7b`: la aseadora no tiene grant sobre la
+ * tabla de pagos, así que resolverlo dentro de la sesión impersonada fallaría
+ * con 42501 y las aserciones pasarían sin haber llamado nunca a la función.
+ */
+select pg_temp.uuid_o_cero(pg_temp.escalar($q$
+  select p.id::text from public.cleaner_payouts p
+   where p.periodo_desde = date '2026-07-01'
+     and p.aseador_id = 'a7000000-0000-0000-0000-00000000000a'
+$q$)) as pago_de_7a \gset
+
+-- 78 LAS CINCO EXISTEN, Y `pagos_de_aseadora` RECIBE UN SOLO ARGUMENTO.
+--    Lo segundo no es trivia de catálogo: el bloque 3 de la ficha IGNORA a
+--    propósito el selector de periodo de la pantalla (UI-SPEC §8.2), porque los
+--    pagos son historial y filtrarlos por el rango de arriba dejaría «sus
+--    pagos» con una sola fila cuando el filtro está en día. La AUSENCIA del
+--    argumento es el mecanismo que impide que alguien «arregle» el bloque
+--    pasándole el rango, así que se mide.
+select is(
+  pg_temp.escalar($q$
+    select count(*)::text || '|'
+        || coalesce(
+             (pg_catalog.max(p.pronargs)
+                filter (where p.proname = 'pagos_de_aseadora'))::text,
+             '<nulo>')
+      from pg_catalog.pg_proc p
+      join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.proname in ('periodos_de_pago', 'pagos_del_periodo',
+                         'pagos_de_aseadora', 'detalle_de_pago',
+                         'marcar_pago_pagado')
+  $q$),
+  '5|1',
+  'las cinco lecturas de Pagos existen y pagos_de_aseadora NO recibe rango');
+
+-- 79 LA CABECERA DE CADA PERIODO, CON SUS DOS FECHAS REALES Y SUS CONTADORES.
+--    Las dos fechas son columnas de FECHA y no una etiqueta de texto: D7-5 hace
+--    que el periodo vaya de cierre a cierre, así que el de junio de 2026
+--    empieza el 30 de MAYO y rotularlo «junio» es la discusión que estas dos
+--    columnas existen para evitar. El orden es del más reciente al más antiguo.
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', $q$
+    select string_agg(
+             q.periodo_desde::text || '..' || q.periodo_hasta::text
+               || ':' || q.personas::text
+               || ':' || q.monto_total::text
+               || ':' || q.faltan_por_pagar::text
+               || ':' || q.aseos_no_computados::text,
+             ' | ' order by q.periodo_desde desc)
+      from public.periodos_de_pago() q
+  $q$),
+  '2026-08-01..2026-08-31:1:40000:1:0 | 2026-07-01..2026-07-31:2:195000:2:1',
+  'FIN-03 la cabecera de cada periodo lleva sus DOS fechas, personas, total, cuantas faltan y los no computados');
+
+-- 80 LA TABLA INTERNA, CON LAS DOS PARTIDAS POR SEPARADO. Es D7-2 en la tabla:
+--    con un total plano no hay forma de decirle a una persona cuánto de lo que
+--    recibe es su trabajo y cuánto el reembolso de lo que puso de su bolsillo.
+--    Los montos de las dos personas son distintos a propósito desde la siembra:
+--    con 40000 y 40000 una suma mal agrupada cuadraría por casualidad.
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', $q$
+    select string_agg(
+             g.aseador_nombre || ':' || g.cantidad_aseos::text
+               || ':' || g.monto_aseos::text
+               || ':' || g.monto_gastos::text
+               || ':' || g.monto_total::text
+               || ':' || case when g.pagado_at is null then 'pendiente' else 'pagado' end,
+             ' | ' order by g.aseador_nombre)
+      from public.pagos_del_periodo(date '2026-07-01') g
+  $q$),
+  'Aseadora 7A:3:120000:12000:132000:pendiente | Aseadora 7B:1:55000:8000:63000:pendiente',
+  'D7-2 la tabla de Pagos separa aseos de gastos por persona ademas del total');
+
+-- 81 EL BLOQUE 3 DE LA FICHA: TODOS los periodos de una persona, sin rango.
+--    7A cobró en julio y en agosto; la cifra de julio es la CONGELADA (132000),
+--    no la que daría recalcular con la tarifa que el bloque F editó después.
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', $q$
+    select string_agg(
+             g.periodo_desde::text || '..' || g.periodo_hasta::text
+               || ':' || g.monto_total::text,
+             ' | ' order by g.periodo_desde desc)
+      from public.pagos_de_aseadora('a7000000-0000-0000-0000-00000000000a') g
+  $q$),
+  '2026-08-01..2026-08-31:40000 | 2026-07-01..2026-07-31:132000',
+  'FIN-04 la ficha lista TODOS los periodos cerrados de la persona con sus cifras congeladas');
+
+-- 82 EL DESGLOSE DEL ADMIN LEE EL SNAPSHOT, Y LA LÍNEA DEL ASEO QUE G BORRÓ
+--    SIGUE AHÍ Y SIGUE SIENDO LEGIBLE. Tres líneas de aseo y una de gasto,
+--    aunque el aseo J2 y el gasto del Detergente ya no existan en el mundo
+--    vivo. Y la línea de J1 con SUS DOS FECHAS DISTINTAS (D7-8): la siembra las
+--    puso distintas a propósito para que una implementación que copie la misma
+--    fecha dos veces no pueda pasar.
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', format($q$
+    select (select count(*) filter (where d.tipo = 'aseo')::text
+                || '|' || count(*) filter (where d.tipo = 'gasto')::text
+              from public.detalle_de_pago(%1$L::uuid) d)
+        || '|' || (select d.property_nombre || '@' || d.monto::text
+                       || '@' || d.fecha_programada::text
+                       || '@' || d.fecha_ejecucion::text
+                     from public.detalle_de_pago(%1$L::uuid) d
+                    where d.tipo = 'aseo' and d.fecha_programada = date '2026-07-09')
+  $q$, :'pago_de_7a')),
+  '3|1|Apto 7A (fixture)@40000@2026-07-09@2026-07-10',
+  'FIN-04 el desglose conserva la linea del aseo borrado, legible y con sus DOS fechas');
+
+-- 83 Y NO SE UNE CONTRA EL MUNDO VIVO. Se mide sobre la DEFINICIÓN de las dos
+--    funciones en el catálogo y no sobre la fila, porque el defecto que importa
+--    no es «hoy devuelve mal», es «alguien añade un join para enriquecer la
+--    fila» y entonces el criterio 3 del ROADMAP deja de cumplirse en silencio:
+--    la línea de un aseo purgado se volvería fila fantasma o desaparecería.
+--    Se escribe como "encontradas | que se unen" para que no pase por vacuidad.
+select is(
+  pg_temp.escalar($q$
+    select count(*)::text || '|'
+        || count(*) filter (
+             where pg_catalog.pg_get_functiondef(p.oid)
+                   ~ 'public\.(cleanings|properties|expenses)\M')::text
+      from pg_catalog.pg_proc p
+      join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.proname in ('detalle_de_pago', 'detalle_de_mi_pago')
+  $q$),
+  '2|0',
+  'FIN-04 ninguna de las dos funciones de desglose se une contra los aseos, los apartamentos ni los gastos');
+
+-- 84 EL MISMO DOCUMENTO, MEDIDO. Las dos funciones de desglose declaran
+--    EXACTAMENTE la misma firma de salida: una sola firma distinta entre dos
+--    funciones. No es simetría cosmética: si el admin viera una columna de más,
+--    el día que alguien reclame estarían comparando dos papeles distintos, y
+--    esa conversación se pierde antes de empezar.
+select is(
+  pg_temp.escalar($q$
+    select count(distinct pg_catalog.pg_get_function_result(p.oid))::text
+        || '|' || count(*)::text
+      from pg_catalog.pg_proc p
+      join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.proname in ('detalle_de_pago', 'detalle_de_mi_pago')
+  $q$),
+  '1|2',
+  'D7-7 el desglose del admin y el del aseador declaran EXACTAMENTE las mismas columnas');
+
+-- 85 LAS CINCO PUERTAS, CERRADAS PARA QUIEN NO ES ADMIN. Las cinco en una sola
+--    aserción y no cinco sueltas: lo que se mide es que NINGUNA se quedó sin
+--    guarda, y un '42501|42501|sin_error|42501|42501' señala en el `have` cuál
+--    es la que falta. Un RPC es un endpoint público de PostgREST: que el botón
+--    viva en el árbol de admin no autoriza nada, y una función definer propiedad
+--    del superusuario salta la seguridad a nivel de fila entera.
+select is(
+  pg_temp.intento_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select * from public.periodos_de_pago()$q$)
+  || '|' || pg_temp.intento_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select * from public.pagos_del_periodo(date '2026-07-01')$q$)
+  || '|' || pg_temp.intento_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select * from public.pagos_de_aseadora('a7000000-0000-0000-0000-00000000000a')$q$)
+  || '|' || pg_temp.intento_como('a7000000-0000-0000-0000-00000000000a',
+    format($q$select * from public.detalle_de_pago(%L::uuid)$q$, :'pago_de_7a'))
+  || '|' || pg_temp.intento_como('a7000000-0000-0000-0000-00000000000a',
+    format($q$select * from public.marcar_pago_pagado(%L::uuid)$q$, :'pago_de_7a')),
+  '42501|42501|42501|42501|42501',
+  'D7-7 una aseadora recibe 42501 en las CINCO lecturas de Pagos, incluida la marca de pagado');
+
+-- 86 T-07-46, EL MISMO INVARIANTE CONTRA EL CATÁLOGO. La aserción 85 prueba que
+--    hoy el RPC deniega; esta prueba que no existe la OTRA vía. En Supabase el
+--    admin y la aseadora comparten el rol de Postgres `authenticated`, y la
+--    aseadora ES el dueño de la fila de su propio pago: un grant de escritura
+--    de tabla le permitiría marcárselo, y ni siquiera una policy por fila lo
+--    impediría. La salida es que no haya grant ninguno.
+select is(
+  pg_temp.escalar($q$
+    select count(*)::text
+      from information_schema.role_table_grants
+     where table_schema = 'public'
+       and table_name in ('payout_periods', 'cleaner_payouts', 'cleaner_payout_lines')
+       and grantee in ('anon', 'authenticated')
+  $q$),
+  '0',
+  'T-07-46 las tres tablas del snapshot no tienen NINGUN privilegio para anon ni authenticated');
+
+-- LA MARCA DE PAGADO, EN SU PROPIA SENTENCIA (trampa 1 de la cabecera): una
+-- escritura hecha dentro de la subconsulta de una aserción no la ve esa misma
+-- aserción. Se invoca con sesión de ADMIN y por el camino real de producción.
+select pg_temp.intento_como('ad700000-0000-0000-0000-000000000001',
+  format($q$select * from public.marcar_pago_pagado(%L::uuid)$q$, :'pago_de_7a'))
+  as marca_primera \gset
+
+-- El instante de la primera marca, para poder demostrar después que el segundo
+-- intento NO lo movió.
+select pg_temp.escalar(format($q$
+  select p.pagado_at::text from public.cleaner_payouts p where p.id = %L::uuid
+$q$, :'pago_de_7a')) as marca_instante \gset
+
+-- 87 FECHA Y AUTOR. Las dos, y el autor sale de la sesión y no de un parámetro:
+--    un identificador que viaja como argumento es un identificador que el
+--    cliente elige, y la autoría de una marca irreversible sobre dinero no se le
+--    pregunta al cliente (T-07-48). Un pago marcado por nadie es un estado que
+--    el sistema no sabe producir, y sin el autor no se puede responder «¿quién
+--    dijo que esto ya se pagó?» tres meses después.
+select is(
+  :'marca_primera' || '|' || pg_temp.escalar(format($q$
+    select (p.pagado_at is not null)::text
+        || '|' || coalesce(p.pagado_por::text, '<nulo>')
+      from public.cleaner_payouts p where p.id = %L::uuid
+  $q$, :'pago_de_7a')),
+  'sin_error|true|ad700000-0000-0000-0000-000000000001',
+  'D7-4.2 marcar pagado deja el instante Y el autor, y el autor sale de la sesion');
+
+-- 88 EL SEGUNDO INTENTO SE RECHAZA CON ERROR, NO CON ÉXITO SILENCIOSO.
+--    Dos pestañas abiertas es el caso real. La interfaz esconde el botón cuando
+--    ya está pagado, pero esconder no es impedir: el bloqueo vive en la base.
+--    P0001 y no 42501 porque quien llama SÍ está autorizado y lo que falla es el
+--    ESTADO de la fila; la pantalla necesita distinguir los dos casos, porque
+--    uno se resuelve recargando y el otro no se resuelve. T-07-47.
+select is(
+  pg_temp.intento_como('ad700000-0000-0000-0000-000000000001',
+    format($q$select * from public.marcar_pago_pagado(%L::uuid)$q$, :'pago_de_7a')),
+  'P0001',
+  'T-07-47 marcar pagado dos veces se RECHAZA con error, y no pasa en silencio');
+
+-- 89 Y EL RECHAZO NO MOVIÓ NADA. Sin esta, un RPC que levantara la excepción
+--    DESPUÉS de escribir pasaría la 88 y habría pisado la fecha y el autor del
+--    primer registro, que es justo el daño que la guarda existe para evitar.
+select is(
+  pg_temp.escalar(format($q$
+    select (p.pagado_at::text = %L)::text
+        || '|' || (p.pagado_por = 'ad700000-0000-0000-0000-000000000001')::text
+      from public.cleaner_payouts p where p.id = %L::uuid
+  $q$, :'marca_instante', :'pago_de_7a')),
+  'true|true',
+  'T-07-48 el segundo intento no piso la fecha ni el autor del primer registro');
+
+-- 90 Y EL CONTADOR DE LA CABECERA BAJÓ SOLO. Julio tenía dos pagos pendientes y
+--    ahora tiene uno. Es lo que sostiene el `faltan {N} por pagar` de la
+--    cabecera colapsable (UI-SPEC §9.1) y su sustitución por `Todos pagados`.
+--    Sin esta aserción, un contador escrito como literal o congelado en el
+--    cierre pasaría las 79 y 87 a la vez.
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', $q$
+    select q.faltan_por_pagar::text || '|' || q.personas::text
+      from public.periodos_de_pago() q
+     where q.periodo_desde = date '2026-07-01'
+  $q$),
+  '1|2',
+  'el contador de «faltan por pagar» de la cabecera baja al marcar, y el de personas no');
+
+-- 91 UN PAGO QUE NO EXISTE SE RECHAZA, NO SE IGNORA. Para el ADMIN la respuesta
+--    SÍ distingue el caso, y es deliberado: el admin puede ver todos los pagos,
+--    así que no hay nada que ocultarle, y decirle que el identificador no existe
+--    es la única forma de que sepa que la lista que tiene abierta está vieja.
+--    Es la decisión CONTRARIA a la de la aserción 93, y por eso van las dos.
+select is(
+  pg_temp.intento_como('ad700000-0000-0000-0000-000000000001',
+    $q$select * from public.marcar_pago_pagado('00000000-0000-0000-0000-0000000000fe'::uuid)$q$),
+  'P0001',
+  'marcar un pago inexistente se rechaza con error y no con exito vacio');
+
+-- 92 EL CIRCUITO COMPLETO DEL ASEADOR, DENTRO DE SU PROPIA SESIÓN. Toma el
+--    identificador de su lista y con él abre su desglose, sin tocar la tabla en
+--    ningún momento: el aseador no tiene grant sobre ella, así que si
+--    `mis_pagos_cerrados` no devolviera `payout_id` la pantalla de desglose
+--    sería inalcanzable. Es el COMPLEMENTO de la aserción 41: una guarda escrita
+--    al revés, que denegara a todo el mundo, pasaría la 41 y rompería el
+--    producto.
+--
+--    Y lo que devuelve es el desglose ENTERO con sus dos partidas y sus dos
+--    fechas por línea: tres aseos y el gasto, todos del snapshot, incluido el
+--    aseo que G borró del mundo vivo.
+select is(
+  pg_temp.valor_como('a7000000-0000-0000-0000-00000000000a', $q$
+    select string_agg(
+             d.tipo || '@' || coalesce(d.concepto, d.property_nombre)
+               || '@' || d.monto::text
+               || '@' || d.fecha_programada::text
+               || '@' || d.fecha_ejecucion::text,
+             ' ; ' order by d.tipo, d.fecha_ejecucion)
+      from (select m.payout_id
+              from public.mis_pagos_cerrados() m
+             where m.periodo_desde = date '2026-07-01') p
+      cross join lateral public.detalle_de_mi_pago(p.payout_id) d
+  $q$),
+  'aseo@Apto 7A (fixture)@40000@2026-07-09@2026-07-10'
+  || ' ; aseo@Apto 7A (fixture)@40000@2026-07-20@2026-07-20'
+  || ' ; aseo@Apto 7A (fixture)@40000@2026-07-31@2026-07-31'
+  || ' ; gasto@Detergente@12000@2026-07-09@2026-07-10',
+  'D7-4 la aseadora abre SU desglose con el identificador de SU lista, con las dos partidas y las dos fechas');
+
+-- 93 Y LA DENEGACIÓN ES INDISTINGUIBLE. «No existe» y «no es tuyo» dan la MISMA
+--    respuesta, y esta aserción compara las dos. Distinguirlas convertiría la
+--    función en un oráculo de enumeración de pagos ajenos: quien probara
+--    identificadores al azar aprendería cuáles existen. Es la razón por la que
+--    el RPC del código de acceso lanza una sola denegación para sus tres casos,
+--    y es la decisión CONTRARIA a la de la aserción 91, que es de admin.
+select is(
+  pg_temp.intento_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select * from public.detalle_de_mi_pago('00000000-0000-0000-0000-0000000000fe'::uuid)$q$)
+  || '|' || pg_temp.intento_como('a7000000-0000-0000-0000-00000000000a',
+    format($q$select * from public.detalle_de_mi_pago(%L::uuid)$q$, :'pago_de_7b')),
+  '42501|42501',
+  'T-07-42 el pago inexistente y el pago ajeno dan la MISMA denegacion, indistinguible');
+
+-- 94 LA ASEADORA DESACTIVADA TAMPOCO ENTRA POR ESTA PUERTA. La aserción 42 lo
+--    mide sobre la lista; esta lo mide sobre el desglose, que es la otra mitad
+--    de la superficie y la que tiene el identificador de un pago REAL en la
+--    mano. `private.is_active_cleaner()` consulta el perfil EN VIVO, así que la
+--    desactivación surte efecto de inmediato aunque el token siga siendo válido
+--    hasta que expire. PLAT-04 y criterio 4 del ROADMAP.
+select is(
+  pg_temp.intento_como('a7000000-0000-0000-0000-00000000000c',
+    format($q$select * from public.detalle_de_mi_pago(%L::uuid)$q$, :'pago_de_7a')),
+  '42501',
+  'PLAT-04 una aseadora desactivada tampoco obtiene el desglose de un pago, aunque tenga su identificador');
 
 
 select * from finish();
