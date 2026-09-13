@@ -77,12 +77,42 @@ const PROHIBIDAS: string[] = [
   CIFRAS_FINANCIERAS.margenB,
 ].flatMap((n) => [String(n), n.toLocaleString('es-CO')]);
 
-/** Lo que el aseador SÍ puede ver, y que además sirve de control del método. */
+/**
+ * Lo que el aseador SÍ puede ver, y que además sirve de control del método.
+ *
+ * ── LAS DOS FORMAS, IGUAL QUE LAS PROHIBIDAS, Y ESTÁ MEDIDO (2026-09-13) ────
+ *
+ * Este arreglo se escribió en Wave 0, antes de que las dos pantallas
+ * existieran, y listaba SOLO el entero crudo. Con el árbol del aseador
+ * renderizado entero en el servidor, **el entero crudo no viaja nunca**: el
+ * formateo ocurre en el servidor, así que lo que cruza es `41.117` y jamás
+ * `41117`. Medido sobre las tres cargas que captura el interceptor en el
+ * recorrido de este archivo:
+ *
+ *   pagoA crudo (41117) ........ NO APARECE
+ *   pagoA con puntos (41.117) .. /mis-pagos y /mis-pagos/[id]
+ *   pagoB crudo (48211) ........ NO APARECE
+ *   pagoB con puntos (48.211) .. /mis-pagos/[id]
+ *   gasto crudo (33517) ........ NO APARECE
+ *   gasto con puntos (33.517) .. /mis-pagos/[id]
+ *
+ * O sea que el control no podía dispararse nunca, y ponía en rojo el caso 16
+ * por una asimetría del propio archivo y no por una fuga: las prohibidas ya se
+ * buscaban en las dos formas, y las permitidas en una sola.
+ *
+ * **Añadir la forma con separador NO debilita nada.** La aserción negativa
+ * sigue recorriendo las mismas cargas buscando las prohibidas en sus dos
+ * formas. Lo único que cambia es que el control vuelve a poder demostrar lo que
+ * existe para demostrar: que el interceptor está mirando donde tiene que
+ * mirar. Si mañana alguien pone una cifra del aseador en un componente de
+ * cliente, el entero crudo empezará a viajar y el control lo aceptará igual,
+ * que es correcto: sigue siendo dinero suyo.
+ */
 const PERMITIDAS: string[] = [
-  String(CIFRAS_FINANCIERAS.pagoA),
-  String(CIFRAS_FINANCIERAS.pagoB),
-  String(CIFRAS_FINANCIERAS.gasto),
-];
+  CIFRAS_FINANCIERAS.pagoA,
+  CIFRAS_FINANCIERAS.pagoB,
+  CIFRAS_FINANCIERAS.gasto,
+].flatMap((n) => [String(n), n.toLocaleString('es-CO')]);
 
 interface CargaUtil {
   url: string;
