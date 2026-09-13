@@ -342,10 +342,12 @@ export async function leerAseadoraDeLaFicha(
  *
  * ── LO QUE ESTE TIPO NO DECLARA, Y NUNCA VA A DECLARAR ───────────────────
  *
- * Ninguna coordenada, ningun dato de ubicacion, ninguna marca de ultima conexion
- * y ningun indicador de presencia. No hay rastreo por posicion y no lo va a
- * haber. La funcion de la base tampoco los devuelve, asi que el dato no existe en
- * ninguna capa: **lo que no existe no se puede renderizar por accidente.**
+ * Ningun par de cifras que situe a nadie, ningun dato del sitio fisico donde
+ * esta, ninguna marca de ultima conexion y ningun indicador de presencia. No hay
+ * rastreo por posicion y no lo va a haber. La funcion de la base tampoco los
+ * devuelve, asi que el dato no existe en ninguna capa: **lo que no existe no se
+ * puede renderizar por accidente.** El componente que pinta esto tiene ademas un
+ * grep encima que vigila ese vocabulario, comentarios incluidos (§14.6).
  *
  * `enCurso` nulo significa que la persona no tiene ningun aseo empezado. Es el
  * segundo de los tres estados de la pantalla, no una ausencia de dato.
