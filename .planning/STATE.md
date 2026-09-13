@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 05
-current_phase_name: notificaciones-push-e-instalacion-de-la-pwa
+current_phase: 07
+current_phase_name: financiero
 status: planning
 stopped_at: Completado 07-03-PLAN.md
 last_updated: "2026-09-13T18:45:14.092Z"
@@ -28,10 +28,37 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 
 ## Current Position
 
-Phase: 05 (notificaciones-push-e-instalacion-de-la-pwa) — DISCUSION CERRADA
-Plan: 0 of TBD. `05-CONTEXT.md` escrito el 2026-09-10 con 8 decisiones (D-01 a D-08)
-Status: Listo para `ui-phase 5`. La fase trae `UI hint: yes` (banner de permiso e instrucciones de instalacion)
-Last activity: 2026-09-10 - discuss-phase 5 cerrado; ROADMAP §Phase 5 actualizado con los criterios 6 y 7
+Phase: 07 (financiero) — EN EJECUCION
+Plan: 3 of 14. Wave 0 cerrada (07-01, 07-02, 07-03, los tres en paralelo)
+Status: Wave 1 en marcha con `07-04` (migracion 23: calendario de cierre, `dia_bog`, las tres tablas del snapshot, recibo a 5 años)
+Last activity: 2026-09-13 - Wave 0 ejecutada: el contrato de la fase existe como aserciones ROJAS antes del schema
+
+**La suite esta ROJA a proposito y lo va a estar durante ocho waves.** Es el diseño
+de `07-VALIDATION.md`: los tests se escriben antes del codigo que los satisface.
+El estado al cerrar la Wave 0, medido:
+
+| Capa | Estado |
+|---|---|
+| pgTAP | 275 verdes (las de siempre) + **47 rojas de 52** en `11_financiero.test.sql` |
+| Unitarios | 1006 verdes + **83 rojos** en tres archivos de `lib/domain/` |
+| Integracion | **186 verdes** (169 + 17 del sembrador nuevo) + 1 archivo rojo |
+| E2E | 112 pasando y 1 saltado + **22 specs rojos** en dos archivos nuevos |
+
+Cada plan de migracion tiene una tarea que anota, bloque por bloque, que paso de
+rojo a verde y que sigue rojo con su plan responsable. Un rojo NUEVO no se puede
+esconder entre los declarados.
+
+**Lo que la Wave 0 ya demostro, y es el hallazgo mas incomodo de la fase:** la
+fuga de la tarifa al huesped no es teorica. La asercion 13 la imprime:
+
+```
+# Failed test 13: "D7-7 FUGA: una aseadora NO puede leer cleanings.tarifa_huesped"
+#         have: 90000
+#         want: ERROR:42501
+```
+
+Eso es la tarifa real de un apartamento, leida desde una sesion de aseadora. La
+cierra `07-05` en la Wave 2, por las dos vias.
 
 Las 8 decisiones de la Fase 5, en una linea cada una (el detalle y el porque estan en `05-CONTEXT.md`):
 
@@ -235,7 +262,8 @@ Ninguno.
 - **[Fase 1] Abierto de producto:** la lista definitiva de tareas del checklist bloquea el seed del catálogo, no el schema. Se arranca con el catálogo provisional (máximo 3 tareas por tipo de cuarto), editable sin migración
 - **[Fase 5] Riesgo aceptado:** push como único canal, sin semáforo de entregabilidad. Si en el piloto de Bogotá un aseo confirmado nunca llega al aseador, entra el semáforo (NOTIF-V2-01)
 - ~~ALTA (04-14): AlertDialog (~32px) y Tooltip (4px) colapsados~~ **RESUELTO 2026-09-07** por el quick `260907-703`. Tokens `--container-alerta` (320px), `--container-alerta-ancha` (384px) y `--container-tooltip` (320px) dentro de las dos primitivas, medidos en el CSS de produccion. La colision de fondo `--spacing-*` vs `--container-*` SIGUE viva: cualquier primitiva nueva con `max-w-md`/`max-w-lg` nace rota, y la regla queda escrita en `app/globals.css`
-- STATE.md sigue en current_phase 05 con 'Plan: 0 of TBD': state.advance-plan no puede parsear Current Plan / Total Plans. La Fase 7 tiene 14 planes y la seccion Current Position no la refleja. Lo reconcilia el orquestador de fase, no un ejecutor de plan (07-02 y 07-03 corren en paralelo sobre el mismo arbol)
+- ~~STATE.md en current_phase 05~~ **RESUELTO el 2026-09-13 por el orquestador**, al cerrar la Wave 0. La seccion Current Position ya refleja la Fase 7 con sus 14 planes y el estado rojo declarado de las cuatro suites. Lo anotaron 07-01 y 07-02 y era correcto: un ejecutor de plan no podia arreglarlo con tres planes corriendo sobre el mismo arbol.
+- ~~FIN-02 a FIN-05 marcados `Complete` en REQUIREMENTS.md~~ **RESUELTO el 2026-09-13 por el orquestador**: pasan a `In Progress`. Venian del frontmatter `requirements` de planes de Wave 0, que escriben el CONTRATO y no lo satisfacen. Dejarlos en `Complete` habria hecho que el verificador de fase diera por buena una fase a medias, que es exactamente el modo de fallo que esta fase esta tratando de evitar en todos los demas frentes.
 - **[Fase 7] Requisitos marcados Complete antes de tiempo:** FIN-03, FIN-04 y FIN-05 quedaron en `Complete` en REQUIREMENTS.md porque figuran en el frontmatter `requirements` de los planes de la Wave 0, y la Wave 0 solo escribe CONTRATOS: sus 87 casos estan en rojo hasta que 07-04 y 07-06 los pongan en verde. No se revierte desde un ejecutor de plan (tres planes corren en paralelo sobre el mismo arbol); lo reconcilia el verificador de fase
 
 ### Quick Tasks Completed

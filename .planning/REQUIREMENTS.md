@@ -245,10 +245,10 @@
 | DASH-06 | Fase 4 | Complete |
 | DASH-07 | Fase 4 | Complete |
 | FIN-01 | Fase 1 | Pending |
-| FIN-02 | Fase 7 | Complete |
-| FIN-03 | Fase 7 | Complete |
-| FIN-04 | Fase 7 | Complete |
-| FIN-05 | Fase 7 | Complete |
+| FIN-02 | Fase 7 | In Progress |
+| FIN-03 | Fase 7 | In Progress |
+| FIN-04 | Fase 7 | In Progress |
+| FIN-05 | Fase 7 | In Progress |
 | RET-01 | Fase 9 | Pending |
 | RET-02 | Fase 9 | Pending |
 | RET-03 | Fase 9 (movido de la 7 el 2026-09-13, issue #5) | Pending |
