@@ -1335,7 +1335,30 @@ export async function sembrarFinanzas(servicio: Servicio): Promise<EscenarioFina
 
   await marcarPagado(admin, unaVieja);
   await marcarPagado(admin, dosReciente);
-  await admin.auth.signOut();
+
+  // ── `scope: 'local'`, Y NO EL DEFECTO. ES LA DIFERENCIA ENTRE UNA SUITE
+  //    VERDE Y VEINTITRÉS ROJOS QUE NO SON DE NADIE. ─────────────────────────
+  //
+  // MEDIDO el 2026-09-13, en la primera corrida en que este sembrador llegó
+  // hasta el final: `signOut()` sin argumento usa `scope: 'global'`, que REVOCA
+  // TODOS los refresh tokens del usuario, no solo el de este cliente de Node.
+  // Y el admin de esta sesión es EL MISMO de la semilla cuyo `storageState`
+  // comparten `paginaAdmin` y todas las specs de la suite.
+  //
+  // Consecuencia, exactamente la que se vio: a partir de aquí el middleware
+  // llama `getUser()`, el servidor de Auth responde que la sesión ya no existe,
+  // y todo spec posterior que use la sesión de admin rebota a `/login`.
+  // `historial`, `operacion`, `operacion-alertas` y `ruteo` se pusieron rojos
+  // los 23 juntos, sin que ninguno tuviera nada que ver con finanzas.
+  //
+  // El defecto llevaba aquí desde el plan 07-03 y estaba TAPADO: hasta el plan
+  // 07-09, `marcarPagado` reventaba porque la función no existía, así que esta
+  // línea nunca se ejecutaba. Arreglar la función es lo que lo destapó.
+  //
+  // `local` cierra la sesión de ESTE cliente y no toca las demás, que es lo
+  // único que este sembrador necesita: ya escribió todo lo que tenía que
+  // escribir y no quiere dejar una sesión viva en el proceso de Node.
+  await admin.auth.signOut({ scope: 'local' });
 
   return {
     aptoA,
@@ -1445,7 +1468,14 @@ async function marcarPagado(
   admin: ReturnType<typeof clienteSinTipar>,
   pago: string,
 ): Promise<void> {
-  const { error } = await admin.rpc('marcar_pago_pagado', { p_pago: pago });
+  // Los nombres de los argumentos son el ÚNICO acoplamiento de este archivo con
+  // la firma de 07-09, igual que en `cerrarPeriodo`. La Wave 0 escribió aquí
+  // `p_pago` a ciegas, antes de que la función existiera; la migración 27 la
+  // definió como `p_payout`, que es el nombre que citan los planes 07-09, 07-12
+  // y 07-13. Se corrige AQUÍ y en ningún otro sitio: PostgREST resuelve los RPC
+  // por nombre de argumento, así que un nombre viejo da PGRST202 y el `beforeAll`
+  // de `finanzas.spec.ts` muere dejando su siembra a medias.
+  const { error } = await admin.rpc('marcar_pago_pagado', { p_payout: pago });
   if (error) {
     throw new Error(
       `No se pudo marcar pagado ${pago}: ${error.message}\n` +
