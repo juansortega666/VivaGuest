@@ -172,7 +172,14 @@ febrero parece un error y genera exactamente la discusión que se quiere evitar.
 cerrados hasta hoy. El research debe haberla identificado; si no, es lo primero
 que el plan tiene que resolver.
 
-## D7-9 · La alerta del 70% de Storage es un banner (respuesta a Q3, tomada sin el dueño)
+## D7-9 · ~~La alerta del 70% de Storage es un banner~~ · **ANULADA el 2026-09-13**
+
+> **Esta decisión ya no aplica: RET-07 salió de la fase entera.** El dueño sacó
+> la alerta de Storage y la retención legal de Finanzas porque no son dinero.
+> Están en la Fase 9, como issues #6 y #5. Lo de abajo se conserva solo porque
+> el análisis del enum sigue siendo válido para quien recoja ese issue.
+
+### (Texto original, ya no vigente)
 
 Q3 era menor y no se le preguntó. Se aplica la recomendación del research:
 **banner persistente** en `/finanzas` y `/operacion`, no push.

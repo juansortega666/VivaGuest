@@ -83,16 +83,11 @@ que verificar y **con qué comando**; el planner la completa con su columna Task
 | FIN-03 | **Dos corridas del cierre no pagan dos veces** | Tampering | pgTAP | `npm run db:test` | ❌ W0 |
 | FIN-04 | **Borrar a mano un aseo del periodo cerrado deja el pago y su desglose intactos** | — | pgTAP | `npm run db:test` | ❌ W0 · **criterio 3 del ROADMAP, literal** |
 | FIN-04 / D7-6 | Borrar el gasto deja su línea con concepto y monto | — | pgTAP | `npm run db:test` | ❌ W0 |
+| D7-6 | El recibo de un gasto sigue existiendo pasados 30 días (la política de 5 años, no la de 30 días) | — | pgTAP | `npm run db:test` | ❌ W0 |
 | FIN-04 / D7-3 | Editar una tarifa después de cerrar **no mueve** el pago cerrado | — | integración | `npm run test:integration` | ❌ W0 |
 | FIN-05 | Un aseo de gestión externa no aparece en ningún total ni en ningún conteo | — | pgTAP | `npm run db:test` | ❌ W0 |
 | D7-8 | Un aseo completado después del cierre cae en el periodo SIGUIENTE, y en uno solo | — | pgTAP | `npm run db:test` | ❌ W0 |
 | D7-8 | El desglose muestra fecha programada **y** fecha de ejecución | — | E2E | `PLAYWRIGHT_PORT=… npm run test:e2e` | ❌ W0 |
-| RET-03 | Marcar retención legal sin motivo falla | — | pgTAP | `npm run db:test` | ❌ W0 |
-| RET-03 | Borrar un aseo retenido levanta P0001 | Destruction | pgTAP | `npm run db:test` | ❌ W0 · **el guardián de la Fase 9** |
-| RET-03 | Borrar las fotos de un aseo retenido levanta P0001 | Destruction | pgTAP | `npm run db:test` | ❌ W0 |
-| RET-03 | Un aseador no puede marcar retención legal | Elevation | pgTAP | `npm run db:test` | ❌ W0 |
-| RET-07 | La lectura del consumo de Storage por un aseador levanta 42501 | Info. Disclosure | pgTAP | `npm run db:test` | ❌ W0 · **medido: sin la guarda, un aseador obtiene el total** |
-| RET-07 | El porcentaje cruza el umbral del 70% cuando debe | — | unit | `npm run test:unit` | ❌ W0 |
 | D7-4 | La consulta de pagos del aseador **no devuelve el periodo en curso** | — | pgTAP | `npm run db:test` | ❌ W0 |
 | D7-4 | Un aseador no ve el pago de otro aseador | Info. Disclosure | pgTAP | `npm run db:test` | ❌ W0 |
 | D7-4 / D7-7 | **Ninguna** función del aseador devuelve una cifra de huésped | Info. Disclosure | pgTAP | `npm run db:test` | ❌ W0 · se prueba sobre el `returns table`, no sobre la fila |
@@ -102,14 +97,22 @@ que verificar y **con qué comando**; el planner la completa con su columna Task
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
+> **Ocho filas salieron de esta tabla el 2026-09-13**, las de `RET-03` (retención
+> legal) y `RET-07` (alerta de Storage al 70%). No se "olvidaron": el dueño sacó
+> los dos requisitos de la fase porque no son dinero, y se movieron a la Fase 9
+> junto con la purga, como issues #5 y #6.
+>
+> Se quitan de aquí a propósito. Una estrategia de validación que cubre cosas que
+> nadie va a construir no es exhaustiva, es ruido: pone en rojo una fase que está
+> completa y entrena a quien la lea a ignorar los rojos.
+
 ---
 
 ## Wave 0 Requirements
 
 **En rojo antes del schema**, igual que hizo el plan 01-02.
 
-- [ ] `supabase/tests/11_financiero.test.sql` — FIN-02 a FIN-05, RET-03, RET-07,
-      D7-4, D7-7 y D7-8
+- [ ] `supabase/tests/11_financiero.test.sql` — FIN-02 a FIN-05, D7-4, D7-7 y D7-8
 - [ ] `lib/domain/mes.test.ts` — el gemelo TypeScript del calendario de cierre
 - [ ] `lib/domain/mes.integration.test.ts` — paridad SQL ↔ TS sobre 36 meses
 - [ ] `lib/domain/finanzas.test.ts` — agregación de presentación del desglose
@@ -124,13 +127,12 @@ Cada uno se corre en los dos sentidos y se deja anotado el resultado:
 
 - [ ] Quitar el filtro de gestión externa del núcleo → **FIN-05 en rojo**
 - [ ] Quitar la protección contra el cierre doble → **la idempotencia en rojo**
-- [ ] Quitar la guarda de rol de la lectura de Storage → **RET-07 en rojo**
 - [ ] Cambiar el borrado en cascada de las líneas del desglose → **el criterio 3
       del ROADMAP en rojo**
 - [ ] Devolverle al aseador el grant sobre la tarifa del huésped → **D7-7 en rojo**
 
 **Presupuesto:** `npm run db:reset` cuesta 54 s. Un plan de señuelos completo son
-~8 resets, o sea **~7 minutos solo de reset**. Presupuestarlo en la estimación de
+~7 resets, o sea **~6 minutos solo de reset**. Presupuestarlo en la estimación de
 la wave, no descubrirlo a mitad.
 
 ---

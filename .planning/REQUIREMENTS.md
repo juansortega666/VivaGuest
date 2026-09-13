@@ -251,11 +251,11 @@
 | FIN-05 | Fase 7 | Pending |
 | RET-01 | Fase 9 | Pending |
 | RET-02 | Fase 9 | Pending |
-| RET-03 | Fase 7 | Pending |
+| RET-03 | Fase 9 (movido de la 7 el 2026-09-13, issue #5) | Pending |
 | RET-04 | Fase 9 | Pending |
 | RET-05 | Fase 9 | Pending |
 | RET-06 | Fase 9 | Pending |
-| RET-07 | Fase 7 | Pending |
+| RET-07 | Fase 9 (movido de la 7 el 2026-09-13, issue #6) | Pending |
 
 **Coverage:**
 - v1 requirements: 83 total

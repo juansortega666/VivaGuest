@@ -219,17 +219,33 @@ Plans:
 la fase son 10 planes y no 20.
 
 ### Phase 7: Financiero
-**Goal**: El admin ve cuánto deja cada aseo y cuánto le debe a cada aseador al cierre de mes
+**Goal**: El admin tiene visión total de la plata en un solo tablero (cuánto se cobra, cuánto se paga, la diferencia y los gastos), filtrable por día, semana y mes; y cada aseador ve en su teléfono lo que se le va a pagar, y nada más
 **Depends on**: Fases 1 y 4
-**Requirements**: FIN-02, FIN-03, FIN-04, FIN-05, RET-03, RET-07
+**Requirements**: FIN-02, FIN-03, FIN-04, FIN-05
 **Success Criteria** (qué debe ser VERDAD):
   1. El admin ve la rentabilidad de cada aseo (fee al huésped menos pago al aseador) calculada contra las tarifas congeladas en ese aseo, y los aseos informativos quedan fuera de todo cálculo financiero y de toda métrica
-  2. Al cierre del último día laboral del mes (excluyendo fines de semana, no festivos) el sistema calcula el pago de cada aseador, lo persiste como snapshot propio y lo muestra en pantalla
-  3. Ese snapshot mensual queda escrito de forma que sobreviva al borrado de los aseos que lo sustentan, verificable borrando manualmente un aseo del mes ya cerrado
-  4. El admin marca un aseo con retención legal y ese aseo queda excluido de cualquier purga futura
-  5. El admin ve cuánto Storage lleva consumido y recibe alerta al superar el 70% del cupo
+  2. El admin abre una sola pantalla y ve cuánto cobró, cuánto pagó, cuánto reembolsó en gastos y cuánto le quedó, en el rango que elija, con filtro de día, semana y mes que manda sobre toda la pantalla
+  3. Al cerrar el periodo, el sistema calcula el pago de cada aseador, lo persiste como snapshot propio y lo muestra en la sub-pestaña de Pagos, donde además se marca a quién ya se le pagó
+  4. Ese snapshot queda escrito de forma que sobreviva al borrado de los aseos que lo sustentan, verificable borrando manualmente un aseo de un periodo ya cerrado
+  5. El aseador ve en su app lo que se le va a pagar de los periodos ya cerrados, y NO existe ninguna consulta, por ninguna vía, que le devuelva una cifra de huésped o un margen
 **Plans**: TBD
 **UI hint**: yes
+
+> **Alcance recortado el 2026-09-13, por decisión del dueño.** `RET-03` (retención
+> legal) y `RET-07` (alerta de Storage al 70%) **salieron de esta fase**: no son
+> dinero y estaban aquí por acumulación, no por lógica. Mezclarlos hacía difícil
+> dar la fase por terminada, porque se podía tener el cálculo perfecto y la fase
+> "incompleta" por un banner de almacenamiento.
+>
+> Los dos pertenecen a la **Fase 9 (borrado automático y retención)**, que es
+> donde vive la purga: tiene sentido construir el freno junto al motor. Quedan
+> registrados como issues [#5](https://github.com/juansortega666/VivaGuest/issues/5)
+> y [#6](https://github.com/juansortega666/VivaGuest/issues/6), con los datos ya
+> medidos.
+>
+> El alcance real de la fase está escrito, en lenguaje de negocio, en
+> `.planning/phases/07-financiero/07-DEFINICION.md`. **Ese documento manda sobre
+> este resumen.**
 
 ### Phase 8: Piloto en Bogotá 1
 **Goal**: Los 23 apartamentos de Bogotá 1, con personal propio, operan dentro del sistema sin WhatsApp ni Excel
