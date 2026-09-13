@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 07
 current_phase_name: financiero
 status: planning
-stopped_at: "Completado 07-05-PLAN.md (migracion 24: la frontera del aseador)"
-last_updated: "2026-09-13T20:22:29.383Z"
+stopped_at: "Completado 07-08-PLAN.md (migracion 26: las seis lecturas financieras del admin)"
+last_updated: "2026-09-13T20:45:18.972Z"
 last_activity: 2026-09-13
 last_activity_desc: "Wave 2 cerrada: 07-05 (migracion 24, la frontera del aseador) y 07-06 (dominio financiero en TypeScript)"
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 89
-  completed_plans: 80
+  completed_plans: 81
   percent: 56
 ---
 
@@ -29,7 +29,7 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 ## Current Position
 
 Phase: 07 (financiero) — EN EJECUCION
-Plan: 7 of 14. Wave 0 cerrada (07-01, 07-02, 07-03) y Wave 1 cerrada (07-04)
+Plan: 8 of 14. Wave 0 cerrada (07-01, 07-02, 07-03) y Wave 1 cerrada (07-04)
 Status: WAVE 2 CERRADA, sus dos planes ejecutados.
 
 `07-05` ejecutado (migracion 24, la frontera del aseador): la tarifa al huesped y el pago
@@ -44,7 +44,16 @@ aseo. FIN-01 verificado ejecutando. Bloque D de `11_financiero.test.sql`: 6 de 1
 calendario de cierre con paridad medida contra Postgres, el filtro del Resumen separado
 fisicamente del calendario de pago, la agregacion de presentacion y las iniciales).
 
-Siguiente: Wave 3 (`07-07`, migracion 25: el cierre idempotente).
+`07-07` ejecutado (Wave 3, migracion 25: el cierre del periodo). `07-08` ejecutado
+(Wave 4, migracion 26: las seis lecturas financieras del admin). Las seis son definer
+con guarda de admin como primera sentencia: `resumen_financiero`, `costo_por_aseadora`,
+`rentabilidad_aseos` (FIN-02), `aseos_de_aseadora`, `gastos_de_aseadora` y
+`aseo_en_curso_de_aseadora`. La conciliacion Resumen <-> detalle y Resumen <-> bloque 3
+esta afirmada, no supuesta. Bloque L nuevo en `11_financiero.test.sql`, 18 aserciones
+(60 a 77), todas en verde.
+
+Siguiente: Wave 5 (`07-09`, migracion 27: las dos lecturas del aseador), que es lo unico
+que queda rojo del contrato pgTAP (aserciones 38 a 43).
 Last activity: 2026-09-13 - Wave 2 cerrada: 07-05 (migracion 24, la frontera del aseador) y 07-06 (dominio financiero en TypeScript)
 
 **La suite esta ROJA a proposito y lo va a estar durante ocho waves.** Es el diseño
@@ -57,6 +66,10 @@ El estado medido, wave a wave:
 | Unitarios | 1006 verdes + **83 rojos** en tres archivos de `lib/domain/` | sin cambio: 1006 verdes + 3 archivos rojos | **1106 verdes, CERO rojos.** Los 83 en verde, mas 17 nuevos (7 de `personas`, 10 de `dates`) |
 | Integracion | **186 verdes** (169 + 17 del sembrador nuevo) + 1 archivo rojo | sin cambio: 186 verdes + 1 archivo rojo | **el archivo rojo esta verde**: `mes.integration.test.ts` 4/4, 144 valores comparados contra Postgres sin una divergencia |
 | E2E | 112 pasando y 1 saltado + **22 specs rojos** en dos archivos nuevos | no re-corrido: 07-04 no toca interfaz | no re-corrido: `07-06` es dominio puro, sin interfaz |
+
+Tras `07-08` (Wave 4): pgTAP en **352 aserciones con solo 6 rojas**, las declaradas del
+plan 07-09. Unitarios 1111 verdes, integracion 190 verdes. E2E no re-corrido: 07-08 es
+base de datos pura, sin interfaz.
 
 Lo que `07-06` cerro: los tres archivos de contrato de `lib/domain/` que la Wave 0
 dejo en rojo, y la paridad del calendario. **Las tres declaraciones `.d.ts` de la
@@ -241,6 +254,7 @@ Progress: [██████████] 100%
 | Phase 07 P06 | 30min | 2 tasks | 7 files |
 | Phase 07 P05 | 60min | 3 tasks | 6 files |
 | Phase 07 P07 | 95min | 3 tasks | 5 files |
+| Phase 07 P08 | 55min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -302,6 +316,10 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Phase ?]: 07-07: el arnés de pgTAP se corrigió, no la guarda de admin del cierre — relajarla habría dejado entrar a la clave de servicio, contra lo que e2e/fixtures.ts documenta y depende
 - [Phase ?]: 07-07: el snapshot del pago y su desglose se escriben en UNA sentencia con CTEs que modifican datos — dos sentencias tomarían dos snapshots y un aseo completado entre medias entraría en el desglose sin entrar en el total
 - [Phase ?]: 07-07: la guarda de calendario del cierre vive dentro de la función y no en la expresión del cron — el comodín de último día del mes de pg_cron es el último día CALENDARIO, y cae en fin de semana en 8 de 24 meses
+- [Phase 07]: Toda lectura financiera nace por funcion definer con guarda de rol como PRIMERA sentencia del cuerpo, nunca por grant: admin y aseador comparten el rol Postgres authenticated y 'solo el admin' no existe como categoria de grant (migraciones 16, 24 y 26)
+- [Phase 07]: El Resumen es lectura VIVA y Pagos es snapshot congelado: los dos conviven y ninguno reemplaza al otro. El Resumen SI ve un aseo que entro a un periodo ya cerrado, y eso no contradice D7-3, que congela el PAGO y no la metrica
+- [Phase 07]: La conciliacion entre dos pantallas del mismo periodo se afirma como IGUALDAD entre las funciones que las alimentan, con un seguro contra la vacuidad, en vez de como dos literales que alguien puede actualizar a la vez (aserciones 60, 62 y 69)
+- [Phase 07]: Una regla de producto que prohibe un dato (ubicacion, cifra de huesped, URL firmada) se mide contra el returns table en pg_proc y no contra la fila: el dato viaja al navegador aunque la pantalla no lo pinte
 
 ### Pending Todos
 
@@ -358,8 +376,8 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-13T20:22:07.152Z
-Stopped at: Completado 07-05-PLAN.md (migracion 24: la frontera del aseador)
+Last session: 2026-09-13T20:44:49.274Z
+Stopped at: Completado 07-08-PLAN.md (migracion 26: las seis lecturas financieras del admin)
 
 **Abierto (unico):** el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real. Los cinco criterios de fallo estan escritos en `06-10-SUMMARY.md`. Nada mas bloquea la fase.
 
