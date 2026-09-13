@@ -1,4 +1,6 @@
+import { ChevronRight, Wallet } from 'lucide-react';
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { cerrarSesion } from '@/app/_actions/sesion';
@@ -44,6 +46,33 @@ export default async function MisAseosPage() {
       </div>
 
       <ListaDeAseos datos={datos} />
+
+      {/*
+        LA ENTRADA A SUS PAGOS (07-UI-SPEC §10.2).
+
+        Va AL PIE de la lista, debajo del trabajo del dia, porque el trabajo del
+        dia es a lo que la aseadora abre esta app. El dinero se consulta una vez
+        al mes.
+
+        NO SE ANADE NAVEGACION PERSISTENTE, y es una decision, no una carencia:
+        este arbol nunca la ha tenido, y una barra inferior nueva es un cambio de
+        paradigma que le tocaria tambien a la ficha del aseo y al asistente de
+        evidencia, ninguno de los dos en el alcance de esta fase.
+
+        56px de alto, que es el destino de toque comodo de este arbol y no el
+        piso de 44: la usa una persona de pie, con guantes o con las manos
+        mojadas.
+      */}
+      <Link
+        href="/mis-pagos"
+        className="transicion flex min-h-toque-comodo w-full items-center justify-between gap-md rounded-md border border-border bg-background px-lg py-md"
+      >
+        <span className="flex items-center gap-md text-body-movil text-foreground">
+          <Wallet size={20} strokeWidth={2} aria-hidden="true" />
+          Mis pagos
+        </span>
+        <ChevronRight size={20} strokeWidth={2} aria-hidden="true" />
+      </Link>
 
       {/* Cerrar sesion no necesita ni un gramo de JavaScript de cliente. */}
       <form action={cerrarSesion} className="pt-xl">

@@ -38,7 +38,41 @@ import { cn } from '@/lib/utils';
  * orden que tenian en la Fase 2, a proposito: cualquier reordenamiento seria un
  * cambio invisible en tres superficies ya entregadas.
  */
-export function clasesDeEstadoVacio(compacto = false) {
+export function clasesDeEstadoVacio(compacto = false, movil = false) {
+  /**
+   * La variante del arbol del aseador, que anadio la Fase 7 para el octavo
+   * vacio del producto (07-UI-SPEC.md §12.1, fila 8: `/mis-pagos` sin ningun
+   * periodo cerrado).
+   *
+   * ── POR QUE UNA VARIANTE Y NO UN SEGUNDO COMPONENTE ───────────────────────
+   *
+   * Porque `04-UI-SPEC.md` §15.1 lo prohibe explicitamente y la razon sigue
+   * valiendo: dos estados vacios se desincronizan en el primer cambio de copy.
+   * Este componente ya sirve a ocho superficies y el octavo no es distinto en
+   * estructura, solo en escala.
+   *
+   * ── POR QUE HACE FALTA LA VARIANTE ────────────────────────────────────────
+   *
+   * `05-UI-SPEC.md` §3.1 declara una supersesion para `app/(cleaner)/`: los
+   * cuatro roles valen 28/20/16/14 px en vez de 24/16/14/12, y las clases llevan
+   * sufijo. Reusar tal cual la variante de escritorio dentro de ese arbol
+   * pondria el texto un escalon por debajo de lo que el contrato fija para un
+   * telefono que se lee de pie y con el brazo extendido.
+   *
+   * El icono sube a 32px tambien en esta variante: es `normal`, no `compacto`.
+   * `compacto` manda sobre `movil` si alguien pasara las dos, y no se combina:
+   * la variante compacta es para cards de 360px del carril lateral del admin,
+   * que no existen en el arbol del aseador.
+   */
+  if (movil && !compacto) {
+    return {
+      contenedor: 'flex flex-col items-center gap-lg py-3xl text-center',
+      icono: 'size-8 text-muted-foreground',
+      encabezado: 'text-heading-movil text-foreground',
+      cuerpo: 'max-w-vacio text-body-movil text-muted-foreground',
+    };
+  }
+
   return compacto
     ? {
         contenedor: 'flex flex-col items-center gap-lg py-xl text-center',
@@ -65,6 +99,7 @@ export function EstadoVacio({
   cuerpo,
   accion,
   compacto = false,
+  movil = false,
   claseIcono,
 }: {
   icono: LucideIcon;
@@ -73,6 +108,13 @@ export function EstadoVacio({
   accion?: ReactNode;
   /** Variante para cards del carril lateral de 360px. Ver §15.1. */
   compacto?: boolean;
+  /**
+   * Variante del arbol del aseador: misma estructura, escala del telefono.
+   *
+   * La usa el octavo vacio del producto (07-UI-SPEC.md §12.1, fila 8). Ver el
+   * bloque de `clasesDeEstadoVacio`.
+   */
+  movil?: boolean;
   /**
    * Color del icono, cuando el contrato lo fija distinto del gris por defecto.
    *
@@ -84,7 +126,7 @@ export function EstadoVacio({
    */
   claseIcono?: string;
 }) {
-  const clases = clasesDeEstadoVacio(compacto);
+  const clases = clasesDeEstadoVacio(compacto, movil);
 
   return (
     <div className={clases.contenedor}>

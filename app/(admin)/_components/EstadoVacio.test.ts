@@ -47,6 +47,24 @@ describe('clasesDeEstadoVacio', () => {
       cuerpo: 'max-w-vacio text-micro text-muted-foreground',
     });
   });
+
+  it('la variante del teléfono usa la escala con sufijo y conserva el icono de 32px', () => {
+    // 05-UI-SPEC.md §3.1: dentro del árbol del aseador los cuatro roles valen
+    // 28/20/16/14 px y las clases llevan sufijo. Es `normal`, no `compacto`:
+    // el icono se queda en size-8 y el bloque en py-3xl.
+    expect(clasesDeEstadoVacio(false, true)).toEqual({
+      contenedor: 'flex flex-col items-center gap-lg py-3xl text-center',
+      icono: 'size-8 text-muted-foreground',
+      encabezado: 'text-heading-movil text-foreground',
+      cuerpo: 'max-w-vacio text-body-movil text-muted-foreground',
+    });
+  });
+
+  it('compacto manda sobre la variante del teléfono si alguien pasara las dos', () => {
+    // No se combinan: la compacta existe para cards de 360px del carril lateral
+    // del admin, que no existen en el árbol del aseador.
+    expect(clasesDeEstadoVacio(true, true)).toEqual(clasesDeEstadoVacio(true));
+  });
 });
 
 describe('EstadoVacio', () => {
@@ -78,6 +96,21 @@ describe('EstadoVacio', () => {
     expect(markup).not.toContain('py-3xl');
     expect(markup).not.toContain('size-8');
     expect(markup).not.toContain('text-heading');
+  });
+
+  it('con movil el encabezado y el cuerpo salen con el sufijo, y ninguna clase sin él', () => {
+    const markup = renderToStaticMarkup(createElement(EstadoVacio, { ...props, movil: true }));
+
+    expect(markup).toContain(
+      '<h2 class="text-heading-movil text-foreground">No hay aseos</h2>',
+    );
+    expect(markup).toContain('class="max-w-vacio text-body-movil text-muted-foreground"');
+
+    // El señuelo: una clase sin sufijo bajo el árbol del aseador es el defecto
+    // que `scripts/ci/check-escala-movil.sh` existe para impedir, y aquí el
+    // guardarraíl no llega porque el archivo vive en (admin).
+    expect(markup).not.toContain('"text-heading text-foreground"');
+    expect(markup).not.toContain('text-body text-muted-foreground');
   });
 
   it('en las dos variantes el encabezado es un h2 y el cuerpo conserva max-w-vacio', () => {
