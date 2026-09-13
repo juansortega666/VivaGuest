@@ -478,7 +478,30 @@ La DEFINICION descartó el revenue por persona porque *"parece un ranking de des
 - **Prohibido teñir la fila o la barra según la posición.** Las ocho barras son del mismo color.
 - El título de la card es `Cuánto cuesta cada aseadora`, en presente y sin comparativo. **No** `Ranking`, **no** `Más costosas`, **no** `Rendimiento`.
 
-**El orden sí es descendente por total**, y eso no contradice lo anterior: el trabajo de este bloque es "cuánto le estoy pagando a cada quien", y poner los compromisos más grandes arriba es lo útil. Lo que estaba prohibido era **presentarlo** como una clasificación de personas, no ordenar una lista de plata.
+**El orden por defecto es ALFABÉTICO por nombre**, y el orden por monto es una elección explícita del admin, no el estado inicial.
+
+> **Corregido el 2026-09-13 por el orquestador, sobre una observación del checker.**
+> El spec proponía orden descendente por total con el argumento de que "ordenar
+> plata no es rankear personas". El argumento es bueno pero no sobrevive al
+> contexto: **este tema ya demostró ser sensible** —fue exactamente la razón por
+> la que el dueño descartó el revenue por persona— y una lista de personas
+> ordenada de mayor a menor **se lee como un podio aunque no lleve números ni
+> medallas**. Prohibir la numeración y dejar el orden descendente es cerrar la
+> puerta y dejar la ventana abierta.
+>
+> Alfabético por defecto elimina la lectura de ranking sin perder nada: quien
+> necesite ver los compromisos grandes primero toca el selector de orden y lo
+> cambia. La diferencia es que entonces **es una pregunta que alguien hizo**, no
+> una jerarquía que la pantalla afirma sola.
+
+El selector de orden ofrece dos opciones, con este copy exacto:
+
+- `Por nombre` (seleccionado por defecto)
+- `Por monto, de mayor a menor`
+
+La elección **no se persiste** entre sesiones: cada vez que se abre Finanzas, la
+lista vuelve a alfabético. Persistirla convertiría una consulta puntual en el
+estado permanente de la pantalla, que es justo lo que se quiere evitar.
 
 #### 6.5.4 Anatomía de la fila (56px, `--spacing-fila-aseador`)
 
