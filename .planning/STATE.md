@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 07
 current_phase_name: financiero
 status: planning
-stopped_at: Completado 07-04-PLAN.md (migracion 23)
-last_updated: "2026-09-13T19:01:36.040Z"
+stopped_at: Completado 07-06-PLAN.md (dominio financiero en TypeScript)
+last_updated: "2026-09-13T19:19:16.058Z"
 last_activity: 2026-09-13
-last_activity_desc: "Wave 0 ejecutada: el contrato de la fase existe como aserciones ROJAS antes del schema"
+last_activity_desc: "07-06 ejecutado: los tres archivos rojos de lib/domain/ en verde y la paridad del calendario medida contra Postgres"
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 89
-  completed_plans: 77
+  completed_plans: 78
   percent: 56
 ---
 
@@ -29,22 +29,32 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 ## Current Position
 
 Phase: 07 (financiero) — EN EJECUCION
-Plan: 4 of 14. Wave 0 cerrada (07-01, 07-02, 07-03) y Wave 1 cerrada (07-04)
-Status: `07-04` ejecutado (migracion 23: calendario de cierre, `dia_bog`, `periodo_de_cierre`,
-`foto_vencida` y las tres tablas del snapshot). Siguiente: Wave 2 con `07-05` (migracion 24,
-cerrar la fuga de la tarifa al huesped por las dos vias)
-Last activity: 2026-09-13 - 07-04 ejecutado: el schema financiero existe y 14 aserciones pasaron de rojo a verde
+Plan: 5 of 14. Wave 0 cerrada (07-01, 07-02, 07-03) y Wave 1 cerrada (07-04)
+Status: `07-06` ejecutado en la Wave 2 (dominio financiero en TypeScript: el gemelo del
+calendario de cierre con paridad medida contra Postgres, el filtro del Resumen separado
+fisicamente del calendario de pago, la agregacion de presentacion y las iniciales). Su
+companero de wave `07-05` (migracion 24, cerrar la fuga de la tarifa al huesped) corre
+aparte. Siguiente: Wave 3
+Last activity: 2026-09-13 - 07-06 ejecutado: los tres archivos rojos de `lib/domain/` en verde y la paridad SQL medida sobre 144 valores
 
 **La suite esta ROJA a proposito y lo va a estar durante ocho waves.** Es el diseño
 de `07-VALIDATION.md`: los tests se escriben antes del codigo que los satisface.
 El estado medido, wave a wave:
 
-| Capa | Al cerrar la Wave 0 | Al cerrar la Wave 1 (07-04) |
-|---|---|---|
-| pgTAP | 275 verdes + **47 rojas de 52** en `11_financiero.test.sql` | 275 verdes + **33 rojas de 52**. 14 nuevas verdes, cero regresiones |
-| Unitarios | 1006 verdes + **83 rojos** en tres archivos de `lib/domain/` | sin cambio: 1006 verdes + 3 archivos rojos |
-| Integracion | **186 verdes** (169 + 17 del sembrador nuevo) + 1 archivo rojo | sin cambio: 186 verdes + 1 archivo rojo |
-| E2E | 112 pasando y 1 saltado + **22 specs rojos** en dos archivos nuevos | no re-corrido: 07-04 no toca interfaz |
+| Capa | Al cerrar la Wave 0 | Al cerrar la Wave 1 (07-04) | Tras `07-06` (Wave 2) |
+|---|---|---|---|
+| pgTAP | 275 verdes + **47 rojas de 52** en `11_financiero.test.sql` | 275 verdes + **33 rojas de 52**. 14 nuevas verdes, cero regresiones | sin cambio: `07-06` no toca la base |
+| Unitarios | 1006 verdes + **83 rojos** en tres archivos de `lib/domain/` | sin cambio: 1006 verdes + 3 archivos rojos | **1106 verdes, CERO rojos.** Los 83 en verde, mas 17 nuevos (7 de `personas`, 10 de `dates`) |
+| Integracion | **186 verdes** (169 + 17 del sembrador nuevo) + 1 archivo rojo | sin cambio: 186 verdes + 1 archivo rojo | **el archivo rojo esta verde**: `mes.integration.test.ts` 4/4, 144 valores comparados contra Postgres sin una divergencia |
+| E2E | 112 pasando y 1 saltado + **22 specs rojos** en dos archivos nuevos | no re-corrido: 07-04 no toca interfaz | no re-corrido: `07-06` es dominio puro, sin interfaz |
+
+Lo que `07-06` cerro: los tres archivos de contrato de `lib/domain/` que la Wave 0
+dejo en rojo, y la paridad del calendario. **Las tres declaraciones `.d.ts` de la
+Wave 0 estan borradas** (`mes.d.ts`, `periodo.d.ts`, `finanzas.d.ts`): eran el
+andamio que mantenia `tsc` util durante la wave, y un `.d.ts` que sobrevive a su
+implementacion queda invisible y muerto porque TypeScript resuelve el `.ts` primero.
+**Deuda declarada con fecha:** `iniciales()` esta hoy en dos sitios
+(`lib/domain/personas.ts` y `app/(admin)/_components/TopNav.tsx`); la borra `07-10`.
 
 Lo que `07-04` cerro, bloque por bloque (el detalle esta en `07-04-SUMMARY.md`):
 **B (calendario del cierre) 6/6** y **J (el recibo dura cinco anos) 3/3**, mas las
@@ -62,9 +72,13 @@ esconder entre los declarados.
 fuga de la tarifa al huesped no es teorica. La asercion 13 la imprime:
 
 ```
+
 # Failed test 13: "D7-7 FUGA: una aseadora NO puede leer cleanings.tarifa_huesped"
+
 #         have: 90000
+
 #         want: ERROR:42501
+
 ```
 
 Eso es la tarifa real de un apartamento, leida desde una sesion de aseadora. La
@@ -214,6 +228,7 @@ Progress: [██████████] 100%
 | Phase 07 P02 | 21min | 3 tasks | 9 files |
 | Phase 07 P03 | 68min | 2 tasks | 4 files |
 | Phase 07 P04 | 25min | 3 tasks | 2 files |
+| Phase 07 P06 | 30min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -264,6 +279,9 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Phase 7]: 07-04: tres tablas y no dos en el snapshot financiero. payout_periods existe para que un periodo sin ninguna aseadora con aseos deje rastro, y para que la idempotencia de D7-3 sea por PERIODO y no por persona
 - [Phase 7]: 07-04: los punteros de cleaner_payout_lines al mundo vivo (cleaning_id, expense_id, property_id) van SIN clave foranea, ni siquiera debil. Con cascada la purga de la Fase 9 borraria el desglose de un pago ya cobrado; con FK restrictiva la purga fallaria con 23503 y no borraria nunca nada
 - [Phase 7]: 07-04 CONSECUENCIA PARA LA FASE 9: el recibo de gasto dura 1825 dias (app_settings.expense_photo_retention_days) y public.foto_vencida(kind, created_at) es el unico punto que decide si una foto vencio. Purgar por photo_retention_days a secas borra los recibos y rompe D7-2
+- [Phase ?]: 07-06: los helpers de calendario compartidos viven en lib/domain/dates.ts; mes.ts y periodo.ts NO se importan entre si, y la separacion se verifica por grep
+- [Phase ?]: 07-06: la etiqueta de un periodo de pago que cruza el ano lleva los dos anos aunque se pida sin ano; sin ellos la etiqueta es falsa, no escueta
+- [Phase ?]: 07-06: la agregacion LANZA cuando un monto llega como cadena, nombrando el campo; un cero silencioso le borraria el pago a una persona
 
 ### Pending Todos
 
@@ -320,8 +338,8 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-13T19:01:36.032Z
-Stopped at: Completado 07-04-PLAN.md (migracion 23)
+Last session: 2026-09-13T19:19:07.543Z
+Stopped at: Completado 07-06-PLAN.md (dominio financiero en TypeScript)
 
 **Abierto (unico):** el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real. Los cinco criterios de fallo estan escritos en `06-10-SUMMARY.md`. Nada mas bloquea la fase.
 
