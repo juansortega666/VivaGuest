@@ -1535,9 +1535,30 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      aseo_en_curso_de_aseadora: {
+        Args: { p_aseador: string }
+        Returns: {
+          cleaning_id: string
+          esta_activa: boolean
+          iniciado_at: string
+          property_id: string
+          property_nombre: string
+        }[]
+      }
       aseo_sin_evidencia_completa: {
         Args: { p_cleaning: string }
         Returns: boolean
+      }
+      aseos_de_aseadora: {
+        Args: { p_aseador: string; p_desde: string; p_hasta: string }
+        Returns: {
+          cleaning_id: string
+          fecha_ejecucion: string
+          fecha_programada: string
+          pago: number
+          property_id: string
+          property_nombre: string
+        }[]
       }
       aseos_sin_evidencia_completa: {
         Args: { p_cleanings: string[] }
@@ -1566,6 +1587,17 @@ export type Database = {
       confirmar_prueba_por_toque: {
         Args: { p_token: string }
         Returns: undefined
+      }
+      costo_por_aseadora: {
+        Args: { p_desde: string; p_hasta: string }
+        Returns: {
+          aseador_id: string
+          aseador_nombre: string
+          cantidad_aseos: number
+          costo_total: number
+          total_gastos: number
+          total_pago: number
+        }[]
       }
       create_manual_cleaning: {
         Args: {
@@ -1600,6 +1632,21 @@ export type Database = {
         Args: { p_created_at: string; p_kind: string }
         Returns: boolean
       }
+      gastos_de_aseadora: {
+        Args: { p_aseador: string; p_desde: string; p_hasta: string }
+        Returns: {
+          cleaning_id: string
+          concepto: string
+          evidencia_bucket: string
+          evidencia_path: string
+          expense_id: string
+          fecha_ejecucion: string
+          moneda: string
+          monto: number
+          property_id: string
+          property_nombre: string
+        }[]
+      }
       periodo_de_cierre: {
         Args: { p_dia: string }
         Returns: {
@@ -1632,6 +1679,29 @@ export type Database = {
         }
         Returns: undefined
       }
+      rentabilidad_aseos: {
+        Args: {
+          p_aseador?: string
+          p_desde: string
+          p_filtro?: string
+          p_hasta: string
+          p_property?: string
+        }
+        Returns: {
+          aseador_id: string
+          aseador_nombre: string
+          cleaning_id: string
+          cobrado: number
+          fecha_ejecucion: string
+          fecha_programada: string
+          margen: number
+          pagado: number
+          property_id: string
+          property_nombre: string
+          tiene_dano: boolean
+          tiene_gasto: boolean
+        }[]
+      }
       report_damage: {
         Args: { p_cleaning: string; p_descripcion: string }
         Returns: string
@@ -1652,6 +1722,20 @@ export type Database = {
       reschedule_cleaning: {
         Args: { p_cleaning: string; p_fecha: string }
         Returns: undefined
+      }
+      resumen_financiero: {
+        Args: { p_desde: string; p_hasta: string }
+        Returns: {
+          aseos_con_danos: number
+          aseos_con_gastos: number
+          aseos_hechos: number
+          cobrado: number
+          ganancia: number
+          gastos_reembolsados: number
+          margen_promedio: number
+          margen_total: number
+          pagado_aseadores: number
+        }[]
       }
       reveal_access_code: {
         Args: { p_cleaning: string }
