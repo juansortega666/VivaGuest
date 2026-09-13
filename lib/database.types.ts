@@ -1670,6 +1670,14 @@ export type Database = {
         }
         Returns: Json
       }
+      tarifas_de_apartamentos: {
+        Args: { p_ids?: string[] }
+        Returns: {
+          pago_aseador: number
+          property_id: string
+          tarifa_huesped: number
+        }[]
+      }
       today_bog: { Args: never; Returns: string }
       toggle_checklist_item: {
         Args: { p_done: boolean; p_item: string; p_nota?: string }

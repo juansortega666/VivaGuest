@@ -1,13 +1,26 @@
 import { describe, expect, test } from 'vitest';
 
-import { listarClusters, type ApartamentoDeLista } from './apartamentos';
+import {
+  fusionarTarifas,
+  listarClusters,
+  type ApartamentoDeLista,
+  type TarifaDeApartamento,
+} from './apartamentos';
 
 /**
- * Solo se prueba aqui `listarClusters`, que es la unica funcion PURA del modulo.
- * Las otras tres hablan con PostgREST y su comportamiento real (que columnas trae,
- * que ve cada rol) lo fija `lib/domain/apartamento.integration.test.ts` contra la
- * base viva. Un test con el cliente stubbeado solo comprobaria que el stub
- * devuelve lo que el stub devuelve.
+ * Aqui solo se prueban las funciones PURAS del modulo: `listarClusters` y
+ * `fusionarTarifas`. Las que hablan con PostgREST y su comportamiento real (que
+ * columnas trae, que ve cada rol) lo fija `lib/domain/apartamento.integration.test.ts`
+ * contra la base viva. Un test con el cliente stubbeado solo comprobaria que el
+ * stub devuelve lo que el stub devuelve.
+ *
+ * ESO VALE DOBLE PARA LA MIGRACION 24. Lo que esa migracion cambio es un GRANT
+ * POR COLUMNA, y un doble de cliente NO TIENE PRIVILEGIOS: siempre acepta. Aqui
+ * no se puede probar que la aseadora ya no lea la tarifa, y no se intenta. Eso
+ * lo miden las aserciones 13 y 14 de `supabase/tests/11_financiero.test.sql`,
+ * dentro de Postgres y con roles reales. Lo que SI se puede fijar sin base es la
+ * COMPOSICION: que las dos cifras se peguen a la fila correcta y que una fila
+ * sin cifras conocidas salga con las dos en `null` y no con `undefined`.
  */
 
 /** Fila minima: solo importa `cluster`, el resto es relleno tipado. */
@@ -99,5 +112,56 @@ describe('listarClusters', () => {
     listarClusters(filas);
 
     expect(filas.map((f) => f.cluster)).toEqual(antes);
+  });
+});
+
+describe('fusionarTarifas', () => {
+  const cifras = (property_id: string, t: number | null, p: number | null): TarifaDeApartamento => ({
+    property_id,
+    tarifa_huesped: t,
+    pago_aseador: p,
+  });
+
+  test('pega cada par de cifras a la fila de su mismo id', () => {
+    const filas = [fila('Armenia'), fila('Chapinero')];
+    const tarifas = [cifras('id-Chapinero', 200_000, 70_000), cifras('id-Armenia', 120_000, 45_000)];
+
+    // El orden de la lista de tarifas no importa: el cruce es por id, no por
+    // posicion. Si alguien lo cambiara por un `zip`, este test lo delata.
+    expect(fusionarTarifas(filas, tarifas)).toEqual([
+      { ...filas[0], tarifa_huesped: 120_000, pago_aseador: 45_000 },
+      { ...filas[1], tarifa_huesped: 200_000, pago_aseador: 70_000 },
+    ]);
+  });
+
+  test('una fila sin cifras conocidas sale con las dos en null, nunca undefined', () => {
+    // Es el caso del apartamento en borrador, y es el que importa: `undefined`
+    // pasaria el `ausente()` de `faltantesParaActivar` de otra forma y podria
+    // pintar como activable un apartamento sin tarifas.
+    const [salida] = fusionarTarifas([fila('Armenia')], []);
+
+    expect(salida.tarifa_huesped).toBeNull();
+    expect(salida.pago_aseador).toBeNull();
+  });
+
+  test('conserva un cero como cero y no lo convierte en null', () => {
+    // `pago_aseador = 0` es una configuracion valida, no un campo sin llenar.
+    // Un `||` en vez del `??` lo convertiria en null y el apartamento dejaria de
+    // poder activarse.
+    const [salida] = fusionarTarifas([fila('Armenia')], [cifras('id-Armenia', 0, 0)]);
+
+    expect(salida.tarifa_huesped).toBe(0);
+    expect(salida.pago_aseador).toBe(0);
+  });
+
+  test('ignora las tarifas de apartamentos que no estan en la lista', () => {
+    const salida = fusionarTarifas([fila('Armenia')], [cifras('id-Fantasma', 999, 999)]);
+
+    expect(salida).toHaveLength(1);
+    expect(salida[0].tarifa_huesped).toBeNull();
+  });
+
+  test('sobre lista vacia devuelve []', () => {
+    expect(fusionarTarifas([], [cifras('id-Armenia', 1, 1)])).toEqual([]);
   });
 });

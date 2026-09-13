@@ -23,6 +23,11 @@ import {
   type FaltanteOutput,
 } from '@/lib/domain/cuartos.schema';
 import { campoDeConstraint, mapDbError, type DbErrorLike } from '@/lib/domain/errors';
+import {
+  COLUMNAS_DE_PROPIEDAD,
+  fusionarTarifas,
+  type TarifaDeApartamento,
+} from '@/lib/data/apartamentos';
 import type { Database } from '@/lib/database.types';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -661,14 +666,41 @@ export async function activarApartamento(id: string): Promise<ResultadoAccion> {
   const revisado = esquemaId.safeParse(id);
   if (!revisado.success) return problemaZod(revisado.error);
 
-  const { data: fila, error: errorLectura } = await supabase
+  // ── LECTURA EN DOS PIEZAS, Y LA RAZÓN ES LA MIGRACIÓN 24 ────────────────────
+  //
+  // Aquí había una proyección de comodín sobre `properties`. Ya no puede haberla:
+  // la migración 24 sacó `tarifa_huesped` y `pago_aseador` del grant de columna
+  // de `authenticated` para cerrar la fuga de D7-7, y en Postgres el asterisco
+  // exige privilegio sobre TODAS las columnas de la tabla. Con el comodín, esta
+  // acción respondería `42501` y NINGÚN apartamento se podría activar desde el
+  // menú de la tabla.
+  //
+  // Y las dos cifras hacen falta de verdad: `esquemaActivar` exige que un
+  // apartamento gestionado las tenga, así que leerlas mal (o no leerlas) haría
+  // fallar la revalidación justo en el caso que esta acción existe para cubrir.
+  const { data: columnasVisibles, error: errorLectura } = await supabase
     .from('properties')
-    .select('*')
+    .select(COLUMNAS_DE_PROPIEDAD)
     .eq('id', id)
     .maybeSingle();
 
   if (errorLectura) return errorDeBase(errorLectura);
-  if (!fila) return noEncontrado();
+  if (!columnasVisibles) return noEncontrado();
+
+  // La función con guarda, llamada AQUÍ y no por el helper de `lib/data/`: ese
+  // helper lanza, y una Server Action tiene que devolver `ResultadoAccion` con
+  // el mensaje ya mapeado. Así un `42501` llega a `mapDbError` con su código
+  // intacto en vez de convertirse en el mensaje genérico.
+  const { data: tarifas, error: errorTarifas } = await supabase.rpc('tarifas_de_apartamentos', {
+    p_ids: [id],
+  });
+
+  if (errorTarifas) return errorDeBase(errorTarifas);
+
+  const [fila] = fusionarTarifas(
+    [columnasVisibles],
+    (tarifas ?? []) as TarifaDeApartamento[],
+  );
 
   // `valoresDesdeFilaGuardada` vive en `lib/domain/` y no aquí: un archivo con
   // `'use server'` solo puede exportar funciones async, así que un helper puro
