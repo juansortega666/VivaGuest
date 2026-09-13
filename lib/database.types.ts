@@ -248,6 +248,138 @@ export type Database = {
           },
         ]
       }
+      cleaner_payout_lines: {
+        Row: {
+          cleaning_id: string | null
+          concepto: string | null
+          evidencia_bucket: string | null
+          evidencia_path: string | null
+          expense_id: string | null
+          fecha_ejecucion: string
+          fecha_programada: string
+          id: string
+          moneda: string
+          monto: number
+          orden: number
+          payout_id: string
+          property_id: string | null
+          property_nombre: string
+          tipo: string
+        }
+        Insert: {
+          cleaning_id?: string | null
+          concepto?: string | null
+          evidencia_bucket?: string | null
+          evidencia_path?: string | null
+          expense_id?: string | null
+          fecha_ejecucion: string
+          fecha_programada: string
+          id?: string
+          moneda?: string
+          monto: number
+          orden?: number
+          payout_id: string
+          property_id?: string | null
+          property_nombre: string
+          tipo: string
+        }
+        Update: {
+          cleaning_id?: string | null
+          concepto?: string | null
+          evidencia_bucket?: string | null
+          evidencia_path?: string | null
+          expense_id?: string | null
+          fecha_ejecucion?: string
+          fecha_programada?: string
+          id?: string
+          moneda?: string
+          monto?: number
+          orden?: number
+          payout_id?: string
+          property_id?: string | null
+          property_nombre?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cleaner_payout_lines_payout_id_fkey"
+            columns: ["payout_id"]
+            isOneToOne: false
+            referencedRelation: "cleaner_payouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cleaner_payouts: {
+        Row: {
+          aseador_id: string | null
+          aseador_nombre: string
+          cantidad_aseos: number
+          cantidad_gastos: number
+          id: string
+          moneda: string
+          monto_aseos: number
+          monto_gastos: number
+          monto_total: number
+          pagado_at: string | null
+          pagado_por: string | null
+          periodo_desde: string
+          periodo_hasta: string
+        }
+        Insert: {
+          aseador_id?: string | null
+          aseador_nombre: string
+          cantidad_aseos?: number
+          cantidad_gastos?: number
+          id?: string
+          moneda?: string
+          monto_aseos?: number
+          monto_gastos?: number
+          monto_total?: number
+          pagado_at?: string | null
+          pagado_por?: string | null
+          periodo_desde: string
+          periodo_hasta: string
+        }
+        Update: {
+          aseador_id?: string | null
+          aseador_nombre?: string
+          cantidad_aseos?: number
+          cantidad_gastos?: number
+          id?: string
+          moneda?: string
+          monto_aseos?: number
+          monto_gastos?: number
+          monto_total?: number
+          pagado_at?: string | null
+          pagado_por?: string | null
+          periodo_desde?: string
+          periodo_hasta?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cleaner_payouts_aseador_id_fkey"
+            columns: ["aseador_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cleaner_payouts_pagado_por_fkey"
+            columns: ["pagado_por"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cleaner_payouts_periodo_desde_fkey"
+            columns: ["periodo_desde"]
+            isOneToOne: false
+            referencedRelation: "payout_periods"
+            referencedColumns: ["periodo_desde"]
+          },
+        ]
+      }
       cleaning_checklist_items: {
         Row: {
           checklist_task_id: string
@@ -1034,6 +1166,41 @@ export type Database = {
           },
         ]
       }
+      payout_periods: {
+        Row: {
+          aseos_no_computados: number
+          cerrado_at: string
+          cerrado_por: string | null
+          moneda: string
+          periodo_desde: string
+          periodo_hasta: string
+        }
+        Insert: {
+          aseos_no_computados?: number
+          cerrado_at?: string
+          cerrado_por?: string | null
+          moneda?: string
+          periodo_desde: string
+          periodo_hasta: string
+        }
+        Update: {
+          aseos_no_computados?: number
+          cerrado_at?: string
+          cerrado_por?: string | null
+          moneda?: string
+          periodo_desde?: string
+          periodo_hasta?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payout_periods_cerrado_por_fkey"
+            columns: ["cerrado_por"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -1407,6 +1574,7 @@ export type Database = {
         Args: { p_cleaning: string; p_motivo: string }
         Returns: undefined
       }
+      dia_bog: { Args: { p_instante: string }; Returns: string }
       dispatch_feed_syncs: { Args: never; Returns: number }
       dispatch_push_notifications: { Args: never; Returns: number }
       estado_avisos_aseadores: {
@@ -1423,6 +1591,17 @@ export type Database = {
       }
       feed_health_watchdog: { Args: never; Returns: undefined }
       finish_cleaning: { Args: { p_cleaning: string }; Returns: undefined }
+      foto_vencida: {
+        Args: { p_created_at: string; p_kind: string }
+        Returns: boolean
+      }
+      periodo_de_cierre: {
+        Args: { p_dia: string }
+        Returns: {
+          periodo_desde: string
+          periodo_hasta: string
+        }[]
+      }
       reassign_cleaning: {
         Args: { p_aseador: string; p_cleaning: string }
         Returns: undefined
@@ -1496,6 +1675,7 @@ export type Database = {
         Args: { p_done: boolean; p_item: string; p_nota?: string }
         Returns: undefined
       }
+      ultimo_dia_habil_del_mes: { Args: { p_dia: string }; Returns: string }
       unskip_room_evidence: {
         Args: { p_cleaning: string; p_room: string }
         Returns: undefined
