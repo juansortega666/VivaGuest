@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 07
 current_phase_name: financiero
 status: planning
-stopped_at: "Completado 07-09-PLAN.md (migracion 27: los pagos del admin y la frontera del aseador). Contrato pgTAP de la Fase 7 ENTERO en verde"
-last_updated: "2026-09-13T22:02:08.013Z"
+stopped_at: Completed 07-10-PLAN.md
+last_updated: "2026-09-13T22:36:31.795Z"
 last_activity: 2026-09-13
-last_activity_desc: "Wave 5 cerrada: 07-09 (migracion 27). Ultima migracion de la fase; el contrato pgTAP queda entero en verde y empiezan las pantallas"
+last_activity_desc: "Wave 2 cerrada: 07-05 (migracion 24, la frontera del aseador) y 07-06 (dominio financiero en TypeScript)"
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 89
-  completed_plans: 82
+  completed_plans: 83
   percent: 56
 ---
 
@@ -29,12 +29,25 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 ## Current Position
 
 Phase: 07 (financiero) — EN EJECUCION
-Plan: 9 of 14. Waves 0 a 5 cerradas (07-01 a 07-09). LA BASE DE LA FASE ESTA COMPLETA.
-Status: WAVE 5 CERRADA. 07-09 fue la ULTIMA MIGRACION de la fase (la 27).
+Plan: 10 of 14. Waves 0 a 6 cerradas (07-01 a 07-10). LA BASE DE LA FASE ESTA COMPLETA
+Y LA PRIMERA PANTALLA TAMBIEN.
+Status: WAVE 6 CERRADA. 07-10 construyo el chasis de la seccion y la sub-pestana Resumen.
 
 `11_financiero.test.sql` queda ENTERO EN VERDE por primera vez desde que empezo la fase:
 94 aserciones, 369 en la suite pgTAP completa, cero `not ok`. Eso es lo que desbloquea
 los cuatro planes de interfaz (07-10 a 07-13).
+
+E2E medido tras 07-10: **117 pasando, 1 saltado, 17 rojos**, todos declarados y con plan
+responsable: 9 de `finanzas.spec.ts` (07-11 y 07-12) y 6 de `mis-pagos.spec.ts` (07-13).
+Cero rojos nuevos. Unitarios: **1120 verdes** (1111 + 9 de `lib/data/finanzas.test.ts`).
+
+**Dos de los rojos que quedan en `finanzas.spec.ts` son de 07-10 solo a medias**, y
+conviene saberlo antes de leerlos como defecto: `:381` y `:411` pasan TODAS sus
+aserciones sobre el Resumen (el enlace de cada conteo lleva `filtro`, `ancla` y `rango`,
+y la fila con cifra cero se renderiza y navega) y caen en la ultima, que ya mira
+`/finanzas/aseos`, la ruta de 07-11. Lo mismo con `:796`: `/finanzas` SI rebota desde una
+sesion de aseadora; las otras dos rutas del recorrido todavia no existen y un 404 no pasa
+por el layout que rebota.
 
 E2E medido tras 07-09: 113 pasando, 1 saltado, 21 rojos, y los 21 son los declarados de
 `finanzas.spec.ts` y `mis-pagos.spec.ts`. Los dos falsos rojos colaterales de
@@ -86,8 +99,11 @@ dejo en rojo, y la paridad del calendario. **Las tres declaraciones `.d.ts` de l
 Wave 0 estan borradas** (`mes.d.ts`, `periodo.d.ts`, `finanzas.d.ts`): eran el
 andamio que mantenia `tsc` util durante la wave, y un `.d.ts` que sobrevive a su
 implementacion queda invisible y muerto porque TypeScript resuelve el `.ts` primero.
-**Deuda declarada con fecha:** `iniciales()` esta hoy en dos sitios
-(`lib/domain/personas.ts` y `app/(admin)/_components/TopNav.tsx`); la borra `07-10`.
+~~**Deuda declarada con fecha:** `iniciales()` esta hoy en dos sitios
+(`lib/domain/personas.ts` y `app/(admin)/_components/TopNav.tsx`); la borra `07-10`.~~
+**CERRADA el 2026-09-13 por `07-10`**: la definicion vieja de `TopNav.tsx` esta borrada,
+el circulo vive en `app/(admin)/_components/CirculoIniciales.tsx`, y la nota de caducidad
+de la cabecera de `personas.ts` tambien se fue.
 
 Lo que `07-04` cerro, bloque por bloque (el detalle esta en `07-04-SUMMARY.md`):
 **B (calendario del cierre) 6/6** y **J (el recibo dura cinco anos) 3/3**, mas las
@@ -266,6 +282,7 @@ Progress: [██████████] 100%
 | Phase 07 P07 | 95min | 3 tasks | 5 files |
 | Phase 07 P08 | 55min | 3 tasks | 3 files |
 | Phase 07 P09 | 145min | 3 tasks | 4 files |
+| Phase 07 P10 | 58min | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -334,6 +351,8 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Phase 07]: 07-09: el filtro por dueño del aseador vive DENTRO de la función definer y nunca en el where de la pantalla
 - [Phase 07]: 07-09: mis_pagos_cerrados devuelve payout_id, adición declarada al contrato: sin él la pantalla de desglose del aseador sería inalcanzable
 - [Phase 07]: 07-09: el sembrador E2E de finanzas cierra sesión con scope local; el signOut global revocaba los refresh tokens del admin y tumbaba 23 specs
+- [Phase ?]: 07-10: el orden del bloque por aseadora vive en estado de cliente y NO en la URL, al reves que el rango y el ancla. En la URL, un enlace compartido llevaria el podio puesto y el refresco lo conservaria
+- [Phase ?]: 07-10: recalcular no es navegar. Al cambiar el filtro las cifras viejas se quedan visibles y atenuadas en vez de sustituirse por un esqueleto, porque lo que el admin esta haciendo es comparar
 
 ### Pending Todos
 
@@ -390,8 +409,8 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-13T22:02:01.498Z
-Stopped at: Completado 07-09-PLAN.md (migracion 27: los pagos del admin y la frontera del aseador). Contrato pgTAP de la Fase 7 ENTERO en verde: 94 aserciones, 369 en la suite, cero not ok
+Last session: 2026-09-13T22:36:31.782Z
+Stopped at: Completed 07-10-PLAN.md
 
 **Abierto (unico):** el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real. Los cinco criterios de fallo estan escritos en `06-10-SUMMARY.md`. Nada mas bloquea la fase.
 

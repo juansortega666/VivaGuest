@@ -16,6 +16,8 @@ cada corrida, y pasan solos a la siguiente sin tocar una línea.
 | 2 (suite completa) | `E1` rojo. 111 pasando |
 | 3 (solo el archivo) | `E2` rojo. 4 pasando |
 | 4 (solo el archivo) | 5 pasando, 1 saltado. Todo verde |
+| 5 (suite completa, 2026-09-13, plan 07-10) | `E3` rojo. 112 pasando |
+| 6 (solo el archivo, inmediatamente despues) | 5 pasando, 1 saltado. Todo verde |
 
 **Por qué no es de esta fase.** `push-instalacion.spec.ts` importa de
 `e2e/fixtures.ts` únicamente `contextoPersistente`, `emularInstalada`,
@@ -27,6 +29,14 @@ archivo y tres campos OPCIONALES a `AseoASembrar`, que ese archivo no usa.
 que dependen de red real: `E1` suscribe contra el servicio de push de Google y
 `E2` entrega un aviso por el protocolo de DevTools. `E5` y `E6`, que no salen de
 la máquina, nunca fallaron.
+
+**Actualizado el 2026-09-13 (plan 07-10).** El flake alcanza también a `E3`, que
+es el tercer caso que depende de la entrega por el protocolo de DevTools. Eso
+refuerza la hipótesis y la acota: los tres rojos vistos hasta hoy (`E1`, `E2`,
+`E3`) son exactamente los casos que salen de la máquina o dependen del protocolo;
+`E5` y `E6`, que no, nunca han fallado. El plan 07-10 no tocó nada de ese camino
+(su superficie es `/finanzas`, `TopNav` y ocho tokens de espaciado), y la corrida
+siguiente del mismo archivo salió entera en verde.
 
 **Detonante para arreglarlo:** que el rojo aparezca dos corridas seguidas, o que
 CI lo vuelva rojo con su `retries: 1`. Antes de eso, el arreglo sería a ciegas.

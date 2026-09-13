@@ -258,7 +258,7 @@ la fase son 10 planes y no 20.
   4. Ese snapshot queda escrito de forma que sobreviva al borrado de los aseos que lo sustentan, verificable borrando manualmente un aseo de un periodo ya cerrado
   5. El aseador ve en su app lo que se le va a pagar de los periodos ya cerrados, y NO existe ninguna consulta, por ninguna vía, que le devuelva una cifra de huésped o un margen
 
-**Plans**: 9/14 plans executed
+**Plans**: 10/14 plans executed
 **UI hint**: yes
 
 Plans:
@@ -272,7 +272,7 @@ Plans:
 - [x] 07-07-PLAN.md — Migración 25: el cierre idempotente, sus dos puertas y el job agendado
 - [x] 07-08-PLAN.md — Migración 26: las lecturas del Resumen, del detalle y de la ficha
 - [x] 07-09-PLAN.md — Migración 27: Pagos del admin, marcar pagado, y las dos funciones del aseador
-- [ ] 07-10-PLAN.md — Chasis de la sección y sub-pestaña Resumen
+- [x] 07-10-PLAN.md — Chasis de la sección y sub-pestaña Resumen
 - [ ] 07-11-PLAN.md — Detalle aseo por aseo y ficha de aseadora
 - [ ] 07-12-PLAN.md — Sub-pestaña Pagos: desglose, marcar pagado y aviso de periodo sin cerrar
 - [ ] 07-13-PLAN.md — La pantalla del aseador: sus periodos cerrados y su desglose
@@ -364,7 +364,7 @@ Fases con patrón ya documentado en el research (se puede saltar):
 | 4. Dashboard operativo del admin | 14/14 | Complete   | 2026-09-06 |
 | 5. Notificaciones push e instalación de la PWA | 15/17 | Executed — 05-12 (wizard `/instalar`) y 05-17 (validación en dispositivo) diferidos por el desarrollador | 2026-09-11 |
 | 6. PWA del aseador, offline-first | 10/10 | Executed — checkpoint humano en teléfono real abierto (06-10 tarea 3) | 2026-09-12 |
-| 7. Financiero | 9/14 | In Progress|  |
+| 7. Financiero | 10/14 | In Progress|  |
 | 8. Piloto en Bogotá 1 | 0/TBD | Not started | - |
 | 9. Borrado automático y retención | 0/TBD | Not started | - |
 
