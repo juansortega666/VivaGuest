@@ -6,14 +6,14 @@ current_phase: 05
 current_phase_name: notificaciones-push-e-instalacion-de-la-pwa
 status: planning
 stopped_at: "Completado 07-01-PLAN.md (Wave 0). Contrato pgTAP en rojo: 47/52 aserciones, rojo acotado a 11_financiero.test.sql. Linea base: pgTAP 275 en 11 archivos, unit 1006, integracion 169, e2e 112+1"
-last_updated: "2026-09-13T18:33:23.929Z"
+last_updated: "2026-09-13T18:36:47.254Z"
 last_activity: 2026-09-10
 last_activity_desc: discuss-phase 5 cerrado; ROADMAP §Phase 5 actualizado con los criterios 6 y 7
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 89
-  completed_plans: 74
+  completed_plans: 75
   percent: 56
 ---
 
@@ -174,6 +174,7 @@ Progress: [██████████] 100%
 | Phase 04 P14 | 3h 40m | 3 tasks | 14 files |
 | Quick 260907-703 | 1h 25m | 3 tasks | 5 files |
 | Phase 07 P01 | 62min | 2 tasks | 1 files |
+| Phase 07 P02 | 21min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -215,6 +216,10 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Quick 260907-703]: los anchos de las primitivas de shadcn van en tokens `--container-<nombre-propio>`, nunca con nombre de talla: `max-w-<nombre>` resuelve contra `--spacing-*` antes que contra `--container-*`, y todo token nuevo se registra ademas en el grupo `max-w` de cn()
 - [Phase 07]: El contrato pgTAP de la Fase 7 nace en rojo y fija el contrato de NOMBRES del schema financiero en la cabecera del test, no en una migracion — Es Wave 0: tres planes de waves distintas (07-04, 07-07, 07-09) escriben contra esos nombres sin verse entre si. Si un nombre cambia, cambia primero en 11_financiero.test.sql
 - [Phase 07]: La fuga del Hallazgo 1 queda MEDIDA en vivo: una aseadora autenticada lee 90000 pesos de tarifa al huesped desde cleanings y desde properties — Los dos grants de la migracion 07 son de TABLA y en Supabase admin y aseadora comparten el rol authenticated: la policy acota filas, no columnas. Las aserciones 13 y 14 de 11_financiero.test.sql lo imprimen en el have del TAP. Las cierra 07-05
+- [Fase 7] 07-02: el sembrador financiero acepta el periodo por parametro para que el autoritativo sea el de Postgres, no el ancla local del arnes
+- [Fase 7] 07-02: el rojo de una Wave 0 se produce por resolucion de modulo, no por una asercion que falla: es inconfundible y no se puede leer como un defecto real
+- [Fase 7] 07-02: el contrato de un modulo que aun no existe se declara en un `.d.ts` SIN `.ts`; tsc queda verde y vitest sigue rojo, y ningun bundle puede importar un stub
+- [Fase 7] 07-02: las fechas de una fixture se anclan 45 dias atras y nunca en literales de calendario, o la suite falla sola al ano siguiente y deja fechas en el futuro los dias 1 y 2 de cada mes
 
 ### Pending Todos
 
@@ -228,6 +233,7 @@ Ninguno.
 - **[Fase 5] Riesgo aceptado:** push como único canal, sin semáforo de entregabilidad. Si en el piloto de Bogotá un aseo confirmado nunca llega al aseador, entra el semáforo (NOTIF-V2-01)
 - ~~ALTA (04-14): AlertDialog (~32px) y Tooltip (4px) colapsados~~ **RESUELTO 2026-09-07** por el quick `260907-703`. Tokens `--container-alerta` (320px), `--container-alerta-ancha` (384px) y `--container-tooltip` (320px) dentro de las dos primitivas, medidos en el CSS de produccion. La colision de fondo `--spacing-*` vs `--container-*` SIGUE viva: cualquier primitiva nueva con `max-w-md`/`max-w-lg` nace rota, y la regla queda escrita en `app/globals.css`
 - STATE.md sigue en current_phase 05 con 'Plan: 0 of TBD': state.advance-plan no puede parsear Current Plan / Total Plans. La Fase 7 tiene 14 planes y la seccion Current Position no la refleja. Lo reconcilia el orquestador de fase, no un ejecutor de plan (07-02 y 07-03 corren en paralelo sobre el mismo arbol)
+- **[Fase 7] Requisitos marcados Complete antes de tiempo:** FIN-03, FIN-04 y FIN-05 quedaron en `Complete` en REQUIREMENTS.md porque figuran en el frontmatter `requirements` de los planes de la Wave 0, y la Wave 0 solo escribe CONTRATOS: sus 87 casos estan en rojo hasta que 07-04 y 07-06 los pongan en verde. No se revierte desde un ejecutor de plan (tres planes corren en paralelo sobre el mismo arbol); lo reconcilia el verificador de fase
 
 ### Quick Tasks Completed
 
@@ -269,7 +275,7 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-13T18:33:18.011Z
+Last session: 2026-09-13T18:36:34.858Z
 Stopped at: Completado 07-01-PLAN.md (Wave 0). Contrato pgTAP en rojo: 47/52 aserciones, rojo acotado a 11_financiero.test.sql. Linea base: pgTAP 275 en 11 archivos, unit 1006, integracion 169, e2e 112+1
 
 **Abierto (unico):** el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real. Los cinco criterios de fallo estan escritos en `06-10-SUMMARY.md`. Nada mas bloquea la fase.
