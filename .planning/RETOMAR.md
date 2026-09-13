@@ -1,161 +1,250 @@
-# RETOMAR — punto de pausa del 2026-09-12
+# RETOMAR — punto de pausa del 2026-09-12 (noche)
 
-> Escribe **`RETOMAR`** en una sesión nueva de Claude Code, parada en la raíz del repo.
-> Este archivo es lo primero que hay que leer. Después `.planning/STATE.md`.
-
----
-
-## ANTES QUE NADA, SI CLONASTE DE CERO
-
-La carpeta anterior se borró a propósito. Todo el código está en GitHub, pero **hay cosas que
-git no guarda** y sin ellas la app no arranca:
-
-1. **`.env.local` no está en el repo** (es correcto, son secretos). Hay una copia en
-   `~/vivaguest-env-local-20260912.txt`. Cópiala a la raíz del proyecto como `.env.local`.
-   - Si esa copia se perdió: las llaves de Supabase local salen de `npx supabase status`, y el
-     par VAPID se regenera con `npx --no-install web-push generate-vapid-keys --json`.
-     **Regenerar el par VAPID hoy no cuesta nada porque no hay ni una suscripción viva.**
-     El día que haya aseadores suscritos, sí: rotar invalida todas sin período de gracia.
-   - `APP_BASE_URL` hay que reapuntarla a donde esté sirviendo la app.
-2. **`npm ci`** para reinstalar dependencias.
-3. **El stack local de Supabase**, con una salvedad medida en esta máquina:
-   ```
-   npx supabase start -x studio,logflare,vector,imgproxy,edge-runtime
-   ```
-   `logflare` (que el CLI llama así, **no** `analytics`) falla su healthcheck aquí y tumba a
-   todos los demás contenedores con él. `-x analytics` no hace nada: el nombre correcto es
-   `logflare`.
+> Escribe **`RETOMAR`** en una sesión nueva, parada en la raíz del repo.
+> Este archivo primero. Después `.planning/STATE.md`.
 
 ---
 
-## DÓNDE VA EL PROYECTO
+## LO PRIMERO: DÓNDE QUEDÓ LA CONVERSACIÓN
 
-| Fase | Estado |
-|---|---|
-| 1 a 4 | Completas y mergeadas |
-| **5 — Notificaciones push e instalación de la PWA** | **15 de 17 planes.** Mergeada a `main` sin verificar |
-| **6 — PWA del aseador** | **10 de 10 planes.** Mergeada. Sin verificación en teléfono |
-| 7 — Financiero | Discutida en conversación, **sin planear** |
-| 8, 9 | Sin empezar |
+Se estaba planeando la **Fase 7 (Financiero)**. El research está hecho y
+commiteado (`.planning/phases/07-financiero/07-RESEARCH.md`, 1412 líneas), y el
+contexto con las decisiones del dueño también (`07-CONTEXT.md`).
 
-Todo está en `main`, sincronizado con GitHub. `main` = `74776da`.
+**Falta una sola cosa para poder planear: cuatro decisiones del dueño.** Se le
+iban a preguntar y se interrumpió para dormir. Están abajo, en "LAS CUATRO
+PREGUNTAS". Con esas respuestas se lanza `/gsd-plan-phase 7` y sigue solo.
 
 ---
 
-## LO QUE FALTA, EN ORDEN
+## LO QUE PASÓ HOY, Y POR QUÉ IMPORTA
 
-### 1. El 404 de `/instalar` — es lo único que se ve roto en la app
+Se probó la aplicación **en un iPhone real por primera vez**. Esa sola prueba
+destapó **dos bugs que los 112 tests en verde no veían, y cada uno bastaba por
+sí solo para que ningún aseador recibiera jamás un aviso.**
 
-Cuatro enlaces del banner del aseador llevan a `/instalar`, y **esa página no existe**. El más
-usado es el de "ábrelo en Safari", porque el link de onboarding se manda por WhatsApp.
+1. **El alta de la suscripción fallaba siempre con 42501.** El `upsert on
+   conflict` desde el cliente necesita UPDATE sobre `user_id`, que la migración
+   16 había revocado a propósito. Postgres lo exige aunque no haya conflicto.
+   Arreglado con la migración 22 (función definer). Seis aserciones pgTAP nuevas,
+   una de ellas señuelo.
+2. **El middleware redirigía `POST /api/push/drain` a `/login`,** que contesta
+   405 a un POST. La notificación se quedaba en `pendiente` para siempre, sin un
+   error visible en ninguna parte. El matcher excluía `api/cron` pero no
+   `api/push`.
 
-Lo bloquea **una acción humana sin sustituto**: cinco capturas de pantalla en
-`public/instalar/`, con estos nombres exactos:
+Y un tercero, menor pero que costó un diagnóstico entero: **las aseadoras de la
+semilla de desarrollo no podían entrar**, porque su `role` estaba solo en
+`profiles` y no en `raw_app_meta_data`, que es de donde el middleware lo lee. El
+síntoma era "le doy a Entrar y no pasa nada", y se le echó la culpa a Safari.
 
-| Archivo | Dónde se toma | Qué muestra |
-|---|---|---|
-| `ios-1-compartir.png` | iPhone, Safari (pestaña normal, no la PWA) | La barra inferior, con el botón Compartir señalado |
-| `ios-2-anadir-inicio.png` | iPhone, hoja de Compartir abierta | La fila "Añadir a inicio" |
-| `ios-3-anadir.png` | iPhone, diálogo abierto | El botón "Añadir", arriba a la derecha |
-| `android-1-menu.png` | Android, Chrome | El menú de tres puntos |
-| `android-2-instalar.png` | Android, menú desplegado | La fila "Instalar aplicación" |
+**La lección, escrita para que no se repita: la Fase 5 no se podía validar sin un
+teléfono.** Todo verde y dos fallos mortales conviviendo.
 
-Formato: PNG de 560 px de ancho, **recortes y no pantallas completas** (una captura entera
-reducida a 280 px deja el botón en doce píxeles y no enseña nada), con el control marcado con un
-rectángulo de 2 px en el coral de la marca, alrededor y no encima. Sin datos personales visibles:
-ni contactos, ni otras pestañas, ni notificaciones en la barra. Eso no lo revisa ningún test.
+### Qué quedó probado en el iPhone (iOS 18.7, Safari 26.6.1)
 
-También hacen falta **la versión exacta de iOS y la fecha**, que van impresas al pie. Es lo único
-que dirá dentro de un año si las capturas siguen sirviendo cuando Apple mueva un botón.
+Instalación en pantalla de inicio, permiso concedido, suscripción guardada
+contra `web.push.apple.com`, **aviso entregado y visto**, y el aseo pasando a
+`en_curso` desde el teléfono. Apple respondió 201, 3 de 3 entregadas.
 
-Se pueden mandar **sin recortar**: el recorte, el escalado y el rectángulo se hacen con script.
+**Lo que NO se probó todavía: la Fase 6 desde el teléfono.** El checklist por
+cuartos, la foto de evidencia, terminar el aseo, y el reporte de daño o gasto.
+Quedó un aseo en curso en la base para retomarlo. Es lo primero que conviene
+hacer mañana, antes de construir encima.
 
-El plan `05-12-PLAN.md` **prohíbe explícitamente** dibujar sustitutos o usar iconos genéricos.
-Si se decide no tomarlas nunca, la salida honesta es declarar PWA-02 como diferido, no fingirlo.
+---
 
-### 2. Ninguna de las dos fases se validó en un teléfono real
+## LAS CUATRO PREGUNTAS QUE BLOQUEAN LA FASE 7
 
-Ni la 5 ni la 6 tienen `VERIFICATION.md`. Las dos declararon ese checkpoint como bloqueante.
-Para probar desde el teléfono hace falta una URL HTTPS: la app en local no le sirve al móvil.
-Lo que se usó aquí fue un túnel temporal:
+Salen del research. Ninguna la puede tomar un agente: son de negocio.
+
+### 1. El mes que termina en fin de semana (BLOQUEA EL SCHEMA)
+
+En **8 de cada 24 meses** el mes termina sábado o domingo. Cerrando el último día
+hábil quedan **5 días huérfanos en 2026 y 7 en 2027**: aseos que ocurren después
+del cierre de su mes y que hoy no pagaría nadie.
+
+- **(a)** El periodo termina el día del cierre. "Enero" va del 1 al 30 y el 31 es
+  de febrero. **Si se elige esta, la cabecera necesita `periodo_desde` y
+  `periodo_hasta` DESDE EL DÍA UNO**; añadirlas después de cerrar meses reales es
+  caro.
+- **(b)** Cerrar contando días que aún no ocurrieron. Inaceptable: paga por
+  adelantado.
+- **(c, recomendada por el research)** El periodo es el mes calendario y el
+  cierre se mueve al **primer día hábil del mes siguiente**. Cierra el mes
+  completo sin inventar nada. Contradice la letra de FIN-03, así que necesita que
+  el dueño confirme que la intención era "cerrar el mes" y no "cerrar ese día".
+
+### 2. ¿Sobrevive el recibo del gasto? (BLOQUEA UN CRITERIO YA DECIDIDO)
+
+D7-2 exige llegar desde cada gasto a su foto. RET-06 borra las fotos **a los 30
+días**, y `cleaning_photos` no distingue política por `kind`. O sea: **el enlace
+ya está roto el mes siguiente**, no dentro de seis meses.
+
+Las fotos de gasto son **~3% del volumen**. Eximirlas cuesta poco.
+
+Recomendación del research: alinear `kind='gasto'` con los 6 meses del resto.
+**Pase lo que pase, la decisión tiene que quedar escrita en `STATE.md` bajo
+consecuencias para la Fase 9**, o la purga va a borrar los recibos sin saber que
+rompía este requisito.
+
+### 3. La fuga de la tarifa al huésped (SEGURIDAD, y está MEDIDA)
+
+**Un aseador puede consultar hoy cuánto se le cobra al huésped.** Medido
+impersonando a la aseadora sembrada: `select max(tarifa_huesped) from
+public.cleanings` devuelve `90000`. Son dos superficies:
+
+- La de `cleanings`: **ningún código la lee** (verificado por grep). Cerrarla es
+  casi gratis.
+- La de `properties`, en la ventana -1..+7: **la usa el CRUD del admin**
+  (`lib/data/apartamentos.ts:106`). Cerrarla obliga a rehacer el embed
+  `properties(...)` de `lib/data/aseo-aseador.ts`.
+
+Opciones: cerrar solo la fácil y anotar la otra como deuda; cerrar las dos; o
+partir las columnas de dinero a una tabla aparte (esto último es v2).
+
+### 4. El aseo que quedó pendiente al cerrar
+
+Un aseo del día 28 que sigue sin completarse el día del cierre no entra en ese
+mes, y como su fecha es del mes cerrado, **no entrará nunca en ninguno**.
+
+Recomendación del research: mantener la pertenencia por fecha (es coherente con
+el resto del sistema) **y mostrarle al admin, antes de cerrar, cuántos aseos del
+periodo quedaron sin computar y cuáles**. Cuesta una columna y convierte un
+agujero silencioso en una lista que alguien puede resolver antes de pagar.
+
+### Una quinta, menor, que se puede resolver sin el dueño
+
+Por dónde llega la alerta del 70% de Storage (RET-07). Recomendación: banner
+persistente en `/finanzas` y `/operacion`. Cumple "ve" y "alerta" sin tocar el
+enum de notificaciones, y se ve aunque el push falle.
+
+---
+
+## OTRO PENDIENTE QUE EL DUEÑO PIDIÓ
+
+Quiere un **documento de una página para ubicarse en el proyecto**, con el
+formato de uno que usa en otro proyecto (`~/Downloads/lider_v1_bloques.html`):
+pestañas por bloque, y dentro de cada una las funcionalidades con código, una
+línea de contexto y bullets de alcance.
+
+Quedaron dos preguntas sin responder: (1) si lo quiere solo con el alcance, como
+el original, o con el estado encima (hecho / a medias / pendiente); y (2) si lo
+quiere como archivo local o como página web con link, para abrirla desde el
+celular.
+
+---
+
+## CÓMO LEVANTAR EL ENTORNO
+
 ```
-brew install cloudflared            # si no está
-PORT=3100 npm run start             # el 3000 puede estar ocupado por otro proyecto
-cloudflared tunnel --url http://localhost:3100
+open -a Docker                                  # esperar a que arranque
+npx supabase start -x studio,logflare,vector,imgproxy,edge-runtime
+npm ci
+npm run db:reset
 ```
-Y apuntar `APP_BASE_URL` en `.env.local` a la URL que imprime el túnel. **La URL cambia en cada
-arranque**, así que las capturas y la prueba conviene hacerlas de corrido.
 
-Lo que hay que comprobar en el teléfono: instalar en pantalla de inicio, dar permiso, que llegue
-una notificación de prueba, tocarla y aterrizar en el aseo, y hacer un aseo con fotos.
+`logflare` (así lo llama el CLI, **no** `analytics`) falla su healthcheck en esta
+máquina y tumba a los demás contenedores. `-x analytics` no hace nada.
 
-### 3. La Fase 7 (Financiero) está discutida pero sin planear
+**`.env.local` no está en el repo y la copia de respaldo YA NO EXISTE.** Se
+regenera: las llaves salen de `npx supabase status`, y el par VAPID de
+`npx --no-install web-push generate-vapid-keys --json`. Hoy rotar no cuesta nada
+si no hay suscripciones vivas; el día que las haya, rotar las invalida todas sin
+período de gracia.
 
-Hay cuatro decisiones abiertas y son de negocio, no de ingeniería:
-- Dónde vive el dinero: ¿ruta propia `/finanzas` o columnas dentro de `/operacion`?
-- Qué entra en el pago del aseador: ¿solo la suma de los aseos? ¿se le reembolsan los gastos
-  que reportó? ¿se descuenta algo por daños? **Es el número que una persona cobra.**
-- Qué pasa si se corrige una tarifa de un mes ya cerrado: ¿se recalcula, se queda quieto, o se
-  crea un ajuste aparte?
-- Qué se hace con el pago una vez calculado: ¿solo verlo, marcarlo como pagado, exportarlo?
+Los dos secretos de Vault **se borran en cada `db:reset`** y hay que recrearlos,
+o el disparo inmediato del push no sale (queda en `pendiente` y lo recoge el
+cron):
+
+```sql
+select vault.create_secret('<el CRON_SHARED_SECRET de .env.local>', 'cron_shared_secret');
+select vault.create_secret('<el origen de la app>', 'app_base_url');
+```
+
+### Para levantar la app
+
+```
+NEXT_PUBLIC_VIVAGUEST_FEED_LOCAL=1 npm run build
+NEXT_PUBLIC_VIVAGUEST_FEED_LOCAL=1 PORT=3001 npm run start
+```
+
+**Esa variable no es opcional.** Sin ella, siete specs de `calendario.spec.ts`
+salen rojos: es la concesión que permite validar feeds contra `127.0.0.1`.
+
+### Para probar desde un teléfono
+
+```
+cloudflared tunnel --url http://localhost:3001
+```
+
+Y apuntar `APP_BASE_URL` en `.env.local` **y el secreto `app_base_url` de Vault**
+a la URL que imprime. Cambia en cada arranque, así que la prueba se hace de
+corrido.
+
+Credenciales de desarrollo: `admin@vivaguest.test`, `maria@vivaguest.test`,
+`luz@vivaguest.test`, todas con `VivaGuest2026!`.
+
+Ojo: los 39 apartamentos de la semilla son placeholders **sin tarifas y
+desactivados**, así que no se les puede crear un aseo. Para probar hay que
+completarle a uno `tarifa_huesped`, `pago_aseador`, `responsable_id` y
+`is_active`.
 
 ---
 
-## TRAMPAS MEDIDAS QUE VAN A VOLVER A MORDER
-
-1. **La suite E2E contra el proyecto equivocado.** `playwright.config.ts` usa el puerto 3000 con
-   `reuseExistingServer: true`. Si otro proyecto de Next ocupa ese puerto, Playwright **reusa el
-   servidor ajeno** y corre los 107 specs contra la app equivocada: fallo total por timeout, que
-   se lee como "la suite está rota". Pasó el 2026-09-12 y costó horas de diagnóstico erróneo,
-   incluida la afirmación falsa de que había "tres tests rojos arrastrados desde la Fase 5".
-   **Salida:** `PLAYWRIGHT_PORT=3200 npm run test:e2e`. Lo delata comparar la versión de Next que
-   responde en el puerto. Está documentado en la cabecera del propio config.
-
-2. **La suite E2E necesita `npm run db:reset` antes.** Su `beforeAll` ya lo exige pero nada lo
-   automatiza. Sin eso, los aseos que dejan los specs previos chocan contra el índice único
-   parcial `(property_id, scheduled_date) where estado <> 'cancelado'` y dos aserciones de
-   `operacion.spec.ts` caen por colisión, no por defecto del producto.
-
-3. **`max-w-<talla>` compila a cuatro u ocho píxeles.** Tailwind v4.3 resuelve `max-w-<nombre>`
-   contra `--spacing-*` antes que contra `--container-*`, y la escala de este proyecto usa
-   nombres de talla. Costó dos ciclos de arreglo. Todo ancho nuevo va como
-   `--container-<nombre-propio>` y se registra en el grupo `max-w` de `cn()`. `npm run ci:arch`
-   lo vigila.
-
-4. **Los guardarraíles de CI funcionan por expresión regular, no leyendo código.** Un comentario
-   que mencione literalmente un token prohibido hace fallar la revisión aunque el código esté
-   bien. Ha mordido cinco veces. Si hay que escribir sobre un token vetado, se construye la
-   cadena en vez de escribirla entera.
-
-5. **`revalidatePath` cuelga el navegador** en las Server Actions de `(admin)`. Medido en la
-   Fase 4: la mutación llega a la base, el servidor responde 200 en ~50 ms y el cliente no lo
-   aplica nunca. El refresco se pide con `router.refresh()` desde el cliente.
-
----
-
-## SUITES, MEDIDAS EL 2026-09-12 CON BASE RESETEADA Y PUERTO LIBRE
+## SUITES, MEDIDAS EL 2026-09-12 A LAS 21:15
 
 | Capa | Resultado |
 |---|---|
-| E2E (Chromium) | **107 / 107** |
-| pgTAP | 11 archivos, **269** aserciones, PASS |
-| Unitarios | 55 archivos, **1005** tests |
+| E2E (Chromium) | **112 pasando, 1 saltado** (E4, con su razón escrita) |
+| pgTAP | 11 archivos, **275** aserciones, PASS |
+| Unitarios | 55 archivos, **1006** tests |
 | Integración | 19 archivos, **169** tests |
 | `tsc --noEmit` | limpio |
 | `ci:arch` | los tres scripts OK |
 
 ---
 
-## UNA NOTA SOBRE CÓMO SE TRABAJÓ ESTE TRAMO
+## TRAMPAS MEDIDAS QUE VAN A VOLVER A MORDER
 
-Durante la Fase 5 y la 6 hubo **dos sesiones trabajando en paralelo** sobre el mismo repo: esta y
-un subagente de planeación que quedó activo y siguió conversando y commiteando. Consecuencias que
-conviene conocer al leer el historial de git:
+1. **La suite E2E contra el proyecto equivocado.** `reuseExistingServer` está en
+   `true`: si otro Next ocupa el 3000, Playwright reusa el servidor ajeno y corre
+   todo contra la app equivocada. Salida: `PLAYWRIGHT_PORT=3200 npm run test:e2e`.
+2. **La suite necesita `npm run db:reset` antes.** Sin eso, dos aserciones de
+   `operacion.spec.ts` caen por colisión contra el índice único parcial. Y aun
+   con reset hay **flake ocasional en los toasts**: se vio una corrida con dos
+   rojos que en la siguiente pasaron sin tocar nada.
+3. **El Chromium por defecto de Playwright no implementa notificaciones.** Es
+   `chromium-headless-shell`. Por eso el proyecto fija `channel: 'chromium'`, y
+   el caso E1 corre con `channel: 'chrome'` (requiere
+   `npx playwright install chrome`).
+4. **Chrome no tiene Push API en incógnito**, y todo contexto normal de Playwright
+   lo es. El error dice "permission denied" con el permiso concedido.
+5. **`max-w-<talla>` compila a cuatro u ocho píxeles.** Todo ancho nuevo va como
+   `--container-<nombre-propio>`. `npm run ci:arch` lo vigila.
+6. **Los guardarraíles de CI funcionan por regex.** Un comentario que mencione un
+   token prohibido hace fallar la revisión aunque el código esté bien.
+7. **`revalidatePath` cuelga el navegador** en las Server Actions de `(admin)`.
+   El refresco se pide con `router.refresh()` desde el cliente.
+8. **`coalesce` y `nullif` NO se califican con `pg_catalog`**: son construcciones
+   del lenguaje, no funciones, y calificarlas da "function does not exist". En
+   una función con `search_path = ''` esto muerde.
+9. **En pgTAP, una escritura dentro de la subconsulta de la aserción no la ve la
+   aserción**: el `select` externo lee el snapshot anterior. La escritura va en su
+   propia sentencia.
 
-- La Fase 5 se mergeó a `main` **incompleta y sin verificar**, por decisión de esa otra sesión.
-- Hay commits revertidos y vueltos a aplicar alrededor del par VAPID y del plan `05-01`.
-- Algunos mensajes de commit atribuyen decisiones al desarrollador que quizá se tomaron en la
-  otra ventana; el historial no distingue cuál sesión las originó.
+---
 
-**Recomendación para el próximo tramo: una sola sesión a la vez.** El riesgo no es que se pisen
-los archivos, es que cada sesión tenga la mitad de la historia.
+## ESTADO DE LAS FASES
+
+| Fase | Estado |
+|---|---|
+| 1 a 4 | Completas |
+| **5 — Push e instalación** | **Completa y VALIDADA EN UN IPHONE REAL.** Los 17 planes, salvo el asistente `/instalar`, que el dueño descartó |
+| **6 — PWA del aseador** | 10 de 10 planes. **Sin probar en teléfono todavía** |
+| **7 — Financiero** | Research y contexto hechos. **Bloqueada por las cuatro preguntas de arriba** |
+| 8, 9 | Sin empezar |
+
+El asistente `/instalar` y sus cinco capturas están **descartados por decisión
+del dueño**, dicha varias veces. La ruta existe y no da 404. No volver a
+proponerlo.
