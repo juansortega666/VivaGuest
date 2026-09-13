@@ -29,6 +29,7 @@
 --   J  el recibo dura cinco años .............. 07-04 (migración 23)
 --   G  supervivencia al borrado ............... 07-04 (schema) + 07-07
 --   K  las dos puertas del cierre ............. 07-07  (añadido por ese plan)
+--   L  las seis lecturas del admin ............ 07-08  (añadido por ese plan)
 --
 --   A PARTIR DE QUE UN BLOQUE SE PONE EN VERDE, UN `not ok` SUYO ES UNA
 --   REGRESIÓN, no un pendiente. La línea base con la que se mide: los once
@@ -79,6 +80,19 @@
 --            cobrado, pagado, margen, tiene_gasto, tiene_dano
 --   public.resumen_financiero(date, date)
 --     -> ... aseos_hechos, aseos_con_gastos, aseos_con_danos, ...
+--   public.costo_por_aseadora(date, date)
+--     -> aseador_id, aseador_nombre, cantidad_aseos, total_pago, total_gastos,
+--        costo_total                  [CERO columnas de cobrado y de margen]
+--   public.aseos_de_aseadora(uuid, date, date)
+--     -> cleaning_id, property_id, property_nombre, fecha_programada,
+--        fecha_ejecucion, pago        [CERO columnas de cobrado y de margen]
+--   public.gastos_de_aseadora(uuid, date, date)
+--     -> expense_id, cleaning_id, property_id, property_nombre, fecha_ejecucion,
+--        concepto, monto, moneda, evidencia_bucket, evidencia_path
+--                                     [LA RUTA, NUNCA UNA URL]
+--   public.aseo_en_curso_de_aseadora(uuid)
+--     -> esta_activa, cleaning_id, property_id, property_nombre, iniciado_at
+--                                     [CERO columnas de ubicación o coordenada]
 --   public.tarifas_de_apartamentos(uuid[])
 --   public.mis_pagos_cerrados()
 --     -> periodo_desde, periodo_hasta, monto_aseos, monto_gastos, monto_total,
@@ -115,10 +129,20 @@
 -- números de H, I, J y G, que están citados por número en este archivo y en los
 -- planes 07-08, 07-09 y 07-14. Sus siete aserciones son insensibles a lo que G
 -- borra: ninguna lee montos.
+--
+-- L SE AÑADE AL FINAL POR LA MISMA RAZÓN QUE K, y con una consecuencia que hay
+-- que tener presente al leerlo: SÍ lee montos, así que sus cifras están
+-- calculadas sobre el fixture YA MUTILADO por G (sin el aseo J2 y sin el gasto
+-- del Detergente). La cuenta va escrita en la cabecera del bloque para que se
+-- pueda auditar a mano.
+--
+-- REGLA PARA QUIEN AMPLÍE ESTE ARCHIVO: todo bloque nuevo va AL FINAL y sube el
+-- argumento de `plan()`. Insertarlo en su sitio alfabético corre los números de
+-- todo lo que venga después, y esos números están citados en los planes.
 -- ============================================================================
 
 begin;
-select plan(59);
+select plan(77);
 
 -- ---------------------------------------------------------------------------
 -- Limpieza del seed, en orden inverso de FK. El rollback la deshace.
@@ -1363,6 +1387,316 @@ select is(
   $q$),
   '0|0|true',
   'FIN-03 el aviso de periodo pendiente no nombra ninguno ya cerrado ni ninguno sin vencer, y nombra como mucho uno');
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- L. LAS SEIS LECTURAS FINANCIERAS DEL ADMIN — 18 aserciones
+--
+--    Lo pone en verde: 07-08, migración 26.
+--
+--    VA AL FINAL, DESPUÉS DE G Y DE K, Y ESO ES DELIBERADO POR DOS RAZONES:
+--
+--    1. pgTAP numera por orden de ejecución. Meter este bloque en su sitio
+--       alfabético correría los números de E, F, H, I, J, G y K, que están
+--       citados por número en este archivo y en los planes 07-09 y 07-14.
+--       Añadir al final es la única forma de ampliar el contrato sin invalidar
+--       las citas de los demás.
+--
+--    2. El bloque G borra a propósito el aseo J2 y el gasto del Detergente.
+--       Estas aserciones leen ESE fixture mutilado y sus cifras están calculadas
+--       sobre él. La cuenta, escrita para que se pueda auditar a mano:
+--
+--         Julio, aseos gestionados y completados que quedan vivos:
+--           J1  Apto 7A · 90000 cobrado · 40000 pagado · aseadora 7A
+--           J3  Apto 7B · 150000        · 55000        · aseadora 7B  (+ daño, + gasto 8000)
+--           JB  Apto 7A · 90000         · 40000        · aseadora 7A
+--           107 Apto 7B · 150000        · 55000        · aseadora 7A  (el tardío del bloque F)
+--
+--           cobrado 480000 · pagado 190000 · gastos 8000 · ganancia 282000
+--           4 aseos hechos · 1 con gastos · 1 con daños
+--
+--         Y esas cifras SON LAS CONGELADAS EN CADA ASEO, no las del apartamento:
+--         el bloque F dejó el Apto 7A a 200000/99000. Si alguna lectura sumara
+--         tarifas vivas, el cobrado daría 700000 y esto se pondría rojo. Es la
+--         regresión de FIN-01 medida desde la lectura.
+--
+--    LA CONCILIACIÓN ES UNA ASERCIÓN, NO UNA ESPERANZA. La fila de totales de
+--    /finanzas/aseos tiene que cuadrar EXACTAMENTE con los KPIs del Resumen del
+--    mismo periodo, y el bloque 3 con el KPI 2. Si no cuadran, el admin ve dos
+--    cifras distintas para lo mismo en dos pantallas y deja de creerle a las
+--    dos.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- 60 LA CONCILIACIÓN RESUMEN ↔ DETALLE. Se escribe como tres booleanos y no
+--    como dos números para que mida la IGUALDAD y no dos literales que alguien
+--    pueda actualizar a la vez. El tercero es el seguro contra la vacuidad: dos
+--    funciones que devolvieran el conjunto vacío también "cuadrarían".
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', $q$
+    select (s.cobrado = d.cobrado)::text
+        || '|' || (s.pagado_aseadores = d.pagado)::text
+        || '|' || (d.filas > 0)::text
+      from public.resumen_financiero(date '2026-07-01', date '2026-07-31') s
+      cross join lateral (
+        select count(*)::int                  as filas,
+               coalesce(sum(r.cobrado), 0)    as cobrado,
+               coalesce(sum(r.pagado), 0)     as pagado
+          from public.rentabilidad_aseos(date '2026-07-01', date '2026-07-31',
+                                         null::uuid, null::uuid, 'todos') r
+      ) d
+  $q$),
+  'true|true|true',
+  'FIN-02 la fila de totales del detalle cuadra exactamente con los KPIs del Resumen');
+
+-- 61 Y los cuatro KPIs con la aritmética a la vista, contra las cifras
+--    CONGELADAS. Con tarifas vivas el cobrado daría 700000.
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', $q$
+    select s.cobrado::text || '|' || s.pagado_aseadores::text
+        || '|' || s.gastos_reembolsados::text || '|' || s.ganancia::text
+        || '|' || s.aseos_hechos::text
+      from public.resumen_financiero(date '2026-07-01', date '2026-07-31') s
+  $q$),
+  '480000|190000|8000|282000|4',
+  'FIN-01 los KPIs del Resumen salen de las cifras congeladas en el aseo, no de las vigentes del apartamento');
+
+-- 62 LA CONCILIACIÓN RESUMEN ↔ BLOQUE 3. El KPI 2 tiene que ser la suma de lo
+--    que cuesta cada persona, y el KPI 3 la de sus gastos. Es la misma pantalla:
+--    dos bloques que no suman lo mismo es el defecto que la hace increíble.
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', $q$
+    select (s.pagado_aseadores = k.pago)::text
+        || '|' || (s.gastos_reembolsados = k.gasto)::text
+      from public.resumen_financiero(date '2026-07-01', date '2026-07-31') s
+      cross join lateral (
+        select coalesce(sum(a.total_pago), 0)   as pago,
+               coalesce(sum(a.total_gastos), 0) as gasto
+          from public.costo_por_aseadora(date '2026-07-01', date '2026-07-31') a
+      ) k
+  $q$),
+  'true|true',
+  'FIN-02 el KPI de pagos y el de gastos cuadran con la suma del bloque de costo por aseadora');
+
+-- 63 UN VALOR DE FILTRO DESCONOCIDO ES UN ERROR, NO UN SILENCIO. Cero filas ante
+--    un `con-gasto` mal escrito le enseñaría al admin un periodo vacío que parece
+--    un dato («este mes no hubo gastos») cuando es un defecto. P0001 y no 42501:
+--    quien llama SÍ está autorizado, lo que está mal es el argumento.
+select is(
+  pg_temp.intento_como('ad700000-0000-0000-0000-000000000001',
+    $q$select * from public.rentabilidad_aseos(
+         date '2026-07-01', date '2026-07-31', null::uuid, null::uuid, 'con-gasto')$q$),
+  'P0001',
+  'FIN-02 rentabilidad_aseos rechaza un filtro de tipo desconocido con error y no con cero filas');
+
+-- 64 Y el filtro válido FILTRA DE VERDAD. Sin esta, una función que ignorara el
+--    argumento pasaría la 63 y devolvería las cuatro filas siempre.
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', $q$
+    select count(*)::text
+      from public.rentabilidad_aseos(date '2026-07-01', date '2026-07-31',
+                                     null::uuid, null::uuid, 'con-danos') r
+  $q$),
+  '1',
+  'FIN-02 el filtro con-danos devuelve solo el aseo que genero un dano');
+
+-- 65 T-07-36. La guarda de la tercera vía de función.
+select is(
+  pg_temp.intento_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select * from public.costo_por_aseadora(date '2026-07-01', date '2026-07-31')$q$),
+  '42501',
+  'D7-7 una aseadora que llama a costo_por_aseadora recibe 42501');
+
+-- 66 El admin SÍ, con el ORDEN ALFABÉTICO por defecto y los montos. El orden no
+--    es cosmético: una lista de personas de mayor a menor se lee como un podio
+--    aunque no lleve números ni medallas (UI-SPEC §6.5.3).
+--      Aseadora 7A: J1 + JB + 107 = 135000, sin gastos (el Detergente lo borró G)
+--      Aseadora 7B: J3 = 55000 + 8000 de gastos = 63000
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', $q$
+    select string_agg(
+             a.aseador_nombre || ':' || a.cantidad_aseos::text
+               || ':' || a.costo_total::text, ' | ' order by a.orden)
+      from (
+        select c.*, row_number() over () as orden
+          from public.costo_por_aseadora(date '2026-07-01', date '2026-07-31') c
+      ) a
+  $q$),
+  'Aseadora 7A:3:135000 | Aseadora 7B:1:63000',
+  'el bloque de costo por aseadora llega ordenado alfabeticamente y con el costo de cada persona');
+
+-- 67 SOBRE EL CATÁLOGO, NO SOBRE LA FILA. Ni el bloque por persona ni el
+--    desglose de la ficha DECLARAN una columna de cobrado, de margen o de cifra
+--    de huésped. Se comprueba contra el `returns table` en `pg_proc` porque una
+--    siembra donde la cifra fuera nula haría pasar una aserción sobre la fila
+--    sin demostrar nada. Por persona va LO QUE CUESTA, nunca lo que rinde: el
+--    margen sale del apartamento y no de quién lo limpió.
+select is(
+  pg_temp.escalar($q$
+    select count(*)::text || '|'
+        || count(*) filter (
+             where pg_catalog.pg_get_function_result(p.oid)
+                   ~* '(huesped|margen|cobrado|tarifa)')::text
+      from pg_catalog.pg_proc p
+      join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.proname in ('costo_por_aseadora', 'aseos_de_aseadora')
+  $q$),
+  '2|0',
+  'ni costo_por_aseadora ni aseos_de_aseadora declaran cobrado, margen ni cifra de huesped');
+
+-- 68 T-07-36.
+select is(
+  pg_temp.intento_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select * from public.aseos_de_aseadora(
+         'a7000000-0000-0000-0000-00000000000a', date '2026-07-01', date '2026-07-31')$q$),
+  '42501',
+  'D7-7 una aseadora que llama a aseos_de_aseadora recibe 42501');
+
+-- 69 Y el desglose del admin suma EXACTAMENTE lo mismo que la fila de esa
+--    persona en el bloque 3. Si no, el día que alguien reclame van a estar
+--    comparando dos papeles distintos.
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', $q$
+    select count(*)::text || '|' || sum(a.pago)::text
+      from public.aseos_de_aseadora('a7000000-0000-0000-0000-00000000000a',
+                                    date '2026-07-01', date '2026-07-31') a
+  $q$),
+  '3|135000',
+  'el desglose de aseos de la ficha suma lo mismo que la fila de esa persona en el bloque 3');
+
+-- 70 T-07-36.
+select is(
+  pg_temp.intento_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select * from public.gastos_de_aseadora(
+         'a7000000-0000-0000-0000-00000000000b', date '2026-07-01', date '2026-07-31')$q$),
+  '42501',
+  'D7-7 una aseadora que llama a gastos_de_aseadora recibe 42501');
+
+-- El recibo del gasto que sobrevivió a G. Escritura en su propia sentencia
+-- (trampa 1 de la cabecera): la foto del Detergente se fue en cascada al borrar
+-- su gasto, así que sin esta el bloque 4 de la ficha no tendría ninguna ruta que
+-- enseñar y la aserción 71 pasaría por vacuidad.
+select pg_temp.correr($q$
+  insert into public.cleaning_photos
+    (id, cleaning_id, kind, expense_id, storage_bucket, storage_path,
+     mime_type, bytes, uploaded_by)
+  values ('c7000000-0000-0000-0000-000000000002',
+          'f7000000-0000-0000-0000-000000000103', 'gasto',
+          'e7000000-0000-0000-0000-000000000002', 'evidencia',
+          'f7000000-0000-0000-0000-000000000103/gasto/c7000000-0000-0000-0000-000000000002.jpg',
+          'image/jpeg', 121000, 'a7000000-0000-0000-0000-00000000000b')
+$q$) as recibo_sembrado \gset
+
+-- 71 T-07-38. El bloque 4 de la ficha devuelve EL BUCKET Y LA RUTA, para que el
+--    servidor de la aplicación firme después de su propio guard.
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', $q$
+    select g.concepto || '|' || g.monto::text || '|' || g.moneda
+        || '|' || g.evidencia_bucket
+        || '|' || g.evidencia_path
+      from public.gastos_de_aseadora('a7000000-0000-0000-0000-00000000000b',
+                                     date '2026-07-01', date '2026-07-31') g
+  $q$),
+  'Bolsas de basura|8000|COP|evidencia|f7000000-0000-0000-0000-000000000103/gasto/c7000000-0000-0000-0000-000000000002.jpg',
+  'D7-2 el bloque de gastos de la ficha devuelve concepto, monto y la RUTA de la evidencia');
+
+-- 72 T-07-38 SOBRE EL CATÁLOGO. La función declara la ruta y NO declara ninguna
+--    URL. Firmar es trabajo del servidor tras su guard: una función de base que
+--    firmara emitiría URLs para todas las filas de la página, incluidas las que
+--    nadie abre, y cada una seguiría viva aunque la sesión se cierre.
+select is(
+  pg_temp.escalar($q$
+    select (pg_catalog.pg_get_function_result(p.oid) ~* 'evidencia_path')::text
+        || '|' || (pg_catalog.pg_get_function_result(p.oid)
+                   ~* '(url|signed|firmad)')::text
+      from pg_catalog.pg_proc p
+      join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.proname = 'gastos_de_aseadora'
+  $q$),
+  'true|false',
+  'T-07-38 gastos_de_aseadora declara la ruta de la evidencia y NINGUNA URL');
+
+-- 73 T-07-36.
+select is(
+  pg_temp.intento_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select * from public.aseo_en_curso_de_aseadora(
+         'a7000000-0000-0000-0000-00000000000a')$q$),
+  '42501',
+  'D7-7 una aseadora que llama a aseo_en_curso_de_aseadora recibe 42501');
+
+-- 74 LA REGLA DEL GPS, MEDIDA SOBRE EL CATÁLOGO Y NO SOBRE LA PANTALLA.
+--    «Ahora mismo» responde con lo que el sistema YA SABE: qué aseo tiene en
+--    curso. No hay rastreo y no lo va a haber, así que la función no puede
+--    declarar NI UNA columna de la que se derive una posición. Se mide aquí y no
+--    en el CSS porque el dato viaja al navegador aunque la pantalla no lo pinte.
+--    OJO: cleaning_photos tiene captured_lat y captured_lng, y son de la FOTO,
+--    no de la persona.
+select is(
+  pg_temp.escalar($q$
+    select count(*)::text || '|'
+        || count(*) filter (
+             where pg_catalog.pg_get_function_result(p.oid)
+                   ~* '(lat|lng|ubicacion|coord|gps|geo|conexion|online)')::text
+      from pg_catalog.pg_proc p
+      join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.proname = 'aseo_en_curso_de_aseadora'
+  $q$),
+  '1|0',
+  'aseo_en_curso_de_aseadora no declara ninguna columna de ubicacion, coordenada ni ultima conexion');
+
+-- El aseo en curso, en su propia sentencia. `state = 'en_curso'` directo en el
+-- INSERT es legal: la guarda de transiciones solo corre en UPDATE, y
+-- `cl_en_curso_shape` exige confirmado_at, aseador_id, started_at y finished_at
+-- nulo. Se respetan los cuatro. Va en el Apto 7B y en una fecha que ningún otro
+-- aseo del fixture ocupa, para no chocar con cleanings_one_active_per_property_date.
+select pg_temp.correr($q$
+  insert into public.cleanings
+    (id, property_id, scheduled_date, tipo, origin, aseador_id, confirmado_at,
+     state, started_at, finished_at)
+  values ('f7000000-0000-0000-0000-000000000401',
+          'b7000000-0000-0000-0000-000000000002',
+          public.today_bog() + 1, 'normal', 'manual',
+          'a7000000-0000-0000-0000-00000000000a', now(), 'en_curso',
+          ((public.today_bog() + 1)::text || ' 09:15')::timestamp at time zone 'America/Bogota',
+          null)
+$q$) as aseo_en_curso_sembrado \gset
+
+-- 75 El estado «tiene un aseo en curso»: apartamento y hora de inicio, y nada
+--    más. La hora se lee EN BOGOTÁ, que es la única en la que significa algo
+--    para quien mira la pantalla.
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', $q$
+    select s.esta_activa::text
+        || '|' || coalesce(s.property_nombre, '<sin aseo>')
+        || '|' || coalesce(to_char(s.iniciado_at at time zone 'America/Bogota', 'HH24:MI'), '-')
+      from public.aseo_en_curso_de_aseadora('a7000000-0000-0000-0000-00000000000a') s
+  $q$),
+  'true|Apto 7B (fixture)|09:15',
+  'la ficha responde que la persona esta en un apartamento desde una hora, y nada mas');
+
+-- 76 El estado «cuenta desactivada». La fila EXISTE aunque no haya aseo: los
+--    tres estados de la pantalla necesitan saber si la cuenta sigue viva, y con
+--    cero filas ese estado sería indistinguible de «no tiene ninguno».
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', $q$
+    select s.esta_activa::text
+        || '|' || coalesce(s.property_nombre, '<sin aseo>')
+      from public.aseo_en_curso_de_aseadora('a7000000-0000-0000-0000-00000000000c') s
+  $q$),
+  'false|<sin aseo>',
+  'la ficha de una cuenta desactivada devuelve fila, dice que esta desactivada y no inventa ningun aseo');
+
+-- 77 Y cero filas significa UNA sola cosa, distinta de las otras dos: ese
+--    identificador no es de ningún perfil.
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', $q$
+    select count(*)::text
+      from public.aseo_en_curso_de_aseadora('00000000-0000-0000-0000-0000000000ff') s
+  $q$),
+  '0',
+  'un identificador que no es de ningun perfil devuelve cero filas, no una fila inventada');
 
 
 select * from finish();
