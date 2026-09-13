@@ -1031,6 +1031,22 @@ export interface EscenarioFinanciero {
   /** El gasto del periodo `reciente`, con su fila de foto de recibo. */
   gasto: { id: string; concepto: string; fotoId: string };
 
+  /**
+   * Los identificadores de los tres pagos que dejó el cierre.
+   *
+   * Hacen falta para dos aserciones que no se pueden escribir sin ellos: el
+   * desglose del aseador se abre por dirección directa, y **el desglose del
+   * compañero también** —que es justo la que comprueba que no se muestra—.
+   */
+  pagos: {
+    /** Aseadora Una, periodo reciente. **PENDIENTE.** */
+    unaReciente: string;
+    /** Aseadora Una, periodo viejo. **PAGADO.** */
+    unaVieja: string;
+    /** Aseadora Dos, periodo reciente. El que la Una no puede ver. */
+    dosReciente: string;
+  };
+
   /** Los ids de los aseos sembrados, para la limpieza y para poder afirmar conteos. */
   aseos: string[];
 
@@ -1313,8 +1329,12 @@ export async function sembrarFinanzas(servicio: Servicio): Promise<EscenarioFina
   // PENDIENTE. Y el del reciente de la aseadora Dos: PAGADO. Con eso, la tabla
   // del admin tiene las dos columnas de estado dentro de UN mismo bloque de
   // periodo, y el teléfono de la Una tiene una tarjeta de cada clase.
-  await marcarPagado(admin, viejo, aseadoraUna.id);
-  await marcarPagado(admin, reciente, aseadoraDos.id);
+  const unaVieja = await idDePago(viejo, aseadoraUna.id);
+  const unaReciente = await idDePago(reciente, aseadoraUna.id);
+  const dosReciente = await idDePago(reciente, aseadoraDos.id);
+
+  await marcarPagado(admin, unaVieja);
+  await marcarPagado(admin, dosReciente);
   await admin.auth.signOut();
 
   return {
@@ -1333,6 +1353,7 @@ export async function sembrarFinanzas(servicio: Servicio): Promise<EscenarioFina
     },
     aseoAlineado: { id: aseoAlineadoId, fecha: diaAlineado },
     gasto: { id: gasto.id, concepto, fotoId: foto.id },
+    pagos: { unaReciente, unaVieja, dosReciente },
     aseos: [aseoViejo, aseoCruzadoId, aseoAlineadoId, aseoDeLaDos, aseoExterno, aseoEnCurso],
     sufijo,
   };
@@ -1389,18 +1410,14 @@ async function cerrarPeriodo(
 }
 
 /**
- * Marca como pagado el pago de una persona en un periodo, por el camino real.
+ * El identificador del pago de una persona en un periodo.
  *
- * El id del pago se busca con el cliente de SERVICIO (las tres tablas del
- * snapshot no tienen grant para `authenticated`: todo sale por función), y la
- * marca se pone con la sesión de ADMIN, que es quien pasa la guarda de
- * `marcar_pago_pagado`. Los dos clientes hacen falta y ninguno sustituye al otro.
+ * Se lee con el cliente de SERVICIO y no con el de admin porque las tres tablas
+ * del snapshot no tienen grant para `authenticated`: todo lo que el admin ve de
+ * ellas sale por función con guarda, y aquí no se está probando esa función, se
+ * está sembrando.
  */
-async function marcarPagado(
-  admin: ReturnType<typeof clienteSinTipar>,
-  periodo: PeriodoDePago,
-  aseadora: string,
-): Promise<void> {
+async function idDePago(periodo: PeriodoDePago, aseadora: string): Promise<string> {
   const { data, error } = await servicioSinTipar()
     .from('cleaner_payouts')
     .select('id')
@@ -1414,12 +1431,24 @@ async function marcarPagado(
         'Si dice que la relación no existe, es lo esperado hasta el plan 07-04.',
     );
   }
+  return (data as { id: string }).id;
+}
 
-  const pago = data as { id: string };
-  const { error: errorMarca } = await admin.rpc('marcar_pago_pagado', { p_pago: pago.id });
-  if (errorMarca) {
+/**
+ * Pone la marca de pagado por el camino real: la RPC, con sesión de admin.
+ *
+ * No es un `update` con la clave de servicio, y la diferencia importa: la marca
+ * lleva autoría, y un `update` a mano sembraría un pago marcado por nadie, que es
+ * un estado que el sistema no sabe producir (D7-4.2).
+ */
+async function marcarPagado(
+  admin: ReturnType<typeof clienteSinTipar>,
+  pago: string,
+): Promise<void> {
+  const { error } = await admin.rpc('marcar_pago_pagado', { p_pago: pago });
+  if (error) {
     throw new Error(
-      `No se pudo marcar pagado ${pago.id}: ${errorMarca.message}\n` +
+      `No se pudo marcar pagado ${pago}: ${error.message}\n` +
         'Si dice que la función no existe, es lo esperado hasta el plan 07-09.',
     );
   }
