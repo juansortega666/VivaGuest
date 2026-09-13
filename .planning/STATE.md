@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 06
-current_phase_name: pwa-del-aseador
+current_phase: 05
+current_phase_name: notificaciones-push-e-instalacion-de-la-pwa
 status: planning
-stopped_at: "2026-09-12. AUDITORIA DE COORDINACION. Fase 6 mergeada a main (10/10). Fase 5 mergeada INCOMPLETA: 15/17, sin VERIFICATION.md, y sus 7 criterios sin verificar. Defecto vivo: /instalar no existe y los cuatro enlaces del banner del aseador caen en 404 (PWA-02 sin cumplir). HALLAZGO: la suite e2e se estaba corriendo contra OTRO proyecto (Playwright usa el puerto 3000 con reuseExistingServer, y ahi corre Alfa-MVP con Next 15.5.18). Los rojos e2e atribuidos a la Fase 5 son falsos rojos de esa confusion de puerto. Correr siempre con PLAYWRIGHT_PORT en un puerto libre."
-last_updated: "2026-09-12T05:10:00.000Z"
-last_activity: 2026-09-12
-last_activity_desc: plan-phase 6 cerrado: 10 planes, y seis requisitos propagados desde las decisiones de la conversacion
+stopped_at: "Completado 07-01-PLAN.md (Wave 0). Contrato pgTAP en rojo: 47/52 aserciones, rojo acotado a 11_financiero.test.sql. Linea base: pgTAP 275 en 11 archivos, unit 1006, integracion 169, e2e 112+1"
+last_updated: "2026-09-13T18:33:23.929Z"
+last_activity: 2026-09-10
+last_activity_desc: discuss-phase 5 cerrado; ROADMAP §Phase 5 actualizado con los criterios 6 y 7
 progress:
   total_phases: 9
-  completed_phases: 4
-  total_plans: 65
-  completed_plans: 63
-  percent: 44
+  completed_phases: 5
+  total_plans: 89
+  completed_plans: 74
+  percent: 56
 ---
 
 # Project State
@@ -173,6 +173,7 @@ Progress: [██████████] 100%
 | Phase 04 P13 | 35min | 3 tasks | 8 files |
 | Phase 04 P14 | 3h 40m | 3 tasks | 14 files |
 | Quick 260907-703 | 1h 25m | 3 tasks | 5 files |
+| Phase 07 P01 | 62min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -212,6 +213,8 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Phase ?]: 04-14: las nueve Server Actions de /operacion NO llaman revalidatePath; colgaba el navegador y el refresco lo pide router.refresh() en el cliente
 - [Phase ?]: 04-14: cn() usa extendTailwindMerge con los max-w-* del proyecto; sin eso el Sheet de confirmacion medía 8px
 - [Quick 260907-703]: los anchos de las primitivas de shadcn van en tokens `--container-<nombre-propio>`, nunca con nombre de talla: `max-w-<nombre>` resuelve contra `--spacing-*` antes que contra `--container-*`, y todo token nuevo se registra ademas en el grupo `max-w` de cn()
+- [Phase 07]: El contrato pgTAP de la Fase 7 nace en rojo y fija el contrato de NOMBRES del schema financiero en la cabecera del test, no en una migracion — Es Wave 0: tres planes de waves distintas (07-04, 07-07, 07-09) escriben contra esos nombres sin verse entre si. Si un nombre cambia, cambia primero en 11_financiero.test.sql
+- [Phase 07]: La fuga del Hallazgo 1 queda MEDIDA en vivo: una aseadora autenticada lee 90000 pesos de tarifa al huesped desde cleanings y desde properties — Los dos grants de la migracion 07 son de TABLA y en Supabase admin y aseadora comparten el rol authenticated: la policy acota filas, no columnas. Las aserciones 13 y 14 de 11_financiero.test.sql lo imprimen en el have del TAP. Las cierra 07-05
 
 ### Pending Todos
 
@@ -224,6 +227,7 @@ Ninguno.
 - **[Fase 1] Abierto de producto:** la lista definitiva de tareas del checklist bloquea el seed del catálogo, no el schema. Se arranca con el catálogo provisional (máximo 3 tareas por tipo de cuarto), editable sin migración
 - **[Fase 5] Riesgo aceptado:** push como único canal, sin semáforo de entregabilidad. Si en el piloto de Bogotá un aseo confirmado nunca llega al aseador, entra el semáforo (NOTIF-V2-01)
 - ~~ALTA (04-14): AlertDialog (~32px) y Tooltip (4px) colapsados~~ **RESUELTO 2026-09-07** por el quick `260907-703`. Tokens `--container-alerta` (320px), `--container-alerta-ancha` (384px) y `--container-tooltip` (320px) dentro de las dos primitivas, medidos en el CSS de produccion. La colision de fondo `--spacing-*` vs `--container-*` SIGUE viva: cualquier primitiva nueva con `max-w-md`/`max-w-lg` nace rota, y la regla queda escrita en `app/globals.css`
+- STATE.md sigue en current_phase 05 con 'Plan: 0 of TBD': state.advance-plan no puede parsear Current Plan / Total Plans. La Fase 7 tiene 14 planes y la seccion Current Position no la refleja. Lo reconcilia el orquestador de fase, no un ejecutor de plan (07-02 y 07-03 corren en paralelo sobre el mismo arbol)
 
 ### Quick Tasks Completed
 
@@ -265,8 +269,8 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-12
-Stopped at: **Fase 06 ejecutada, 10/10 planes.** Las doce puertas en verde con conteo reconciliado: pgTAP `Files=11, Tests=269` (= suma exacta de los `plan(N)`), `test:unit` 55 archivos / 1005 tests, `test:integration` 19 archivos / 169 tests, `test:e2e` 107 en Chromium, `lint` 0 errores, `ci:arch`, `build` y `tsc` limpios.
+Last session: 2026-09-13T18:33:18.011Z
+Stopped at: Completado 07-01-PLAN.md (Wave 0). Contrato pgTAP en rojo: 47/52 aserciones, rojo acotado a 11_financiero.test.sql. Linea base: pgTAP 275 en 11 archivos, unit 1006, integracion 169, e2e 112+1
 
 **Abierto (unico):** el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real. Los cinco criterios de fallo estan escritos en `06-10-SUMMARY.md`. Nada mas bloquea la fase.
 
@@ -311,4 +315,4 @@ migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` **29 ar
    segundos, `db:test` 2,3 s y la integracion completa 9,7 s.
 
 Siguiente: cerrar el checkpoint humano de la Fase 6 en un telefono real, o arrancar la Fase 7 (Financiero), que es la que consume el `monto` entero que esta fase empezo a capturar.
-Resume file: .planning/phases/06-pwa-del-aseador-offline-first/06-10-SUMMARY.md
+Resume file: .planning/phases/07-financiero/07-01-SUMMARY.md
