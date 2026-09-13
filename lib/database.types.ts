@@ -1544,6 +1544,11 @@ export type Database = {
         Returns: string[]
       }
       cancel_cleaning: { Args: { p_cleaning: string }; Returns: undefined }
+      cerrar_periodo: {
+        Args: { p_desde: string; p_hasta: string }
+        Returns: number
+      }
+      cerrar_periodo_si_toca: { Args: never; Returns: number }
       clear_review_flag: { Args: { p_cleaning: string }; Returns: undefined }
       close_cleaning: { Args: { p_cleaning: string }; Returns: undefined }
       confirm_cleaning: {
@@ -1597,6 +1602,13 @@ export type Database = {
       }
       periodo_de_cierre: {
         Args: { p_dia: string }
+        Returns: {
+          periodo_desde: string
+          periodo_hasta: string
+        }[]
+      }
+      periodo_pendiente_de_cierre: {
+        Args: never
         Returns: {
           periodo_desde: string
           periodo_hasta: string

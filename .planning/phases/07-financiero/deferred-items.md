@@ -30,3 +30,30 @@ la máquina, nunca fallaron.
 
 **Detonante para arreglarlo:** que el rojo aparezca dos corridas seguidas, o que
 CI lo vuelva rojo con su `retries: 1`. Antes de eso, el arreglo sería a ciegas.
+
+---
+
+## El pago de una persona asume UNA sola moneda (plan 07-07, migración 25)
+
+**Qué queda pendiente.** `public.cleaner_payouts` tiene una única columna
+`moneda` (con `default 'COP'` y su `check` ISO), pero `public.expenses` ganó su
+propia `moneda` en la migración 18 «regla 1 del camino a v2». El núcleo del
+cierre copia la moneda de CADA gasto a su línea del desglose, que es correcto, y
+deja la del pago en su valor por defecto. Si algún día un periodo mezclara
+gastos en dos monedas, `monto_gastos` sumaría peras con manzanas y el `check
+cp_total_cuadra` no lo vería: solo comprueba que el total sea la suma de las dos
+partidas, no que las partidas sean comparables.
+
+**Por qué no es de esta fase.** Hoy no existe ninguna superficie que permita
+escribir un gasto en una moneda distinta de `COP`: la columna nació con default
+y sin selector en ninguna pantalla. El defecto es latente, no vivo, y el
+PROJECT.md declara el multi-moneda como camino a v2, no como MVP.
+
+**Cómo se arregla cuando toque.** Agrupar también por moneda al construir
+`personas` en `private.cerrar_periodo_core`, y pasar de «una fila de pago por
+persona» a «una por persona y moneda». Es un cambio de clave única en
+`cleaner_payouts` (`unique (periodo_desde, aseador_id)` pasaría a incluir
+`moneda`), así que **es más barato antes de tener histórico financiero vivo**.
+
+**Detonante:** el día que una pantalla ofrezca elegir moneda al reportar un
+gasto, o el día que entre la primera unidad fuera de Colombia.
