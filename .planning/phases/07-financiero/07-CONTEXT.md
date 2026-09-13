@@ -89,3 +89,98 @@ Que cada persona vea su propio pago en el teléfono trae consigo:
   mes, excluyendo fines de semana y **sin** tener en cuenta festivos.
 - Los aseos informativos (gestión externa) quedan fuera de todo cálculo y de toda
   métrica (`FIN-05`). No es decisión nueva, es requisito existente.
+
+---
+
+# DECISIONES DEL 2026-09-13 — las cuatro que bloqueaban el plan
+
+> Salieron de `07-RESEARCH.md` (Q1, Q2, Q4, Q5). Las respondió el dueño en
+> conversación directa. **Ninguna es interpretable: si el plan contradice algo de
+> aquí, el plan está mal.**
+
+## D7-5 · El periodo termina el día del cierre (respuesta a Q1)
+
+**Decidido: la opción (a).** El periodo de pago va **de cierre a cierre**, no de
+día 1 a fin de mes calendario. Si enero cierra el viernes 30, ese periodo es del
+1 al 30, y el 31 pertenece al periodo siguiente.
+
+**Consecuencia dura, y hay que respetarla desde la primera migración:** la
+cabecera del snapshot necesita **`periodo_desde` y `periodo_hasta`**, dos
+columnas de fecha reales. NO basta con un `periodo` tipo `'2026-01'`. El research
+lo dice con todas las letras: añadirlas después de haber cerrado meses reales es
+caro.
+
+**Lo que el aseador ve:** el periodo NO siempre coincide con el mes calendario, y
+la pantalla tiene que decir las fechas exactas que cubre, no solo el nombre del
+mes. Un recibo que dice "enero" y cubre del 1 al 30 sin decirlo es una discusión
+esperando a ocurrir.
+
+## D7-6 · Los recibos de gasto duran lo mismo que el pago (respuesta a Q2)
+
+**Decidido: 6 meses**, alineados con `retention_months`, en vez de los 30 días
+que hoy aplica `photo_retention_days` a todas las fotos por igual.
+
+Razón: D7-2 exige poder llegar desde cada gasto a su foto, y con 30 días ese
+enlace ya está roto el mes siguiente. Las fotos de gasto son **~3% del volumen**
+(una por gasto, contra ~6 de checklist por aseo), así que el coste en Storage es
+marginal.
+
+**Obligación que esta fase NO puede dejar sin escribir:** la decisión va a
+`.planning/STATE.md` bajo consecuencias para la **Fase 9**. Si nadie la escribe
+allí, la purga automática va a borrar los recibos sin saber que está rompiendo un
+requisito de la Fase 7.
+
+## D7-7 · El aseador no sabe nada de lo que se le cobra al huésped (respuesta a Q4)
+
+**Decidido, y es cita literal: _"no, la aseadora no debe saber nada de nuestros
+cobros"_.** Se cierran **las dos** superficies medidas en el Hallazgo 1 del
+research, no solo la barata:
+
+1. La de `cleanings` (`tarifa_huesped` legible por el aseador vía grant por
+   columna). Ningún código la lee: cerrarla es casi gratis.
+2. La de `properties` en la ventana -1..+7. Esta **sí** tiene consumidor: el CRUD
+   del admin en `lib/data/apartamentos.ts:106`. Cerrarla obliga a rehacer el
+   embed `properties(...)` de `lib/data/aseo-aseador.ts`, probablemente moviendo
+   la lectura del aseador a una función definer que devuelva solo sus columnas.
+
+Esto **sube el alcance de la fase** respecto a lo que el ROADMAP dice, y es
+deliberado: es una fuga de datos de negocio medida contra Postgres, no una
+sospecha teórica. Se cierra ahora.
+
+**Cómo se prueba:** pgTAP, impersonando a un aseador, afirmando que la lectura
+devuelve NULL o falla. Un test contra la pantalla no sirve: el dato viaja aunque
+no se pinte.
+
+## D7-8 · Un aseo pertenece al periodo en que SE COMPLETÓ (respuesta a Q5)
+
+**Decidido:** la pertenencia NO sale de `scheduled_date`. Sale de **cuándo se
+completó el aseo**. Un aseo programado el 28 de enero que se termina el 2 de
+febrero se paga en el periodo de febrero.
+
+**Por qué esto es coherente y no un parche:** junto con D7-5, **elimina los días
+huérfanos por completo**. El periodo va de cierre a cierre y cada aseo cae en el
+periodo en el que se terminó, así que no existe ningún aseo que no pertenezca a
+ninguno. La recomendación del research (mantener `scheduled_date` y avisar al
+admin de los colgados) queda **descartada**: ya no hay colgados que avisar.
+
+**Consecuencia en la pantalla:** el desglose muestra **las dos fechas** —cuándo
+estaba programado y cuándo se hizo—. Sin eso, un aseo de enero en el recibo de
+febrero parece un error y genera exactamente la discusión que se quiere evitar.
+
+**Consecuencia en el schema:** hay que verificar qué columna marca el completado
+(`closed_at`, `terminado_at` o equivalente) y si está poblada en todos los aseos
+cerrados hasta hoy. El research debe haberla identificado; si no, es lo primero
+que el plan tiene que resolver.
+
+## D7-9 · La alerta del 70% de Storage es un banner (respuesta a Q3, tomada sin el dueño)
+
+Q3 era menor y no se le preguntó. Se aplica la recomendación del research:
+**banner persistente** en `/finanzas` y `/operacion`, no push.
+
+Cumple las dos mitades de RET-07 ("ve el consumo" y "recibe alerta") sin tocar el
+enum `notification_type` —que tiene once valores por decisión del plan 03-03, y
+cuyo doceavo no se puede usar en la misma migración que lo añade—. Y se ve aunque
+el push falle, que es justo el escenario en el que uno quiere enterarse.
+
+**Si el dueño prefiere push, es un cambio aditivo:** un valor `storage_alto` en
+su propia migración. No hay que rehacer nada de lo anterior.
