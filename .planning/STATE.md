@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 05
 current_phase_name: notificaciones-push-e-instalacion-de-la-pwa
 status: planning
-stopped_at: "Completado 07-01-PLAN.md (Wave 0). Contrato pgTAP en rojo: 47/52 aserciones, rojo acotado a 11_financiero.test.sql. Linea base: pgTAP 275 en 11 archivos, unit 1006, integracion 169, e2e 112+1"
-last_updated: "2026-09-13T18:36:47.254Z"
+stopped_at: Completado 07-03-PLAN.md
+last_updated: "2026-09-13T18:45:14.092Z"
 last_activity: 2026-09-10
 last_activity_desc: discuss-phase 5 cerrado; ROADMAP §Phase 5 actualizado con los criterios 6 y 7
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 89
-  completed_plans: 75
+  completed_plans: 76
   percent: 56
 ---
 
@@ -175,6 +175,7 @@ Progress: [██████████] 100%
 | Quick 260907-703 | 1h 25m | 3 tasks | 5 files |
 | Phase 07 P01 | 62min | 2 tasks | 1 files |
 | Phase 07 P02 | 21min | 3 tasks | 9 files |
+| Phase 07 P03 | 68min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -220,6 +221,8 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Fase 7] 07-02: el rojo de una Wave 0 se produce por resolucion de modulo, no por una asercion que falla: es inconfundible y no se puede leer como un defecto real
 - [Fase 7] 07-02: el contrato de un modulo que aun no existe se declara en un `.d.ts` SIN `.ts`; tsc queda verde y vitest sigue rojo, y ningun bundle puede importar un stub
 - [Fase 7] 07-02: las fechas de una fixture se anclan 45 dias atras y nunca en literales de calendario, o la suite falla sola al ano siguiente y deja fechas en el futuro los dias 1 y 2 de cada mes
+- [Phase 7]: El cierre de un periodo se siembra en E2E invocando cerrar_periodo con una sesion de admin real, no escribiendo el snapshot con la clave de servicio: un periodo cerrado que la funcion nunca produjo haria que las specs afirmaran sobre datos que el sistema no sabe generar
+- [Phase 7]: Toda asercion de no-divulgacion en E2E lleva su control de metodo: si ninguna carga de red trae un dato que el usuario SI puede ver, el interceptor no miro nada y la ausencia del dato prohibido no prueba nada
 
 ### Pending Todos
 
@@ -275,8 +278,8 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-13T18:36:34.858Z
-Stopped at: Completado 07-01-PLAN.md (Wave 0). Contrato pgTAP en rojo: 47/52 aserciones, rojo acotado a 11_financiero.test.sql. Linea base: pgTAP 275 en 11 archivos, unit 1006, integracion 169, e2e 112+1
+Last session: 2026-09-13T18:45:14.085Z
+Stopped at: Completado 07-03-PLAN.md
 
 **Abierto (unico):** el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real. Los cinco criterios de fallo estan escritos en `06-10-SUMMARY.md`. Nada mas bloquea la fase.
 
@@ -321,4 +324,4 @@ migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` **29 ar
    segundos, `db:test` 2,3 s y la integracion completa 9,7 s.
 
 Siguiente: cerrar el checkpoint humano de la Fase 6 en un telefono real, o arrancar la Fase 7 (Financiero), que es la que consume el `monto` entero que esta fase empezo a capturar.
-Resume file: .planning/phases/07-financiero/07-01-SUMMARY.md
+Resume file: None

@@ -109,7 +109,7 @@
 ### Financiero
 
 - [ ] **FIN-01**: Las tarifas del aseo se congelan al momento de generarse y no cambian si después se edita la tarifa del apartamento
-- [ ] **FIN-02**: Admin ve la rentabilidad de cada aseo (fee al huésped menos pago al aseador)
+- [x] **FIN-02**: Admin ve la rentabilidad de cada aseo (fee al huésped menos pago al aseador)
 - [x] **FIN-03**: El sistema calcula el pago del mes por aseador al cierre del último día laboral, excluyendo fines de semana
 - [x] **FIN-04**: El cálculo mensual queda persistido como snapshot y sigue consultable aunque los aseos que lo sustentan se borren por retención
 - [x] **FIN-05**: Los aseos informativos quedan fuera de todo cálculo financiero y de toda métrica
@@ -245,7 +245,7 @@
 | DASH-06 | Fase 4 | Complete |
 | DASH-07 | Fase 4 | Complete |
 | FIN-01 | Fase 1 | Pending |
-| FIN-02 | Fase 7 | Pending |
+| FIN-02 | Fase 7 | Complete |
 | FIN-03 | Fase 7 | Complete |
 | FIN-04 | Fase 7 | Complete |
 | FIN-05 | Fase 7 | Complete |
