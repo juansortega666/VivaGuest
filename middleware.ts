@@ -56,13 +56,19 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     // Excluye estaticos e imagenes (no necesitan sesion y pagar un getUser() por
-    // cada uno seria absurdo) y `api/cron/*`, que se autentica por secreto
-    // compartido y no por cookie: `pg_net` no manda cookies, asi que pasarlo por
-    // aqui lo redirigiria a /login. Esos endpoints los anade la Fase 3.
+    // cada uno seria absurdo) y los DOS endpoints que se autentican por secreto
+    // compartido y no por cookie: `api/cron/*` (Fase 3) y `api/push/*` (Fase 5).
+    // `pg_net` no manda cookies, asi que pasarlos por aqui los redirige a /login.
+    //
+    // ── `api/push` FALTABA, Y COSTO LA FASE ENTERA (medido el 2026-09-12) ────
+    // Sin el, `POST /api/push/drain` responde 307 hacia `/login`, `pg_net` sigue
+    // la redireccion, `/login` contesta 405 a un POST, y el aviso se queda en
+    // `pendiente` PARA SIEMPRE. Nada lo delata: la notificacion existe en la
+    // base, el dispatcher corre sin excepcion, y el telefono no suena nunca.
+    // Se descubrio probando en un iPhone de verdad, no en la suite.
     //
     // `sw.js` y `manifest.webmanifest` se excluyen ya para las Fases 5 y 6: un
     // service worker servido con una redireccion a /login no se registra nunca.
-    // Excluirlos ahora es gratis y evita una edicion cruzada mas adelante.
-    '/((?!_next/static|_next/image|favicon\\.ico|api/cron|sw\\.js|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/((?!_next/static|_next/image|favicon\\.ico|api/cron|api/push|sw\\.js|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 };
