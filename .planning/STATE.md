@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 07
 current_phase_name: financiero
 status: planning
-stopped_at: "Completado 07-08-PLAN.md (migracion 26: las seis lecturas financieras del admin)"
-last_updated: "2026-09-13T20:45:18.972Z"
+stopped_at: "Completado 07-09-PLAN.md (migracion 27: los pagos del admin y la frontera del aseador). Contrato pgTAP de la Fase 7 ENTERO en verde"
+last_updated: "2026-09-13T22:02:08.013Z"
 last_activity: 2026-09-13
-last_activity_desc: "Wave 2 cerrada: 07-05 (migracion 24, la frontera del aseador) y 07-06 (dominio financiero en TypeScript)"
+last_activity_desc: "Wave 5 cerrada: 07-09 (migracion 27). Ultima migracion de la fase; el contrato pgTAP queda entero en verde y empiezan las pantallas"
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 89
-  completed_plans: 81
+  completed_plans: 82
   percent: 56
 ---
 
@@ -29,8 +29,18 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 ## Current Position
 
 Phase: 07 (financiero) — EN EJECUCION
-Plan: 8 of 14. Wave 0 cerrada (07-01, 07-02, 07-03) y Wave 1 cerrada (07-04)
-Status: WAVE 2 CERRADA, sus dos planes ejecutados.
+Plan: 9 of 14. Waves 0 a 5 cerradas (07-01 a 07-09). LA BASE DE LA FASE ESTA COMPLETA.
+Status: WAVE 5 CERRADA. 07-09 fue la ULTIMA MIGRACION de la fase (la 27).
+
+`11_financiero.test.sql` queda ENTERO EN VERDE por primera vez desde que empezo la fase:
+94 aserciones, 369 en la suite pgTAP completa, cero `not ok`. Eso es lo que desbloquea
+los cuatro planes de interfaz (07-10 a 07-13).
+
+E2E medido tras 07-09: 113 pasando, 1 saltado, 21 rojos, y los 21 son los declarados de
+`finanzas.spec.ts` y `mis-pagos.spec.ts`. Los dos falsos rojos colaterales de
+`operacion.spec.ts:210` y `operacion-alertas.spec.ts:215` DESAPARECIERON, como estaba
+previsto. La causa real del colateral no era la que se creia: era un `signOut()` global
+en el sembrador de finanzas, arreglado en 07-09.
 
 `07-05` ejecutado (migracion 24, la frontera del aseador): la tarifa al huesped y el pago
 al aseador salen del grant por columna de `authenticated` en `cleanings` y `properties`,
@@ -255,6 +265,7 @@ Progress: [██████████] 100%
 | Phase 07 P05 | 60min | 3 tasks | 6 files |
 | Phase 07 P07 | 95min | 3 tasks | 5 files |
 | Phase 07 P08 | 55min | 3 tasks | 3 files |
+| Phase 07 P09 | 145min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -320,6 +331,9 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Phase 07]: El Resumen es lectura VIVA y Pagos es snapshot congelado: los dos conviven y ninguno reemplaza al otro. El Resumen SI ve un aseo que entro a un periodo ya cerrado, y eso no contradice D7-3, que congela el PAGO y no la metrica
 - [Phase 07]: La conciliacion entre dos pantallas del mismo periodo se afirma como IGUALDAD entre las funciones que las alimentan, con un seguro contra la vacuidad, en vez de como dos literales que alguien puede actualizar a la vez (aserciones 60, 62 y 69)
 - [Phase 07]: Una regla de producto que prohibe un dato (ubicacion, cifra de huesped, URL firmada) se mide contra el returns table en pg_proc y no contra la fila: el dato viaja al navegador aunque la pantalla no lo pinte
+- [Phase 07]: 07-09: el filtro por dueño del aseador vive DENTRO de la función definer y nunca en el where de la pantalla
+- [Phase 07]: 07-09: mis_pagos_cerrados devuelve payout_id, adición declarada al contrato: sin él la pantalla de desglose del aseador sería inalcanzable
+- [Phase 07]: 07-09: el sembrador E2E de finanzas cierra sesión con scope local; el signOut global revocaba los refresh tokens del admin y tumbaba 23 specs
 
 ### Pending Todos
 
@@ -376,8 +390,8 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-13T20:44:49.274Z
-Stopped at: Completado 07-08-PLAN.md (migracion 26: las seis lecturas financieras del admin)
+Last session: 2026-09-13T22:02:01.498Z
+Stopped at: Completado 07-09-PLAN.md (migracion 27: los pagos del admin y la frontera del aseador). Contrato pgTAP de la Fase 7 ENTERO en verde: 94 aserciones, 369 en la suite, cero not ok
 
 **Abierto (unico):** el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real. Los cinco criterios de fallo estan escritos en `06-10-SUMMARY.md`. Nada mas bloquea la fase.
 
