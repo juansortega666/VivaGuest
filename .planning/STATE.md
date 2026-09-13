@@ -6,14 +6,14 @@ current_phase: 07
 current_phase_name: financiero
 status: planning
 stopped_at: "Completado 07-05-PLAN.md (migracion 24: la frontera del aseador)"
-last_updated: "2026-09-13T19:56:56.772Z"
+last_updated: "2026-09-13T20:22:29.383Z"
 last_activity: 2026-09-13
-last_activity_desc: "Wave 2 cerrada: 07-05 cierra la fuga de la tarifa al huesped por las dos vias (4 aserciones del bloque D a verde) y 07-06 pone en verde el dominio financiero en TypeScript"
+last_activity_desc: "Wave 2 cerrada: 07-05 (migracion 24, la frontera del aseador) y 07-06 (dominio financiero en TypeScript)"
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 89
-  completed_plans: 79
+  completed_plans: 80
   percent: 56
 ---
 
@@ -29,7 +29,7 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 ## Current Position
 
 Phase: 07 (financiero) — EN EJECUCION
-Plan: 6 of 14. Wave 0 cerrada (07-01, 07-02, 07-03) y Wave 1 cerrada (07-04)
+Plan: 7 of 14. Wave 0 cerrada (07-01, 07-02, 07-03) y Wave 1 cerrada (07-04)
 Status: WAVE 2 CERRADA, sus dos planes ejecutados.
 
 `07-05` ejecutado (migracion 24, la frontera del aseador): la tarifa al huesped y el pago
@@ -240,6 +240,7 @@ Progress: [██████████] 100%
 | Phase 07 P04 | 25min | 3 tasks | 2 files |
 | Phase 07 P06 | 30min | 2 tasks | 7 files |
 | Phase 07 P05 | 60min | 3 tasks | 6 files |
+| Phase 07 P07 | 95min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -298,6 +299,9 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Phase ?]: 07-05: tg_cleanings_snapshot() NO pasa a definer y NO se le devuelve el grant. authenticated no tiene DML sobre cleanings, asi que el trigger nunca corre con ese rol. FIN-01 verificado EJECUTANDO por las tres vias reales (RPC definer, insert directo, reimposicion tras estado terminal), no leyendo el archivo
 - [Phase ?]: 07-05 TRAMPA MEDIDA: con grants por columna un is_empty() de pgTAP no puede pedir el comodin. El 42501 ABORTA el archivo entero en vez de dar un not ok (00_rls_aseos: 16 planeadas, 3 corridas). Lo mismo vale para el RETURNING * de una escritura: el insert pasa y la lectura de vuelta da 42501
 - [Phase ?]: 07-05 PARA LOS PLANES 07-10 a 07-14: toda columna nueva de cleanings o properties hay que anadirla al grant de la migracion 24 Y a COLUMNAS_DE_PROPIEDAD en lib/data/apartamentos.ts, o nacera invisible para la aplicacion
+- [Phase ?]: 07-07: el arnés de pgTAP se corrigió, no la guarda de admin del cierre — relajarla habría dejado entrar a la clave de servicio, contra lo que e2e/fixtures.ts documenta y depende
+- [Phase ?]: 07-07: el snapshot del pago y su desglose se escriben en UNA sentencia con CTEs que modifican datos — dos sentencias tomarían dos snapshots y un aseo completado entre medias entraría en el desglose sin entrar en el total
+- [Phase ?]: 07-07: la guarda de calendario del cierre vive dentro de la función y no en la expresión del cron — el comodín de último día del mes de pg_cron es el último día CALENDARIO, y cae en fin de semana en 8 de 24 meses
 
 ### Pending Todos
 
@@ -354,7 +358,7 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-13T19:56:31.925Z
+Last session: 2026-09-13T20:22:07.152Z
 Stopped at: Completado 07-05-PLAN.md (migracion 24: la frontera del aseador)
 
 **Abierto (unico):** el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real. Los cinco criterios de fallo estan escritos en `06-10-SUMMARY.md`. Nada mas bloquea la fase.
