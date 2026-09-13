@@ -228,8 +228,24 @@ la fase son 10 planes y no 20.
   3. Al cerrar el periodo, el sistema calcula el pago de cada aseador, lo persiste como snapshot propio y lo muestra en la sub-pestaña de Pagos, donde además se marca a quién ya se le pagó
   4. Ese snapshot queda escrito de forma que sobreviva al borrado de los aseos que lo sustentan, verificable borrando manualmente un aseo de un periodo ya cerrado
   5. El aseador ve en su app lo que se le va a pagar de los periodos ya cerrados, y NO existe ninguna consulta, por ninguna vía, que le devuelva una cifra de huésped o un margen
-**Plans**: TBD
+**Plans**: 14 plans en 9 waves
 **UI hint**: yes
+
+Plans:
+- [ ] 07-01-PLAN.md — Wave 0: el contrato pgTAP de la fase, en rojo antes del schema
+- [ ] 07-02-PLAN.md — Wave 0: sembrador de periodo completo y el dominio financiero en rojo
+- [ ] 07-03-PLAN.md — Wave 0: las specs E2E de las cinco superficies nuevas, en rojo
+- [ ] 07-04-PLAN.md — Migración 23: calendario de cierre, día de negocio y las tres tablas del snapshot
+- [ ] 07-05-PLAN.md — Migración 24: cerrar la fuga de la tarifa al huésped, por las dos vías (D7-7)
+- [ ] 07-06-PLAN.md — El dominio en TypeScript: gemelo del calendario, filtro del Resumen y agregación
+- [ ] 07-07-PLAN.md — Migración 25: el cierre idempotente, sus dos puertas y el job agendado
+- [ ] 07-08-PLAN.md — Migración 26: las lecturas del Resumen, del detalle y de la ficha
+- [ ] 07-09-PLAN.md — Migración 27: Pagos del admin, marcar pagado, y las dos funciones del aseador
+- [ ] 07-10-PLAN.md — Chasis de la sección y sub-pestaña Resumen
+- [ ] 07-11-PLAN.md — Detalle aseo por aseo y ficha de aseadora
+- [ ] 07-12-PLAN.md — Sub-pestaña Pagos: desglose, marcar pagado y aviso de periodo sin cerrar
+- [ ] 07-13-PLAN.md — La pantalla del aseador: sus periodos cerrados y su desglose
+- [ ] 07-14-PLAN.md — Puerta de fase: cinco señuelos, suite completa y consecuencias para la Fase 9
 
 > **Alcance recortado el 2026-09-13, por decisión del dueño.** `RET-03` (retención
 > legal) y `RET-07` (alerta de Storage al 70%) **salieron de esta fase**: no son
