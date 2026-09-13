@@ -108,6 +108,7 @@ export function FiltroPeriodo({
   hasta,
   etiqueta,
   hoy,
+  subNav,
   children,
 }: {
   rango: RangoDePeriodo;
@@ -126,6 +127,15 @@ export function FiltroPeriodo({
    * el servidor y el cliente pintan lo mismo y no hay desajuste de hidratación.
    */
   hoy: string;
+  /**
+   * El sub-nav de la seccion, que va entre la cabecera y los bloques.
+   *
+   * Entra como ranura y NO como hijo por una razon de comportamiento: los hijos
+   * se atenuan mientras la transicion esta pendiente, y atenuar la navegacion
+   * seria decirle al admin que `Pagos` tampoco responde. Responde: es un enlace
+   * a otra ruta y no depende de estas cifras.
+   */
+  subNav?: ReactNode;
   /** Los tres bloques, ya renderizados por el servidor. */
   children: ReactNode;
 }) {
@@ -242,6 +252,8 @@ export function FiltroPeriodo({
           </div>
         </div>
       </div>
+
+      {subNav}
 
       {/*
         La región de cortesía. Va fuera del contenedor que se atenúa a propósito:
