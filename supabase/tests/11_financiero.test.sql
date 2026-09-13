@@ -28,6 +28,7 @@
 --   I  lo que ve el aseador ................... 07-09 (migración 27)
 --   J  el recibo dura cinco años .............. 07-04 (migración 23)
 --   G  supervivencia al borrado ............... 07-04 (schema) + 07-07
+--   K  las dos puertas del cierre ............. 07-07  (añadido por ese plan)
 --
 --   A PARTIR DE QUE UN BLOQUE SE PONE EN VERDE, UN `not ok` SUYO ES UNA
 --   REGRESIÓN, no un pendiente. La línea base con la que se mide: los once
@@ -104,14 +105,20 @@
 --      `10_reportes.test.sql` nació en rojo en la Fase 6.
 --
 -- ---------------------------------------------------------------------------
--- ORDEN DE LOS BLOQUES: el bloque G va AL FINAL aunque su letra sea anterior.
--- G borra un aseo y un gasto de la siembra a propósito, y cualquier bloque que
--- corriera después leería un fixture mutilado y fallaría por la razón
--- equivocada. El orden real es A B C D E F H I J G.
+-- ORDEN DE LOS BLOQUES: el bloque G va casi AL FINAL aunque su letra sea
+-- anterior. G borra un aseo y un gasto de la siembra a propósito, y cualquier
+-- bloque que corriera después leería un fixture mutilado y fallaría por la razón
+-- equivocada. El orden real es A B C D E F H I J G K.
+--
+-- K es la única excepción y va DESPUÉS de G por una razón distinta: pgTAP numera
+-- por orden de ejecución, y meterlo en su sitio alfabético habría corrido los
+-- números de H, I, J y G, que están citados por número en este archivo y en los
+-- planes 07-08, 07-09 y 07-14. Sus siete aserciones son insensibles a lo que G
+-- borra: ninguna lee montos.
 -- ============================================================================
 
 begin;
-select plan(52);
+select plan(59);
 
 -- ---------------------------------------------------------------------------
 -- Limpieza del seed, en orden inverso de FK. El rollback la deshace.
@@ -535,11 +542,34 @@ select is(
 --
 -- El periodo EN CURSO no se cierra, ni se puede: su día de cierre no ha pasado.
 -- Esa ausencia es el fixture del bloque I.
--- ═══════════════════════════════════════════════════════════════════════════
+--
+-- ---------------------------------------------------------------------------
+-- EL CIERRE SE INVOCA CON UNA SESIÓN DE ADMIN, NO COMO `postgres`.
+--
+-- CORREGIDO EN EL PLAN 07-07. La Wave 0 escribió estas cinco invocaciones con
+-- `pg_temp.correr`, que ejecuta como `postgres` y SIN claims de JWT. Contra eso,
+-- `public.cerrar_periodo` responde 42501 y no escribe nada: su primera operación
+-- es `private.is_admin()`, que resuelve `auth.uid()` contra `profiles`, y sin
+-- claims `auth.uid()` es nulo. Los bloques E, F, G y H se habrían quedado en rojo
+-- para siempre por el arnés, no por el código.
+--
+-- LA GUARDA NO SE RELAJA PARA QUE ESTO PASE, Y ES DELIBERADO. Aflojarla a «o es
+-- admin o no hay sesión» dejaría entrar a la CLAVE DE SERVICIO, que tampoco tiene
+-- `auth.uid()`. `e2e/fixtures.ts` documenta y depende del comportamiento
+-- contrario: siembra el cierre abriendo una sesión de admin de verdad
+-- precisamente porque la clave de servicio no pasa la guarda.
+--
+-- Cambiar el arnés en vez de la guarda además FORTALECE el archivo: a partir de
+-- aquí, los bloques E, F, G y H prueban el cierre por el camino REAL de
+-- producción (un admin autenticado invocando el RPC), no por un atajo de
+-- superusuario que ningún cliente puede tomar.
+-- ---------------------------------------------------------------------------
 
-select pg_temp.correr($q$select public.cerrar_periodo(date '2026-07-01', date '2026-07-31')$q$)
+select pg_temp.intento_como('ad700000-0000-0000-0000-000000000001',
+  $q$select public.cerrar_periodo(date '2026-07-01', date '2026-07-31')$q$)
   as cierre_julio \gset
-select pg_temp.correr($q$select public.cerrar_periodo(date '2026-08-01', date '2026-08-31')$q$)
+select pg_temp.intento_como('ad700000-0000-0000-0000-000000000001',
+  $q$select public.cerrar_periodo(date '2026-08-01', date '2026-08-31')$q$)
   as cierre_agosto \gset
 
 
@@ -860,8 +890,10 @@ select is(
 --    Lo pone en verde: 07-07, migración 25.
 -- ═══════════════════════════════════════════════════════════════════════════
 
--- Segunda corrida sobre el MISMO periodo. Escritura, en su propia sentencia.
-select pg_temp.correr($q$select public.cerrar_periodo(date '2026-07-01', date '2026-07-31')$q$)
+-- Segunda corrida sobre el MISMO periodo. Escritura, en su propia sentencia, y
+-- con sesión de admin por la razón escrita antes del bloque C.
+select pg_temp.intento_como('ad700000-0000-0000-0000-000000000001',
+  $q$select public.cerrar_periodo(date '2026-07-01', date '2026-07-31')$q$)
   as segunda_corrida \gset
 
 -- 31
@@ -881,7 +913,8 @@ select pg_temp.correr($q$
    where id = 'b7000000-0000-0000-0000-000000000001'
 $q$) as tarifa_editada \gset
 
-select pg_temp.correr($q$select public.cerrar_periodo(date '2026-07-01', date '2026-07-31')$q$)
+select pg_temp.intento_como('ad700000-0000-0000-0000-000000000001',
+  $q$select public.cerrar_periodo(date '2026-07-01', date '2026-07-31')$q$)
   as tercera_corrida \gset
 
 -- 32 Si el cierre recalculara, 7A pasaría de 132000 a 3 x 99000 + 12000 = 309000.
@@ -908,7 +941,8 @@ select pg_temp.correr($q$
           (timestamp '2026-07-05 14:00') at time zone 'America/Bogota')
 $q$) as aseo_tardio \gset
 
-select pg_temp.correr($q$select public.cerrar_periodo(date '2026-07-01', date '2026-07-31')$q$)
+select pg_temp.intento_como('ad700000-0000-0000-0000-000000000001',
+  $q$select public.cerrar_periodo(date '2026-07-01', date '2026-07-31')$q$)
   as cuarta_corrida \gset
 
 -- 33 Un periodo cerrado NO SE RECALCULA NUNCA. El aseo tardío no entra, y eso es
@@ -1209,6 +1243,126 @@ select is(
   $q$),
   'Detergente|12000',
   'FIN-04 la linea del gasto borrado conserva concepto y monto');
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- K. LAS DOS PUERTAS DEL CIERRE Y LO QUE NINGUNA DEJA PASAR — 7 aserciones
+--
+--    AÑADIDO POR EL PLAN 07-07, y va DESPUÉS del bloque G a propósito: pgTAP
+--    numera por orden de ejecución, y meterlo en medio habría corrido los
+--    números de los bloques H, I, J y G, que están citados por número en los
+--    comentarios de este archivo y en los planes 07-08, 07-09 y 07-14.
+--
+--    Las siete son insensibles a la mutilación del fixture que hace G: ninguna
+--    lee montos, y las dos cabeceras de periodo siguen ahí (aserción 48).
+--
+--    QUÉ MIDEN, Y POR QUÉ HACEN FALTA. El cierre tiene dos puertas y las dos son
+--    endpoints: el RPC del admin lo expone PostgREST, y el núcleo es una función
+--    `security definer` propiedad del superusuario, que salta la seguridad a
+--    nivel de fila entera. Que el botón viva en el árbol de admin no autoriza
+--    nada.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- 53 T-07-31. La puerta del admin, cerrada para quien no lo es.
+select is(
+  pg_temp.intento_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select public.cerrar_periodo(date '2026-07-01', date '2026-07-31')$q$),
+  '42501',
+  'T-07-31 una aseadora que llama a cerrar_periodo recibe 42501');
+
+-- 54 T-07-31. Y la del aviso, que enseña el calendario financiero de la empresa.
+select is(
+  pg_temp.intento_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select * from public.periodo_pendiente_de_cierre()$q$),
+  '42501',
+  'T-07-31 una aseadora que llama a periodo_pendiente_de_cierre recibe 42501');
+
+-- 55 T-07-32. EL NÚCLEO NO ES ALCANZABLE DESDE LA APLICACIÓN. Vive en `private`
+--    y sin grant, así que una sesión de la aplicación no lo puede invocar ni
+--    saltándose las dos puertas. Se prueba EJECUTÁNDOLO, no solo leyendo el
+--    catálogo: el grant es el mecanismo, la imposibilidad es el requisito.
+select is(
+  pg_temp.intento_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select private.cerrar_periodo_core(date '2026-07-01', date '2026-07-31')$q$),
+  '42501',
+  'T-07-32 el nucleo del cierre no es invocable desde una sesion de la aplicacion');
+
+-- 56 Y el mismo invariante contra el catálogo, que es donde se ve si alguien
+--    «arregla» el 42501 de arriba añadiendo un grant. Se escribe como
+--    "concesiones totales | concesiones a roles de la aplicacion" para que una
+--    función inexistente dé '0|0' y no pase por vacuidad.
+--    `grantee = 0` es PUBLIC, y ahí el catálogo no tiene nombre que devolver:
+--    sin el `case`, la consulta revienta en vez de contar.
+select is(
+  pg_temp.escalar($q$
+    select count(*)::text || '|'
+        || count(*) filter (
+             where case when a.grantee = 0 then 'PUBLIC'
+                        else pg_catalog.pg_get_userbyid(a.grantee) end
+                   in ('PUBLIC', 'anon', 'authenticated'))::text
+      from pg_catalog.pg_proc p
+      join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+      cross join pg_catalog.aclexplode(p.proacl) a
+     where n.nspname = 'private'
+       and p.proname = 'cerrar_periodo_core'
+       and a.privilege_type = 'EXECUTE'
+  $q$),
+  '1|0',
+  'T-07-32 el nucleo tiene UNA sola concesion de ejecucion y ninguna es de un rol de la aplicacion');
+
+-- 57 T-07-30. UN ADMIN NO PUEDE CERRAR UN PERIODO POR ADELANTADO.
+--
+--    El rango se pide AL CALENDARIO, no se escribe a mano, por dos razones: es
+--    un periodo REAL —así que la validación de forma del rango no puede ser la
+--    que lo rechace, y lo que se está midiendo es la guarda de vencimiento— y
+--    la aserción no caduca, corra el archivo el mes que corra.
+--
+--    Importa porque un periodo cerrado no se vuelve a tocar: cerrarlo hoy
+--    pagaría por trabajo que aún no ocurrió y congelaría el error para siempre.
+select pg_temp.escalar(
+  $q$select (public.periodo_de_cierre(public.today_bog())).periodo_desde::text$q$)
+  as curso_desde \gset
+select pg_temp.escalar(
+  $q$select (public.periodo_de_cierre(public.today_bog())).periodo_hasta::text$q$)
+  as curso_hasta \gset
+
+select is(
+  pg_temp.intento_como('ad700000-0000-0000-0000-000000000001',
+    format($q$select public.cerrar_periodo(%L::date, %L::date)$q$,
+           :'curso_desde', :'curso_hasta')),
+  'P0001',
+  'T-07-30 el admin NO puede cerrar el periodo en curso: su dia de cierre no ha pasado');
+
+-- 58 Y el complemento: un rango que SÍ está vencido pero que NO es un periodo de
+--    cierre real. El 2 de julio no es el día siguiente a ningún cierre (D7-5),
+--    así que el rango no existe y la base lo rechaza en vez de fiarse del
+--    cliente. Las dos aserciones se discriminan por la ENTRADA, no por el
+--    código de error: 57 manda un periodo real no vencido y 58 uno vencido que
+--    no es un periodo, así que cada una solo puede fallar por su propia guarda.
+select is(
+  pg_temp.intento_como('ad700000-0000-0000-0000-000000000001',
+    $q$select public.cerrar_periodo(date '2026-07-02', date '2026-07-31')$q$),
+  'P0001',
+  'T-07-30 el admin NO puede cerrar un rango inventado: el periodo se valida contra el calendario');
+
+-- 59 EL AVISO DE «CERRAR EL PERIODO AHORA» (UI-SPEC §9.5), medido como
+--    invariante y no como literal: el archivo se corre en cualquier mes, y un
+--    valor esperado fijo diría «julio» en septiembre y «octubre» en noviembre.
+--
+--    Lo que no puede pasar NUNCA: nombrar un periodo que ya está cerrado (sería
+--    un aviso que empuja a cerrar dos veces), nombrar uno cuyo día de cierre no
+--    ha pasado (sería empujar a pagar por adelantado, T-07-30), o devolver más
+--    de una fila (el aviso de la pantalla es uno).
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', $q$
+    select count(*) filter (
+             where q.periodo_desde in (date '2026-07-01', date '2026-08-01'))::text
+        || '|' || count(*) filter (where q.periodo_hasta >= public.today_bog())::text
+        || '|' || (count(*) <= 1)::text
+      from public.periodo_pendiente_de_cierre() q
+  $q$),
+  '0|0|true',
+  'FIN-03 el aviso de periodo pendiente no nombra ninguno ya cerrado ni ninguno sin vencer, y nombra como mucho uno');
 
 
 select * from finish();
