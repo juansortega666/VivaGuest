@@ -162,6 +162,7 @@
 --
 -- ---------------------------------------------------------------------------
 -- BITÁCORA DE SEÑUELOS — 2026-09-13, plan 07-14
+-- (bitacora de senuelos, sin tildes, para que un grep simple la encuentre)
 --
 -- Una suite en verde demuestra que el código pasa los tests. NO demuestra que
 -- los tests puedan fallar. Por cada garantía que la Fase 7 promete se rompió a
