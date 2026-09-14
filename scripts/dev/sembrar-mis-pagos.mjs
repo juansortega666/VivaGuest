@@ -29,6 +29,15 @@
  * Es idempotente por reinicio de base, no por ejecucion: correrlo dos veces
  * seguidas sin reiniciar choca contra el indice unico de un aseo activo por
  * apartamento y fecha. Reinicia la base entre corridas.
+ *
+ * ── Y EL SEGUNDO MODO, PARA EL PUNTO 9 DEL RECORRIDO ────────────────────────
+ *
+ *   node scripts/dev/sembrar-mis-pagos.mjs --purgar-recibo
+ *
+ * Borra del bucket los BYTES del recibo y deja su fila y su gasto intactos, que
+ * es exactamente el estado en que queda un recibo que la purga por antiguedad ya
+ * se llevo. Sirve para comprobar en el telefono que ahi aparece la explicacion y
+ * no una imagen rota.
  * ════════════════════════════════════════════════════════════════════════════
  */
 
@@ -174,7 +183,41 @@ async function crearAseoCompletado(propiedad, programado, hecho, aseadora) {
   return data.id;
 }
 
+/**
+ * Deja el recibo EXACTAMENTE como lo deja la purga por antiguedad: sin bytes en
+ * el bucket, con su fila y su gasto intactos.
+ *
+ * Se borra el objeto y NO la fila, y esa es toda la gracia: el gasto y su monto
+ * siguen registrados —el aseador cobra igual— y lo unico que se perdio es la
+ * imagen. La pantalla tiene que decir eso, no ensenar un cuadro roto.
+ */
+async function purgarRecibo() {
+  const { data, error } = await servicio
+    .from('cleaning_photos')
+    .select('storage_path')
+    .like('storage_path', '%/gasto/recibo-demo.jpg');
+  if (error) reventar('No se pudo buscar la foto del recibo', error);
+
+  const rutas = (data ?? []).map((f) => f.storage_path);
+  if (rutas.length === 0) {
+    reventar('No hay ningun recibo de demostracion. Corre el script sin bandera primero', null);
+  }
+
+  const { error: errorBorrado } = await servicio.storage.from('evidencia').remove(rutas);
+  if (errorBorrado) reventar('No se pudieron borrar los bytes del recibo', errorBorrado);
+
+  console.log('');
+  console.log(`  Bytes borrados de ${rutas.length} recibo(s). La fila y el gasto siguen ahi.`);
+  console.log('  En el telefono, ese gasto tiene que explicar la ausencia, no romper la imagen.');
+  console.log('');
+}
+
 async function main() {
+  if (process.argv.includes('--purgar-recibo')) {
+    await purgarRecibo();
+    return;
+  }
+
   const hoy = await diaDeNegocio();
 
   const aseadora = await idPorEmail(ASEADORA);
