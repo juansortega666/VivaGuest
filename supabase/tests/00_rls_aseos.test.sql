@@ -125,20 +125,40 @@ select is((select count(*) from public.properties)::int, 2,
 -- ===========================================================================
 select public.tests_auth('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
 
+-- ───────────────────────────────────────────────────────────────────────────
+-- POR QUÉ ESTAS CUATRO ASERCIONES NO USAN `select *` (migración 24, plan 07-05)
+--
+-- `is_empty` EJECUTA la consulta, así que un `select *` sobre `cleanings` o
+-- `properties` con el rol `authenticated` ya no devuelve cero filas: devuelve
+-- `42501 permission denied`. La migración 24 sacó `tarifa_huesped` y
+-- `pago_aseador` del grant de columna para cerrar la fuga medida de D7-7, y en
+-- Postgres un comodín pide privilegio sobre TODAS las columnas de la tabla.
+--
+-- Un error dentro de `is_empty` no es un `not ok`: ABORTA EL ARCHIVO ENTERO y
+-- se lleva por delante las 16 aserciones (medido: "You planned 16 tests but ran
+-- 3"). Es exactamente la trampa que la migración 07 §1.2 dejó anotada.
+--
+-- Lo que estas aserciones miden es AISLAMIENTO POR FILA, no por columna, así que
+-- pedir `id` en vez del comodín no debilita nada: si la policy fugara una fila,
+-- `id` la delataría igual. La denegación POR COLUMNA la miden las aserciones 13
+-- y 14 de `11_financiero.test.sql`, que es donde le corresponde.
+-- ───────────────────────────────────────────────────────────────────────────
+
 -- 4
-select is_empty('select * from public.cleanings',
+select is_empty('select id from public.cleanings',
   'PLAT-03 NEG B no ve ningún aseo ajeno');
 
 -- 5
-select is_empty('select * from public.properties',
+select is_empty('select id from public.properties',
   'PLAT-03 NEG B no ve ningún apartamento ajeno');
 
 -- 6  Fuga por embed: PostgREST resuelve ?select=*,properties(*) como un join y
 --    es la policy de properties la que decide. Sin esta aserción, una policy
---    permisiva en properties le daría a B las tarifas y la dirección de los 39
---    apartamentos.
+--    permisiva en properties le daría a B la dirección de los 39 apartamentos.
+--    (Las dos cifras de dinero ya no viajan por ninguna vía desde la migración
+--    24; aquí lo que se mide sigue siendo que el join no devuelva NI UNA FILA.)
 select is_empty(
-  'select c.*, p.* from public.cleanings c join public.properties p on p.id = c.property_id',
+  'select c.id, p.id from public.cleanings c join public.properties p on p.id = c.property_id',
   'PLAT-03 NEG el join cleanings x properties no filtra nada para B (fuga por embed)');
 
 -- 7
@@ -155,11 +175,11 @@ select throws_ok(
 select public.tests_auth('cccccccc-cccc-cccc-cccc-cccccccccccc');
 
 -- 8
-select is_empty('select * from public.cleanings',
+select is_empty('select id from public.cleanings',
   'PLAT-03 NEG aseadora desactivada con token vivo no ve ningún aseo');
 
 -- 9
-select is_empty('select * from public.properties',
+select is_empty('select id from public.properties',
   'PLAT-03 NEG aseadora desactivada con token vivo no ve ningún apartamento');
 
 -- ===========================================================================

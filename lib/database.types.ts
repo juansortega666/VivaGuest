@@ -248,6 +248,138 @@ export type Database = {
           },
         ]
       }
+      cleaner_payout_lines: {
+        Row: {
+          cleaning_id: string | null
+          concepto: string | null
+          evidencia_bucket: string | null
+          evidencia_path: string | null
+          expense_id: string | null
+          fecha_ejecucion: string
+          fecha_programada: string
+          id: string
+          moneda: string
+          monto: number
+          orden: number
+          payout_id: string
+          property_id: string | null
+          property_nombre: string
+          tipo: string
+        }
+        Insert: {
+          cleaning_id?: string | null
+          concepto?: string | null
+          evidencia_bucket?: string | null
+          evidencia_path?: string | null
+          expense_id?: string | null
+          fecha_ejecucion: string
+          fecha_programada: string
+          id?: string
+          moneda?: string
+          monto: number
+          orden?: number
+          payout_id: string
+          property_id?: string | null
+          property_nombre: string
+          tipo: string
+        }
+        Update: {
+          cleaning_id?: string | null
+          concepto?: string | null
+          evidencia_bucket?: string | null
+          evidencia_path?: string | null
+          expense_id?: string | null
+          fecha_ejecucion?: string
+          fecha_programada?: string
+          id?: string
+          moneda?: string
+          monto?: number
+          orden?: number
+          payout_id?: string
+          property_id?: string | null
+          property_nombre?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cleaner_payout_lines_payout_id_fkey"
+            columns: ["payout_id"]
+            isOneToOne: false
+            referencedRelation: "cleaner_payouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cleaner_payouts: {
+        Row: {
+          aseador_id: string | null
+          aseador_nombre: string
+          cantidad_aseos: number
+          cantidad_gastos: number
+          id: string
+          moneda: string
+          monto_aseos: number
+          monto_gastos: number
+          monto_total: number
+          pagado_at: string | null
+          pagado_por: string | null
+          periodo_desde: string
+          periodo_hasta: string
+        }
+        Insert: {
+          aseador_id?: string | null
+          aseador_nombre: string
+          cantidad_aseos?: number
+          cantidad_gastos?: number
+          id?: string
+          moneda?: string
+          monto_aseos?: number
+          monto_gastos?: number
+          monto_total?: number
+          pagado_at?: string | null
+          pagado_por?: string | null
+          periodo_desde: string
+          periodo_hasta: string
+        }
+        Update: {
+          aseador_id?: string | null
+          aseador_nombre?: string
+          cantidad_aseos?: number
+          cantidad_gastos?: number
+          id?: string
+          moneda?: string
+          monto_aseos?: number
+          monto_gastos?: number
+          monto_total?: number
+          pagado_at?: string | null
+          pagado_por?: string | null
+          periodo_desde?: string
+          periodo_hasta?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cleaner_payouts_aseador_id_fkey"
+            columns: ["aseador_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cleaner_payouts_pagado_por_fkey"
+            columns: ["pagado_por"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cleaner_payouts_periodo_desde_fkey"
+            columns: ["periodo_desde"]
+            isOneToOne: false
+            referencedRelation: "payout_periods"
+            referencedColumns: ["periodo_desde"]
+          },
+        ]
+      }
       cleaning_checklist_items: {
         Row: {
           checklist_task_id: string
@@ -1034,6 +1166,41 @@ export type Database = {
           },
         ]
       }
+      payout_periods: {
+        Row: {
+          aseos_no_computados: number
+          cerrado_at: string
+          cerrado_por: string | null
+          moneda: string
+          periodo_desde: string
+          periodo_hasta: string
+        }
+        Insert: {
+          aseos_no_computados?: number
+          cerrado_at?: string
+          cerrado_por?: string | null
+          moneda?: string
+          periodo_desde: string
+          periodo_hasta: string
+        }
+        Update: {
+          aseos_no_computados?: number
+          cerrado_at?: string
+          cerrado_por?: string | null
+          moneda?: string
+          periodo_desde?: string
+          periodo_hasta?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payout_periods_cerrado_por_fkey"
+            columns: ["cerrado_por"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -1368,15 +1535,41 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      aseo_en_curso_de_aseadora: {
+        Args: { p_aseador: string }
+        Returns: {
+          cleaning_id: string
+          esta_activa: boolean
+          iniciado_at: string
+          property_id: string
+          property_nombre: string
+        }[]
+      }
       aseo_sin_evidencia_completa: {
         Args: { p_cleaning: string }
         Returns: boolean
+      }
+      aseos_de_aseadora: {
+        Args: { p_aseador: string; p_desde: string; p_hasta: string }
+        Returns: {
+          cleaning_id: string
+          fecha_ejecucion: string
+          fecha_programada: string
+          pago: number
+          property_id: string
+          property_nombre: string
+        }[]
       }
       aseos_sin_evidencia_completa: {
         Args: { p_cleanings: string[] }
         Returns: string[]
       }
       cancel_cleaning: { Args: { p_cleaning: string }; Returns: undefined }
+      cerrar_periodo: {
+        Args: { p_desde: string; p_hasta: string }
+        Returns: number
+      }
+      cerrar_periodo_si_toca: { Args: never; Returns: number }
       clear_review_flag: { Args: { p_cleaning: string }; Returns: undefined }
       close_cleaning: { Args: { p_cleaning: string }; Returns: undefined }
       confirm_cleaning: {
@@ -1395,6 +1588,17 @@ export type Database = {
         Args: { p_token: string }
         Returns: undefined
       }
+      costo_por_aseadora: {
+        Args: { p_desde: string; p_hasta: string }
+        Returns: {
+          aseador_id: string
+          aseador_nombre: string
+          cantidad_aseos: number
+          costo_total: number
+          total_gastos: number
+          total_pago: number
+        }[]
+      }
       create_manual_cleaning: {
         Args: {
           p_fecha: string
@@ -1407,6 +1611,35 @@ export type Database = {
         Args: { p_cleaning: string; p_motivo: string }
         Returns: undefined
       }
+      detalle_de_mi_pago: {
+        Args: { p_payout: string }
+        Returns: {
+          concepto: string
+          evidencia_bucket: string
+          evidencia_path: string
+          fecha_ejecucion: string
+          fecha_programada: string
+          moneda: string
+          monto: number
+          property_nombre: string
+          tipo: string
+        }[]
+      }
+      detalle_de_pago: {
+        Args: { p_payout: string }
+        Returns: {
+          concepto: string
+          evidencia_bucket: string
+          evidencia_path: string
+          fecha_ejecucion: string
+          fecha_programada: string
+          moneda: string
+          monto: number
+          property_nombre: string
+          tipo: string
+        }[]
+      }
+      dia_bog: { Args: { p_instante: string }; Returns: string }
       dispatch_feed_syncs: { Args: never; Returns: number }
       dispatch_push_notifications: { Args: never; Returns: number }
       estado_avisos_aseadores: {
@@ -1423,6 +1656,100 @@ export type Database = {
       }
       feed_health_watchdog: { Args: never; Returns: undefined }
       finish_cleaning: { Args: { p_cleaning: string }; Returns: undefined }
+      foto_vencida: {
+        Args: { p_created_at: string; p_kind: string }
+        Returns: boolean
+      }
+      gastos_de_aseadora: {
+        Args: { p_aseador: string; p_desde: string; p_hasta: string }
+        Returns: {
+          cleaning_id: string
+          concepto: string
+          evidencia_bucket: string
+          evidencia_path: string
+          expense_id: string
+          fecha_ejecucion: string
+          moneda: string
+          monto: number
+          property_id: string
+          property_nombre: string
+        }[]
+      }
+      marcar_pago_pagado: {
+        Args: { p_payout: string }
+        Returns: {
+          aseador_nombre: string
+          moneda: string
+          monto_total: number
+          pagado_at: string
+          payout_id: string
+        }[]
+      }
+      mis_pagos_cerrados: {
+        Args: never
+        Returns: {
+          moneda: string
+          monto_aseos: number
+          monto_gastos: number
+          monto_total: number
+          pagado_at: string
+          payout_id: string
+          periodo_desde: string
+          periodo_hasta: string
+        }[]
+      }
+      pagos_de_aseadora: {
+        Args: { p_aseador: string }
+        Returns: {
+          moneda: string
+          monto_aseos: number
+          monto_gastos: number
+          monto_total: number
+          pagado_at: string
+          payout_id: string
+          periodo_desde: string
+          periodo_hasta: string
+        }[]
+      }
+      pagos_del_periodo: {
+        Args: { p_desde: string }
+        Returns: {
+          aseador_nombre: string
+          cantidad_aseos: number
+          moneda: string
+          monto_aseos: number
+          monto_gastos: number
+          monto_total: number
+          pagado_at: string
+          payout_id: string
+        }[]
+      }
+      periodo_de_cierre: {
+        Args: { p_dia: string }
+        Returns: {
+          periodo_desde: string
+          periodo_hasta: string
+        }[]
+      }
+      periodo_pendiente_de_cierre: {
+        Args: never
+        Returns: {
+          periodo_desde: string
+          periodo_hasta: string
+        }[]
+      }
+      periodos_de_pago: {
+        Args: never
+        Returns: {
+          aseos_no_computados: number
+          faltan_por_pagar: number
+          moneda: string
+          monto_total: number
+          periodo_desde: string
+          periodo_hasta: string
+          personas: number
+        }[]
+      }
       reassign_cleaning: {
         Args: { p_aseador: string; p_cleaning: string }
         Returns: undefined
@@ -1440,6 +1767,29 @@ export type Database = {
           p_user_agent: string
         }
         Returns: undefined
+      }
+      rentabilidad_aseos: {
+        Args: {
+          p_aseador?: string
+          p_desde: string
+          p_filtro?: string
+          p_hasta: string
+          p_property?: string
+        }
+        Returns: {
+          aseador_id: string
+          aseador_nombre: string
+          cleaning_id: string
+          cobrado: number
+          fecha_ejecucion: string
+          fecha_programada: string
+          margen: number
+          pagado: number
+          property_id: string
+          property_nombre: string
+          tiene_dano: boolean
+          tiene_gasto: boolean
+        }[]
       }
       report_damage: {
         Args: { p_cleaning: string; p_descripcion: string }
@@ -1461,6 +1811,20 @@ export type Database = {
       reschedule_cleaning: {
         Args: { p_cleaning: string; p_fecha: string }
         Returns: undefined
+      }
+      resumen_financiero: {
+        Args: { p_desde: string; p_hasta: string }
+        Returns: {
+          aseos_con_danos: number
+          aseos_con_gastos: number
+          aseos_hechos: number
+          cobrado: number
+          ganancia: number
+          gastos_reembolsados: number
+          margen_promedio: number
+          margen_total: number
+          pagado_aseadores: number
+        }[]
       }
       reveal_access_code: {
         Args: { p_cleaning: string }
@@ -1491,11 +1855,20 @@ export type Database = {
         }
         Returns: Json
       }
+      tarifas_de_apartamentos: {
+        Args: { p_ids?: string[] }
+        Returns: {
+          pago_aseador: number
+          property_id: string
+          tarifa_huesped: number
+        }[]
+      }
       today_bog: { Args: never; Returns: string }
       toggle_checklist_item: {
         Args: { p_done: boolean; p_item: string; p_nota?: string }
         Returns: undefined
       }
+      ultimo_dia_habil_del_mes: { Args: { p_dia: string }; Returns: string }
       unskip_room_evidence: {
         Args: { p_cleaning: string; p_room: string }
         Returns: undefined

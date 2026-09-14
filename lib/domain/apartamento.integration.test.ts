@@ -106,7 +106,23 @@ async function iniciarSesion(email: string, password: string): Promise<string> {
  * Sembrar con el cliente que salta la RLS y comprobar con otro es lo correcto
  * para un fixture ajeno, pero aquí el hecho que interesa es justamente que el
  * admin PUEDE escribir `properties` con su propio token: es la otra mitad de la
- * frontera 1 y hacerlo por la vía privilegiada la escondería.
+ * frontera 1 y hacerlo por la vía privilegiada la escondería. LA ESCRITURA SIGUE
+ * SIENDO SUYA, y si un día dejara de poder escribir, este helper revienta.
+ *
+ * ── POR QUÉ LA REPRESENTACIÓN DE VUELTA YA NO ES UN COMODÍN (migración 24) ──
+ *
+ * Este helper pedía `select('*')` tras el insert. La migración 24 sacó
+ * `tarifa_huesped` y `pago_aseador` del grant de columna de `authenticated` para
+ * cerrar la fuga de D7-7, y en Postgres el asterisco de un RETURNING exige
+ * privilegio sobre TODAS las columnas: el insert funcionaba y la LECTURA DE
+ * VUELTA daba `42501 permission denied for table properties`. Es el caso
+ * silencioso que el plan 07-05 fue a buscar: un error de permiso en una
+ * operación que parecía de escritura.
+ *
+ * La escritura se queda con el token del admin y solo devuelve `id`; la fila
+ * completa —que este archivo necesita entera, incluidas las dos cifras— la lee
+ * el cliente de servicio, que conserva su grant de tabla. Lo que el helper
+ * DEMUESTRA no cambia: el admin escribió.
  */
 async function crearApartamento(
   campos: Partial<Database['public']['Tables']['properties']['Insert']> = {},
@@ -120,12 +136,23 @@ async function crearApartamento(
       cluster: 'Int Cluster',
       ...campos,
     })
-    .select('*')
+    .select('id')
     .single();
 
   if (error) throw new Error(`No se pudo crear el apartamento de prueba: ${error.message}`);
   propiedadesCreadas.push(data.id);
-  return data;
+
+  const { data: fila, error: errorLectura } = await servicio()
+    .from('properties')
+    .select('*')
+    .eq('id', data.id)
+    .single();
+
+  if (errorLectura) {
+    throw new Error(`No se pudo releer el apartamento de prueba: ${errorLectura.message}`);
+  }
+
+  return fila;
 }
 
 beforeAll(async () => {
@@ -431,14 +458,26 @@ describe('persistencia del apartamento y de sus secretos', () => {
   test('un borrador con solo nombre y cluster persiste con is_active = false', async () => {
     const nombre = `Int Borrador ${randomUUID().slice(0, 8)}`;
 
-    const { data, error } = await clienteConToken(tokenAdmin)
+    // El insert va con el token del admin, que es el hecho que se mide. La
+    // representación de vuelta pide solo `id`: desde la migración 24 un comodín
+    // en el RETURNING pide privilegio sobre las dos columnas de dinero, que
+    // `authenticated` ya no tiene, y devolvería 42501 sobre un insert correcto.
+    const { data: creado, error } = await clienteConToken(tokenAdmin)
       .from('properties')
       .insert({ nombre, cluster: 'Int Cluster Borrador' })
-      .select('*')
+      .select('id')
       .single();
 
     expect(error).toBeNull();
-    if (data) propiedadesCreadas.push(data.id);
+    if (creado) propiedadesCreadas.push(creado.id);
+
+    // La fila entera, incluidas las dos cifras que este test afirma vacías, la
+    // lee el cliente de servicio, que conserva su grant de tabla.
+    const { data } = await servicio()
+      .from('properties')
+      .select('*')
+      .eq('id', creado!.id)
+      .single();
 
     // UI-SPEC §8.2 regla 1: "Guarda incompleto, sin ruido, sin confirmación".
     expect(data?.is_active).toBe(false);

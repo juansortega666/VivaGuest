@@ -9,6 +9,7 @@ El equipo son dos personas, así que **las fases corren en secuencia estricta**.
 ## Phases
 
 **Numeración de fases:**
+
 - Fases enteras (1, 2, 3): trabajo planeado del milestone
 - Fases decimales (2.1, 2.2): inserciones urgentes (marcadas con INSERTED)
 
@@ -25,19 +26,23 @@ El equipo son dos personas, así que **las fases corren en secuencia estricta**.
 ## Phase Details
 
 ### Phase 1: Fundación, schema y RLS
+
 **Status**: Complete 2026-09-01 (`passed_with_gaps`) — 9/9 planes, 47/47 aserciones pgTAP, verificación independiente. PR #1 mergeado. Gaps abiertos: CI sin correr automático, aserción de fuga por embed tautológica (la propiedad sí está cubierta por otras dos), y el checkpoint humano de los proyectos Supabase
 **Goal**: La base de datos existe, impone las reglas del negocio por sí sola y ningún aseador puede ver datos ajenos
 **Depends on**: Nada (primera fase)
 **Requirements**: PLAT-03, PLAT-05, PLAT-06, ASEO-07, FIN-01
 **Success Criteria** (qué debe ser VERDAD):
+
   1. `supabase db reset` levanta el schema completo desde cero en CI, la suite pgTAP pasa en verde incluyendo los casos negativos de RLS, y el seed de los 8 clusters y las 39 unidades reales queda cargado
   2. Un aseador autenticado que consulta la API directamente solo obtiene los aseos asignados a él, y no ve instrucciones ni datos de apartamentos ajenos
   3. El código de acceso de un apartamento solo se obtiene vía RPC, solo para el aseador con un aseo vigente, y cada consulta queda registrada en `access_code_reads`
   4. Intentar crear un segundo aseo activo para el mismo apartamento y la misma fecha falla a nivel de base de datos
   5. Editar la tarifa de un apartamento no altera el margen ya congelado en un aseo generado antes de la edición
+
 **Plans:** 9 plans en 8 waves
 
 Plans:
+
 - [ ] 01-01-PLAN.md — Scaffolding de Next.js sin Turbopack, `supabase init` con `config.toml` endurecido, `lib/domain/errors.ts` (ASEO-07) y las dos puertas de CI de arquitectura
 - [ ] 01-02-PLAN.md — Wave 0: la suite pgTAP completa (5 archivos, 45 aserciones) escrita en rojo antes del schema
 - [ ] 01-03-PLAN.md — Migraciones 01–03: `today_bog()`, los 6 enums y el catálogo (identidad, apartamentos, secretos, cuartos, faltantes, ajustes)
@@ -49,6 +54,7 @@ Plans:
 - [ ] 01-09-PLAN.md — Cierre: `database.types.ts`, CI en verde, sign-off de validación y checkpoint humano de link a Supabase dev
 
 **Alcance no capturado por REQ-IDs pero obligatorio en esta fase:**
+
 - `legal_hold` y `deleted_at` en el schema inicial aunque el job de borrado llegue en la Fase 9
 - Máquina de estados del aseo y log de auditoría de transiciones
 - Helper `today_bog()` y regla transversal `date` vs `timestamptz` (nada de `current_date` en jobs, policies ni índices)
@@ -56,20 +62,24 @@ Plans:
 - Catálogo provisional de cuartos y tareas (máximo 3 por tipo), editable sin migración
 
 ### Phase 2: Acceso y administración del catálogo
+
 **Status**: Executed 2026-09-02 — 15/15 planes. 285 unit, 52 integración, 76 E2E, 47 pgTAP, las 11 puertas en verde. Criterios 1, 2, 4 y 5 verificados; el 3 con hueco declarado (puerta solo de UI); el 6 pendiente de verificación humana contra un `.ics` real
 **Goal**: El admin monta toda la operación real en el sistema y cada usuario entra a la superficie que le corresponde
 **Depends on**: Fase 1
 **Requirements**: PLAT-01, PLAT-02, PLAT-04, PLAT-07, APTO-01, APTO-02, APTO-03, APTO-04, APTO-05, APTO-06, APTO-07, APTO-08, APTO-09, APTO-10, APTO-11, APTO-12, ASEADOR-01, ASEADOR-02, ASEADOR-03
 **Success Criteria** (qué debe ser VERDAD):
+
   1. Admin y aseador inician sesión con email y contraseña y aterrizan cada uno en su superficie (dashboard o PWA), con la sesión persistiendo entre recargas
   2. El admin crea, edita, activa y desactiva apartamentos con tarifas, links de calendario validados al guardar, ubicación de Google Maps, código de acceso, hora límite (default 11:30), cuartos, lista base de faltantes y responsable/suplente
   3. El sistema impide activar un apartamento sin tarifa al huésped y pago al aseador, exige responsable cuando `gestion_vivaguest` es true y contacto externo cuando es false
   4. El admin crea y desactiva cuentas de aseador (sin auto-registro) y el aseador desactivado pierde el acceso de inmediato aunque tuviera la sesión abierta
   5. El admin encuentra cualquiera de las 39 unidades desde el buscador y ve la lista de aseadores con su estado y los apartamentos donde es responsable o suplente
   6. Al conectar el calendario, el admin sigue una guía visual de dónde sacar el link de exportación en Airbnb, y al pegarlo ve en pantalla que el feed sirve, cuántas reservas trajo y cuál es el próximo checkout detectado, sin tener que esperar la siguiente corrida del sync
+
 **Plans:** 15 plans en 13 waves
 
 Plans:
+
 - [ ] 02-01-PLAN.md — Desbloqueo: proveedor de email en `config.toml`, `.env.example`, env de build en CI y los guardarraíles 5 y 6 de arquitectura
 - [ ] 02-02-PLAN.md — Dominio puro: tabla de ruteo por rol, derivación de estado de apartamento, dinero COP y fechas de negocio
 - [ ] 02-03-PLAN.md — Dominio puro: contrato borrador→activo en Zod, `mapDbError` ampliado + `mapAuthError`, y el escáner de iCal con sus fixtures
@@ -85,14 +95,17 @@ Plans:
 - [ ] 02-13-PLAN.md — Cuartos y faltantes del apartamento, sección 5 (APTO-06, APTO-07)
 - [ ] 02-14-PLAN.md — APTO-12: guía de Airbnb, validación en vivo del feed y los siete estados
 - [ ] 02-15-PLAN.md — Cierre: capturas de la guía, las 11 puertas a mano, sign-off de validación y humo con feed real
+
 **UI hint**: yes
 
 ### Phase 3: Motor de sincronización iCal
+
 **Status**: Complete 2026-09-03 (`passed_with_gaps`) — 10/10 planes en 9 waves, 105 tests de integración, 112 aserciones pgTAP, 49 señuelos corridos y 48 atrapados. Gaps declarados con dueño: la clasificación reserva-vs-bloqueo en confianza MEDIA (sin `.ics` real de bloqueos, diferido por decisión), el dead man's switch externo, y la lectura de la instrumentación atada a que exista producción
 **Goal**: Todo checkout publicado en los calendarios se convierte en un aseo pendiente, sin duplicados y sin cancelaciones falsas
 **Depends on**: Fases 1 y 2
 **Requirements**: SYNC-01, SYNC-02, SYNC-03, SYNC-04, SYNC-05, SYNC-06, SYNC-07, SYNC-08, SYNC-09, SYNC-10, SYNC-11
 **Success Criteria** (qué debe ser VERDAD):
+
   1. Cada feed configurado se lee cada 30 minutos en una invocación aislada, y un feed caído no impide que los demás corran
   2. El fin de una **reserva** genera exactamente un aseo `normal` en la fecha correcta (su `DTEND`), corridas sucesivas sobre el mismo feed no crean duplicados, y los apartamentos con `gestion_vivaguest = false` generan un aseo informativo sin estado ni asignación
   3. Los **bloqueos del propietario** (fechas que el anfitrión cierra a mano, distintas de una reserva) no generan aseos, y un feed vacío, inválido o truncado no cancela ningún aseo existente y queda registrado como intento fallido
@@ -110,6 +123,7 @@ que no traen huésped ni generan aseo. Son cosas distintas.
 **Plans**: 10 plans
 
 Plans:
+
 - [x] 03-01-PLAN.md — Wave 0: guardarraíles de CI, las nueve fixtures que faltaban y el pgTAP de la fase en rojo
 - [x] 03-02-PLAN.md — Dominio puro del iCal: parser sin dependencias, clasificador de tres valores y normalizador donde muere el teléfono
 - [x] 03-03-PLAN.md — Migración 11: `pg_cron` y `pg_net`, `feed_sync_runs` como instrumento, y el CHECK de privacidad
@@ -122,17 +136,21 @@ Plans:
 - [x] 03-10-PLAN.md — Privacidad transversal, los dos checkpoints humanos y el cierre de la fase
 
 ### Phase 4: Dashboard operativo del admin
+
 **Goal**: El admin ve toda la operación del día en una pantalla y confirma, reasigna o cierra cualquier aseo sin salir de ahí
 **Depends on**: Fases 2 y 3
 **Requirements**: ASEO-01, ASEO-02, ASEO-03, ASEO-04, ASEO-05, ASEO-06, ASEO-08, ASEO-09, DASH-01, DASH-02, DASH-03, DASH-04, DASH-05, DASH-06, DASH-07, REPORT-04
 **Success Criteria** (qué debe ser VERDAD):
+
   1. Todo aseo nuevo nace en Pendiente sin confirmar y aparece en la bandeja persistente "Sin confirmar"; el admin lo confirma en un solo paso escribiendo número de huéspedes e instrucciones, y queda asignado en firme al responsable del apartamento
   2. El admin ve los servicios organizados por día (hoy, mañana y siguientes) y la carga diaria de cada aseador para decidir si activa al suplente
   3. El admin reasigna un aseo puntual sin tocar responsable ni suplente permanentes, crea aseos `repaso` y `emergencia`, reprograma fechas, cierra manualmente un aseo que la realidad ya resolvió y cancela
   4. Un solo panel de alertas muestra con la misma jerarquía visual: urgentes, extensión mal creada, "no puedo", daños, faltantes, calendario caído y hora límite vencida sin terminar
   5. El admin abre cualquier apartamento y ve su historial cronológico con los daños reportados; los aseos de unidades con `gestion_vivaguest = false` se muestran con fecha y a cargo de quién, sin estado ni acciones
+
 **Plans**: 14 plans en 6 waves
 Plans:
+
 - [x] 04-01-PLAN.md — Wave 0: guarda de duplicados, pgTAP de las seis RPC en rojo, helper de siembra
 - [x] 04-02-PLAN.md — Fundamentos de UI: `sheet`, tokens de `@theme` y `EstadoVacio compacto`
 - [x] 04-03-PLAN.md — `estadoDeAseo()`, fecha corta, tiempo relativo y el campo del error de ASEO-07
@@ -147,16 +165,19 @@ Plans:
 - [x] 04-12-PLAN.md — Historial del apartamento con los daños (DASH-06, REPORT-04)
 - [x] 04-13-PLAN.md — Panel de alertas, marca de frescura y Realtime con degradación
 - [x] 04-14-PLAN.md — E2E, prueba de escala de grises y puerta de fase
+
 **UI hint**: yes
 
 **Costura conocida:** al confirmar, el aseo queda asignado pero **no se notifica a nadie** hasta que exista la Fase 5. El evento se escribe en la cola de notificaciones y se drena cuando el worker exista. Es intencional, no un olvido.
 
 ### Phase 5: Notificaciones push e instalación de la PWA
+
 **Status**: **INCOMPLETA — 15/17 planes**, mergeada a `main` el 2026-09-12 sin verificación. Faltan **05-12** (`/instalar`: bloqueado esperando las cinco capturas reales; mientras tanto los cuatro enlaces del banner del aseador caen en 404, PWA-02 sin cumplir) y **05-17** (E2E de la fase, las doce puertas y la validación en teléfono físico). No existe `VERIFICATION.md`: los siete criterios de éxito **no se han verificado formalmente**
 **Goal**: El aseador instala la PWA y recibe en el teléfono cada aseo que se le asigna; el admin recibe cada evento de campo
 **Depends on**: Fase 2
 **Requirements**: NOTIF-01, NOTIF-02, NOTIF-03, NOTIF-04, PWA-02, PWA-03
 **Success Criteria** (qué debe ser VERDAD):
+
   1. La PWA se instala en la pantalla de inicio en Android y en iOS y desde ahí recibe notificaciones push en dispositivos físicos reales
   2. Al asignarse un aseo, el aseador recibe push con los detalles del aseo (apartamento, fecha y hora límite) y al tocarla aterriza en ese aseo, donde revela el código de acceso con la auditoría y la ventana temporal intactas. **Corregido 2026-09-10:** el código de acceso NO viaja dentro del payload de push. Desviación deliberada de la redacción original, justificada en `05-CONTEXT.md` D-06: el código solo sale por `reveal_access_code()`, que exige rastro en `access_code_reads` (T-01-48); meterlo en el payload lo pondría en la pantalla de bloqueo, sin auditoría y posiblemente días antes del aseo
   3. El admin recibe push por daño reportado, faltante reportado, "no puedo" y aseo completado
@@ -164,10 +185,12 @@ Plans:
   5. Cada envío queda registrado, los fallidos se reintentan, y las suscripciones que el navegador reporta como expiradas o revocadas se eliminan solas
   6. El admin ve qué aseadores no tienen push activo, y al confirmar un aseo para uno de ellos recibe una advertencia antes de asignar (`05-CONTEXT.md` D-03)
   7. Un aseo de fecha anterior a hoy, vivo y con la hora límite vencida, genera alerta. **Añadido 2026-09-10** por decisión explícita del usuario (`05-CONTEXT.md` D-08): hoy no la genera, porque `leerOperacion()` filtra con `.gte('scheduled_date', hoy)` en `lib/data/operacion.ts:243`. Toca el Core Value: un aseo se puede perder en silencio
+
 **Plans:** 17 plans en 9 waves
 **UI hint**: yes
 
 Plans:
+
 - [x] 05-01-PLAN.md — Compuerta de legitimidad de paquetes, dependencias, par VAPID y contrato de entorno
 - [x] 05-02-PLAN.md — Migración 16: columnas de verificación en `push_subscriptions`, grants por columna y la función agregada que ve el admin (cierra la compuerta §20.10 del UI-SPEC)
 - [x] 05-03-PLAN.md — Migración 17: dispatcher del outbox, trigger `AFTER INSERT` y cron de 60 s, con la aserción pgTAP de que un rollback revierte el disparo
@@ -187,20 +210,24 @@ Plans:
 - [ ] 05-17-PLAN.md — E2E en Chromium, las doce puertas y los procedimientos manuales en iPhone físico
 
 ### Phase 6: PWA del aseador, offline-first
+
 **Status**: Executed 2026-09-12 — 10/10 planes. Doce puertas en verde: pgTAP 269/269 declaradas, 1005 unitarios, 169 de integración, 107 E2E en Chromium. **Abierto:** el checkpoint humano de 06-10 (recorrido en un teléfono real). El criterio 4 quedó diferido por decisión del desarrollador
 **Goal**: El aseador ejecuta el aseo completo desde el teléfono y deja evidencia de lo que hizo. **Corregido 2026-09-12:** el "con o sin señal" sale del alcance, ver criterio 4
 **Depends on**: Fases 2 y 5
 **Requirements**: PWA-01, PWA-04, PWA-05, PWA-06, PWA-07, PWA-08, PWA-09, PWA-10, CHECK-01, CHECK-02, CHECK-03, CHECK-04, REPORT-01, REPORT-02, REPORT-03
 **Success Criteria** (qué debe ser VERDAD):
+
   1. El aseador ve la lista de sus aseos asignados y abre el detalle con instrucciones y código de acceso
   2. El aseador marca "Empecé", completa el checklist armado únicamente con los cuartos que ese apartamento tiene, y al finalizar el sistema le pide la evidencia cuarto por cuarto. **Corregido 2026-09-12** (`06-CONTEXT.md` D-06): "Terminé" **ya no se bloquea** por falta de foto. El aseador puede saltar un cuarto eligiendo un motivo de una lista cerrada, y entonces el aseo queda marcado **sin evidencia completa** y eso le sale al admin. Se evaluó bloquear y se eligió marcar: un bloqueo deja al aseador atrapado en campo, y una lista de motivos además se puede contar
   3. Las fotos se comprimen a ~200 KB con lado largo de 1280 px y pierden el EXIF en el dispositivo antes de subirse, conservando solo la corrección de orientación
   4. ~~El aseador completa un aseo entero en modo avión y todo sube al recuperar señal.~~ **DIFERIDO 2026-09-12** por decisión explícita del desarrollador (`06-CONTEXT.md` D-08). Era ~la mitad del trabajo de la fase. Riesgo aceptado y registrado en `.planning/BACKLOG.md`: si se cae la señal a mitad del aseo se pierde el trabajo de campo, y las fotos son justo lo que falla con mala señal
   5. El aseador reporta con **un solo campo libre clasificado** en daño, gasto o faltante, y **el gasto lleva monto** para que el cierre mensual de la Fase 7 lo pueda sumar (`06-CONTEXT.md` D-07). El "no puedo" **no es un botón dentro del aseo**: es la segunda opción al tocar la tarjeta, antes de empezar, y devuelve el aseo a Pendiente sin asignar avisando al admin (D-02)
+
 **Plans:** 10 plans en 7 waves
 **UI hint**: yes
 
 Plans:
+
 - [x] 06-01-PLAN.md — Migración 18: derogar el bloqueo de "Terminé" (D-06), tabla de cuartos saltados con motivo, y moneda en `expenses`
 - [x] 06-02-PLAN.md — Migración 19: los tres RPC de reporte, cada uno con su notificación al admin. Cobra la promesa de D-04 de la Fase 5
 - [x] 06-03-PLAN.md — Lógica pura: armado del checklist, progreso, evidencia incompleta, motivos y esquema del reporte
@@ -219,17 +246,37 @@ Plans:
 la fase son 10 planes y no 20.
 
 ### Phase 7: Financiero
+
 **Goal**: El admin tiene visión total de la plata en un solo tablero (cuánto se cobra, cuánto se paga, la diferencia y los gastos), filtrable por día, semana y mes; y cada aseador ve en su teléfono lo que se le va a pagar, y nada más
 **Depends on**: Fases 1 y 4
 **Requirements**: FIN-02, FIN-03, FIN-04, FIN-05
 **Success Criteria** (qué debe ser VERDAD):
+
   1. El admin ve la rentabilidad de cada aseo (fee al huésped menos pago al aseador) calculada contra las tarifas congeladas en ese aseo, y los aseos informativos quedan fuera de todo cálculo financiero y de toda métrica
   2. El admin abre una sola pantalla y ve cuánto cobró, cuánto pagó, cuánto reembolsó en gastos y cuánto le quedó, en el rango que elija, con filtro de día, semana y mes que manda sobre toda la pantalla
   3. Al cerrar el periodo, el sistema calcula el pago de cada aseador, lo persiste como snapshot propio y lo muestra en la sub-pestaña de Pagos, donde además se marca a quién ya se le pagó
   4. Ese snapshot queda escrito de forma que sobreviva al borrado de los aseos que lo sustentan, verificable borrando manualmente un aseo de un periodo ya cerrado
   5. El aseador ve en su app lo que se le va a pagar de los periodos ya cerrados, y NO existe ninguna consulta, por ninguna vía, que le devuelva una cifra de huésped o un margen
-**Plans**: TBD
+
+**Plans**: 12/14 plans executed
 **UI hint**: yes
+
+Plans:
+
+- [x] 07-01-PLAN.md — Wave 0: el contrato pgTAP de la fase, en rojo antes del schema
+- [x] 07-02-PLAN.md — Wave 0: sembrador de periodo completo y el dominio financiero en rojo
+- [x] 07-03-PLAN.md — Wave 0: las specs E2E de las cinco superficies nuevas, en rojo
+- [x] 07-04-PLAN.md — Migración 23: calendario de cierre, día de negocio y las tres tablas del snapshot
+- [x] 07-05-PLAN.md — Migración 24: cerrar la fuga de la tarifa al huésped, por las dos vías (D7-7)
+- [x] 07-06-PLAN.md — El dominio en TypeScript: gemelo del calendario, filtro del Resumen y agregación
+- [x] 07-07-PLAN.md — Migración 25: el cierre idempotente, sus dos puertas y el job agendado
+- [x] 07-08-PLAN.md — Migración 26: las lecturas del Resumen, del detalle y de la ficha
+- [x] 07-09-PLAN.md — Migración 27: Pagos del admin, marcar pagado, y las dos funciones del aseador
+- [x] 07-10-PLAN.md — Chasis de la sección y sub-pestaña Resumen
+- [x] 07-11-PLAN.md — Detalle aseo por aseo y ficha de aseadora
+- [x] 07-12-PLAN.md — Sub-pestaña Pagos: desglose, marcar pagado y aviso de periodo sin cerrar
+- [ ] 07-13-PLAN.md — La pantalla del aseador: sus periodos cerrados y su desglose
+- [ ] 07-14-PLAN.md — Puerta de fase: cinco señuelos, suite completa y consecuencias para la Fase 9
 
 > **Alcance recortado el 2026-09-13, por decisión del dueño.** `RET-03` (retención
 > legal) y `RET-07` (alerta de Storage al 70%) **salieron de esta fase**: no son
@@ -248,29 +295,35 @@ la fase son 10 planes y no 20.
 > este resumen.**
 
 ### Phase 8: Piloto en Bogotá 1
+
 **Goal**: Los 23 apartamentos de Bogotá 1, con personal propio, operan dentro del sistema sin WhatsApp ni Excel
 **Depends on**: Fases 4, 6 y 7
 **Requirements**: Ninguno nuevo (valida en operación real los requisitos ya entregados)
 **Success Criteria** (qué debe ser VERDAD):
+
   1. Existe una ruta `/instalar` que detecta navegador y webview, y una persona ajena al equipo completa la instalación de la PWA siguiéndola, tanto en iOS como en Android
   2. Los 23 apartamentos de Bogotá 1 están cargados con feeds activos, cuartos, lista base de faltantes, tarifas y responsable/suplente
   3. Durante el piloto, cada checkout detectado en calendario termina en un aseo confirmado, asignado y ejecutado con evidencia, con WhatsApp y Excel corriendo en paralelo solo como red de seguridad
   4. El admin ve el estado de onboarding de cada aseador del cluster: instaló la PWA, concedió el permiso de push y completó su primer aseo
+
 **Plans**: TBD
 **UI hint**: yes
 
 **Riesgo abierto:** no hay métrica de éxito definida para este piloto. Sin criterio de corte no hay forma de decidir cuándo se apagan WhatsApp y Excel. Está registrado como decisión pendiente, no como tarea de la fase.
 
 ### Phase 9: Borrado automático y retención
+
 **Goal**: El sistema se limpia solo, cabe en el free tier y no destruye ni evidencia en disputa ni historial de pagos
 **Depends on**: Fase 8
 **Requirements**: RET-01, RET-02, RET-04, RET-05, RET-06
 **Success Criteria** (qué debe ser VERDAD):
+
   1. Las fotos de evidencia con más de 30 días se borran solas, y el registro del aseo con su checklist sigue completo y consultable
   2. Los aseos, checklists, gastos y daños con más de 6 meses se borran solos, y el admin recibe aviso 15 días antes de cada borrado
   3. El borrado elimina los archivos en Storage además de las filas, sin dejar objetos huérfanos facturando, verificable comparando el bucket contra la tabla
   4. Un aseo marcado con retención legal nunca se borra, ni por la purga de fotos ni por la de 6 meses
   5. Los agregados de desempeño (timestamps de inicio y fin, eventos "no puedo") sobreviven al borrado del detalle
+
 **Plans**: TBD
 
 **Por qué va de último:** el job de 6 meses no tiene nada que borrar hasta el mes 7 de operación, así que construirlo antes del piloto no se puede validar. Las columnas que sí necesitan existir desde el principio (`legal_hold`, `deleted_at`) están en el alcance de la Fase 1.
@@ -292,11 +345,13 @@ Equipo de dos personas, ejecución secuencial estricta:
 ## Research adicional en planning
 
 Fases que necesitan `--research-phase`:
+
 - **Fase 3 (motor iCal):** el comportamiento del iCal de Airbnb no tiene especificación pública y la estabilidad del `UID` está en contradicción directa entre documentos de research
 - **Fase 5 (push):** el comportamiento de Web Push en iOS (expiración de suscripciones, `pushsubscriptionchange`) requiere validación en dispositivos físicos
 - **Fase 8 (piloto):** no hay patrón estándar de rollout de PWA a una fuerza laboral con dispositivos heterogéneos
 
 Fases con patrón ya documentado en el research (se puede saltar):
+
 - Fase 1 (schema + RLS), Fase 6 (cola offline idempotente), Fase 7 (snapshot), Fase 9 (soft delete y purga de Storage)
 
 ## Progress
@@ -309,7 +364,7 @@ Fases con patrón ya documentado en el research (se puede saltar):
 | 4. Dashboard operativo del admin | 14/14 | Complete   | 2026-09-06 |
 | 5. Notificaciones push e instalación de la PWA | 15/17 | Executed — 05-12 (wizard `/instalar`) y 05-17 (validación en dispositivo) diferidos por el desarrollador | 2026-09-11 |
 | 6. PWA del aseador, offline-first | 10/10 | Executed — checkpoint humano en teléfono real abierto (06-10 tarea 3) | 2026-09-12 |
-| 7. Financiero | 0/TBD | Not started | - |
+| 7. Financiero | 12/14 | In Progress|  |
 | 8. Piloto en Bogotá 1 | 0/TBD | Not started | - |
 | 9. Borrado automático y retención | 0/TBD | Not started | - |
 

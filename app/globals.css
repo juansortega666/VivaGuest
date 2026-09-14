@@ -577,6 +577,53 @@
   --container-motivo:        320px;  /* caja de motivos del skip (§8.4) */
 }
 
+/* ── Fase 7: la seccion de Finanzas — 07-UI-SPEC.md §2.1 ─────────────────────
+   Los ocho son multiplos de 4 y NINGUNO de sus nombres colisiona con una talla
+   de la escala de espaciado (`xs` `sm` `md` `lg` `xl` `2xl` `3xl`) ni con un
+   token ya declarado. La comprobacion se hizo nombre por nombre contra la lista
+   completa del repo antes de escribir este bloque, y es exactamente la que
+   falto las dos veces que este defecto costo un quick.
+
+   Las columnas de esta seccion son PROPIAS y no reutilizan las de /operacion ni
+   las de /apartamentos, misma regla que la Fase 4 ya escribio: compartir el
+   token haria que tocar una tabla moviera otra.
+
+   Se reutilizan tal cual, sin redeclarar: --spacing-fila (40px),
+   --spacing-fila-encabezado (32px), --spacing-barra (56px),
+   --spacing-col-nombre (200px), --spacing-col-acargo (176px),
+   --spacing-col-dinero (120px), --spacing-col-menu (48px), --spacing-avatar
+   (28px), --spacing-buscador (320px), --tracking-columna (0.04em),
+   --container-admin (1440px), --container-vacio (44ch), --container-sheet
+   (480px) y --container-dialogo (480px).
+
+   No se declara ningun token de toque: /finanzas es escritorio y tablet
+   apaisada, y el piso de 44px sigue siendo exclusivo de app/(cleaner)/.       */
+@theme {
+  /* ── tabla de detalle de aseos (§7.1) ─────────────────────────────────── */
+  --spacing-col-fecha:        96px;  /* PROGRAMADO y HECHO: `28 ene` a 14px con aire */
+
+  /* ── tabla de pagos (§9.1) ────────────────────────────────────────────── */
+  --spacing-col-conteo:       88px;  /* ASEOS, entero alineado a la derecha */
+  --spacing-col-pagado:      140px;  /* PAGADO: `Pagado el 3 sep`, la etiqueta mas larga */
+  --spacing-col-accion-pago: 160px;  /* la celda del boton `Marcar pagado` */
+
+  /* ── bloques del resumen (§6) ─────────────────────────────────────────── */
+  --spacing-kpi:            104px;  /* alto FIJO de la card de KPI: 16+17+8+29+17+16 = 103 */
+  --spacing-fila-aseador:    56px;  /* fila del bloque 3: circulo de 28 + nombre + barra de 4 */
+
+  /* ── recibo del gasto (§9.4) ──────────────────────────────────────────── */
+  --spacing-recibo-alto:    480px;  /* tope de alto de la foto dentro del dialogo */
+
+  /* ── ancho: NOMBRE PROPIO, NUNCA NOMBRE DE TALLA (§2.4) ─────────────────
+     Se usa como `min-w-boton-marcar` y NO como ancho maximo, asi que no entra
+     en conflicto con ninguna clase de primitiva y no necesita registro en el
+     grupo `max-w` de `cn()` en lib/utils.ts. Misma situacion que
+     --container-boton-alta, --container-boton-guardar y los cuatro de
+     /operacion. Si durante la ejecucion de la fase apareciera un ancho maximo
+     nuevo, ese registro NO es opcional.                                      */
+  --container-boton-marcar:  148px;  /* `Marcar pagado` -> `Marcando…` sin cambiar de ancho */
+}
+
 /* ── Fase 5: la escala tipografica del arbol del aseador — 05-UI-SPEC.md §3.1 ─
    SUPERSEDE de 02-UI-SPEC §3 DENTRO DE `app/(cleaner)/` Y SOLO AHI. Los roles
    siguen siendo cuatro y los pesos siguen siendo dos (400 y 600): lo que cambia

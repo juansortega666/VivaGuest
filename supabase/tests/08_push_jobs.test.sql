@@ -533,7 +533,17 @@ select is(
 -- GRUPO G — EL JOB ESTÁ AGENDADO Y CON LA SINTAXIS CORRECTA
 -- ===========================================================================
 
--- 14  El job nuevo, con su expresión, activo, y los CUATRO jobs del sistema.
+-- 14  El job nuevo, con su expresión, activo, y los CINCO jobs del sistema.
+--
+--     ACTUALIZADA EN LA FASE 7 (plan 07-07), de cuatro jobs a cinco. Es
+--     exactamente el trabajo de esta aserción: el inventario de jobs es una
+--     lista cerrada, y añadir uno obliga a declararlo aquí en vez de que
+--     aparezca sin que nadie lo mire. El quinto es `cerrar-periodo-de-pago`
+--     (migración 25), que corre a las 04:30 en tiempo universal —las 23:30 de
+--     Bogotá— y lleva la guarda de calendario DENTRO de la función, no en la
+--     expresión del cron: el comodín de último día del mes de pg_cron es el
+--     último día CALENDARIO, y eso cae en fin de semana en 8 de los 24 meses de
+--     2026 y 2027.
 --
 --     LA EXPRESIÓN NO ES DECORATIVA Y ESTA ASERCIÓN LA CONGELA POR UNA RAZÓN
 --     MEDIDA en la Fase 3 y reconfirmada aquí:
@@ -553,10 +563,11 @@ select is(
     (select coalesce(string_agg(j.jobname, '+' order by j.jobname), '<ninguno>') from cron.job j),
     (select count(*)::text from cron.job j where not j.active)],
   array['* * * * * | true',
-        '4',
-        'dispatch-feed-syncs+dispatch-push-notifications+feed-health-watchdog+purge-cron-history',
+        '5',
+        'cerrar-periodo-de-pago+dispatch-feed-syncs+dispatch-push-notifications'
+          || '+feed-health-watchdog+purge-cron-history',
         '0'],
-  'el job dispatch-push-notifications está agendado con el tick de cinco estrellas, activo, y son los cuatro del sistema');
+  'el job dispatch-push-notifications está agendado con el tick de cinco estrellas, activo, y son los cinco del sistema');
 
 -- 15  NO HAY UNA SEGUNDA PODA DE `cron.job_run_details`.
 --

@@ -4,8 +4,10 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { chromium, test as base, expect, type Page } from '@playwright/test';
+import { createClient } from '@supabase/supabase-js';
 
 import type { Database, Enums } from '@/lib/database.types';
+import { publicEnv, readServerSecret } from '@/lib/env';
 
 import {
   ARCHIVO_CREDENCIALES,
@@ -298,6 +300,140 @@ export async function esperarWorkerListo(pagina: Page): Promise<void> {
     undefined,
     { timeout: 20_000 },
   );
+}
+
+/**
+ * Espera a que UN CONTROL CONCRETO esté hidratado, o sea: a que tenga de verdad
+ * el manejador de clic que su componente de cliente le va a poner.
+ *
+ * ── EL FALLO QUE ESTA FUNCIÓN EXISTE PARA MATAR (medido el 2026-09-13) ─────
+ *
+ * `page.goto()` espera al evento `load`, que ocurre cuando llegó el HTML del
+ * servidor. En ese instante la pantalla YA SE VE ENTERA y todas las aserciones
+ * sobre texto, atributos y roles pasan, porque el árbol de accesibilidad lo
+ * produce el HTML renderizado en el servidor. Lo que todavía NO existe es un
+ * solo manejador de `onClick`.
+ *
+ * Un `click()` en esa ventana no falla ni avisa: Playwright encuentra el botón,
+ * lo ve visible y habilitado, y lo pulsa. No pasa nada. La prueba muere después
+ * esperando una navegación que nadie disparó, y el fallo apunta al componente en
+ * vez de a la carrera. Es lo que le pasaba a dos pruebas de `finanzas.spec.ts`,
+ * y por eso pasaban aisladas y fallaban en grupo: la ventana la abre o la cierra
+ * el rendimiento de la máquina, que es la definición de prueba que miente.
+ *
+ * ── POR QUÉ POR CONTROL Y NO «LA PÁGINA YA HIDRATÓ» ───────────────────────
+ *
+ * El primer intento esperó al elemento `next-route-announcer`, que Next crea en
+ * un `useEffect` del enrutador. **No alcanzó, y está medido:** con esa espera
+ * puesta, la prueba del chevron seguía fallando 2 de cada 3 veces. La razón es
+ * que la hidratación de React es progresiva: que la raíz del enrutador haya
+ * montado no dice nada sobre un componente hoja que vive en otro fragmento de
+ * JavaScript y que puede hidratar segundos después.
+ *
+ * ── EL MARCADOR, Y POR QUÉ ES EXACTO ──────────────────────────────────────
+ *
+ * React DOM escribe las props del elemento en el propio nodo, bajo una clave
+ * `__reactProps$<aleatorio>`, EN EL MOMENTO en que hidrata ese nodo. Preguntar
+ * si esa clave existe y si lleva un `onClick` invocable no es una aproximación
+ * temporal: es la señal positiva de que ese botón concreto ya responde. Vale en
+ * las compilaciones de producción, que es como corre esta suite.
+ *
+ * El sondeo va con `expect.poll`, que reevalúa DESDE Node; el predicado se
+ * ejecuta en la página pero no deja ningún bucle vivo dentro del documento.
+ */
+export async function esperarControlHidratado(
+  control: import('@playwright/test').Locator,
+): Promise<void> {
+  await expect
+    .poll(
+      async () =>
+        control.evaluate((el) => {
+          const clave = Object.keys(el).find((k) => k.startsWith('__reactProps$'));
+          if (clave === undefined) return false;
+          const props = (el as unknown as Record<string, { onClick?: unknown }>)[clave];
+          return typeof props?.onClick === 'function';
+        }),
+      {
+        timeout: 20_000,
+        message: 'El control nunca llegó a tener su manejador de clic: React no hidrató este nodo.',
+      },
+    )
+    .toBe(true);
+}
+
+/**
+ * Espera a que una navegación DEL LADO DEL CLIENTE haya dejado la URL en su
+ * sitio, sondeando desde Node y NUNCA desde dentro del documento.
+ *
+ * ── EL ARTEFACTO DE MEDICIÓN QUE ESTO ESQUIVA (medido el 2026-09-13) ───────
+ *
+ * `FiltroPeriodo` navega con `router.push` dentro de `useTransition`. Cuando la
+ * prueba espera ese cambio con `page.waitForURL()` o con
+ * `expect(page).toHaveURL()`, LA TRANSICIÓN NO SE COMPLETA NUNCA: medido con un
+ * plazo de 20 segundos, la aserción seguía viendo la URL vieja. Con una sola
+ * lectura tras dormir un segundo, la URL nueva YA ESTABA. Y sondeando
+ * `page.url()` desde Node, aparece a los ~200 ms.
+ *
+ * La diferencia entre los dos grupos es DÓNDE se sondea: los dos primeros
+ * inyectan un sondeo dentro de la página y se reprograman con
+ * `requestAnimationFrame`, y ese bucle y el commit de la transición de React se
+ * traban entre sí. `page.url()` se lee del lado del navegador, sin ejecutar nada
+ * dentro del documento, y no perturba lo que está midiendo.
+ *
+ * **No es un defecto del producto, y conviene que quede dicho:** la navegación
+ * tarda ~200 ms de verdad. Lo que estaba roto era el instrumento. Es el mismo
+ * error que esta fase persigue en la base de datos, solo que del lado del
+ * navegador: un rojo que acusa a la pantalla equivocada.
+ *
+ * Esto NO es la aserción, es la espera. La aserción sobre la URL se escribe
+ * después, y se sigue escribiendo.
+ */
+export async function esperarUrlDeCliente(
+  pagina: Page,
+  patron: RegExp,
+  ms = 15_000,
+): Promise<void> {
+  const limite = Date.now() + ms;
+  while (Date.now() < limite) {
+    if (patron.test(pagina.url())) return;
+    await pagina.waitForTimeout(50);
+  }
+  throw new Error(
+    `La navegación de cliente no dejó la URL en ${patron} tras ${ms} ms. Sigue en ${pagina.url()}`,
+  );
+}
+
+/**
+ * Pulsa un control que navega DEL LADO DEL CLIENTE y espera a que la URL lo
+ * demuestre, sin sondear nada dentro del documento.
+ *
+ * Es la composición de las dos funciones de arriba, y existe porque las dos
+ * trampas van SIEMPRE juntas: hay que esperar a que el control tenga manejador
+ * ANTES de pulsar, y hay que esperar la URL DESDE Node después.
+ *
+ * ── LO QUE ESTA FUNCIÓN NO ARREGLA, Y HAY QUE SABERLO AL LEER UN ROJO ──────
+ *
+ * Queda un fallo VIVO, medido el 2026-09-13 y anotado en el `deferred-items.md`
+ * de la Fase 7: en aproximadamente una corrida de cada dos, y con el control ya
+ * hidratado, la transición de `FiltroPeriodo` en `/finanzas` NO SE COMPLETA
+ * NUNCA. El contenedor se queda con `aria-busy="true"` para siempre y la
+ * respuesta RSC de la navegación llega con 200 y acto seguido se aborta.
+ *
+ * Cuando eso pasa, ESTA FUNCIÓN FALLA, y tiene que fallar: el rojo es del
+ * producto, no del instrumento, y el mensaje dice exactamente en qué URL se
+ * quedó. Descartado por medición: no es el service worker (reproducido con
+ * `/sw.js` bloqueado), no es el servidor (la misma petición RSC pedida a mano
+ * con `fetch` devuelve el cuerpo entero en ~100 ms), no es falta de hidratación,
+ * no es el orden de las pruebas, y volver a pulsar NO lo recupera.
+ */
+export async function pulsarHastaNavegar(
+  pagina: Page,
+  control: import('@playwright/test').Locator,
+  patron: RegExp,
+): Promise<void> {
+  await esperarControlHidratado(control);
+  await control.click();
+  await esperarUrlDeCliente(pagina, patron);
 }
 
 export type { RolE2E };
@@ -626,6 +762,25 @@ export interface AseoASembrar {
    */
   horaLimite?: string;
   huespedes?: number;
+  /**
+   * Instantes explícitos del ciclo de vida, en vez de los relativos a `Date.now()`.
+   *
+   * ── POR QUÉ HACEN FALTA, Y NO ES UN CAPRICHO DEL PLAN 07-03 ────────────────
+   * Los tres por defecto se calculan como "hace cuatro / dos / una hora", que
+   * sirve para sembrar el día de hoy y NO sirve para sembrar un periodo cerrado:
+   * un aseo de hace mes y medio tiene que tener su `finished_at` DENTRO de ese
+   * periodo, porque la pertenencia de un aseo a un periodo de pago se decide por
+   * su hora de ejecución convertida a día de Bogotá (D7-5), no por su fecha
+   * programada. Con el default, los cuatro aseos del periodo viejo caerían en el
+   * periodo EN CURSO y el cierre saldría vacío.
+   *
+   * Se pasan como texto ISO con desfase explícito `-05:00`. Un `YYYY-MM-DD` a
+   * secas se parsea como medianoche UTC y en Bogotá cae el día anterior, que es
+   * exactamente el error de un día que `lib/domain/dates.ts` persigue.
+   */
+  confirmadoEn?: string;
+  iniciadoEn?: string;
+  terminadoEn?: string;
 }
 
 /**
@@ -681,9 +836,9 @@ function construirAseo(fila: AseoASembrar): Partial<
   Database['public']['Tables']['cleanings']['Insert']
 > {
   const ahora = Date.now();
-  const haceCuatroHoras = new Date(ahora - 4 * 60 * 60 * 1000).toISOString();
-  const haceDosHoras = new Date(ahora - 2 * 60 * 60 * 1000).toISOString();
-  const haceUnaHora = new Date(ahora - 60 * 60 * 1000).toISOString();
+  const haceCuatroHoras = fila.confirmadoEn ?? new Date(ahora - 4 * 60 * 60 * 1000).toISOString();
+  const haceDosHoras = fila.iniciadoEn ?? new Date(ahora - 2 * 60 * 60 * 1000).toISOString();
+  const haceUnaHora = fila.terminadoEn ?? new Date(ahora - 60 * 60 * 1000).toISOString();
 
   const base: Record<string, unknown> = {
     property_id: fila.propiedad,
@@ -906,4 +1061,659 @@ export async function sembrarDanos(
   }
 
   return ids;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SIEMBRA DEL ESCENARIO FINANCIERO (plan 07-03, Fase 7)
+//
+// Deja en la base lo que las specs de `finanzas.spec.ts` y `mis-pagos.spec.ts`
+// necesitan y que ninguna de las dos puede sembrarse a mano sin duplicar el
+// cierre: DOS periodos ya cerrados y UNO en curso.
+//
+// ── ESTE SEMBRADOR NO CORRE TODAVÍA, Y ESO ES EL PLAN ────────────────────────
+// Nombra `public.periodo_de_cierre`, `public.cerrar_periodo`,
+// `public.marcar_pago_pagado` y la tabla `public.cleaner_payouts`. Ninguno existe
+// en `main`: los construyen los planes 07-04, 07-07 y 07-09. Hasta entonces la
+// llamada revienta con un mensaje que dice qué falta y quién lo trae, en vez de
+// con un `PGRST202` críptico. El archivo COMPILA hoy —que es lo que este plan
+// exige de él— y las dos specs que lo usan nacen rojas a propósito.
+//
+// ── LAS TRES REGLAS DEL SEMBRADOR DE OPERACIÓN SIGUEN EN PIE ─────────────────
+//   1. El día sale de la base (`today_bog()`), y los LÍMITES DE PERIODO también
+//      (`periodo_de_cierre()`). Ni un literal de calendario, ni el reloj del
+//      proceso. El calendario de cierre no es "el último día del mes": es el
+//      último día hábil, y duplicarlo en TypeScript aquí sería una segunda
+//      implementación que se desincroniza el primer mes que caiga en sábado.
+//   2. Orden de borrado por clave foránea, sin excepción.
+//   3. Se borra por id, nunca por tabla: el stack local es compartido.
+//
+// ── Y UNA CUARTA, PROPIA DE ESTA FASE ────────────────────────────────────────
+// **Las dos aseadoras del escenario son los usuarios de `global-setup`**, no
+// usuarios nuevos. El pago que `mis-pagos.spec.ts` tiene que ver es el del rol
+// con el que esa spec abre sesión; un pago de una aseadora recién creada no
+// aparecería en ninguna pantalla y el fallo apuntaría a la consulta.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Las cifras del escenario, y NO son redondas por una razón de método.
+ *
+ * `mis-pagos.spec.ts` afirma que ninguna cifra de huésped llega al navegador del
+ * aseador, y lo afirma buscando el número dentro del cuerpo de las respuestas de
+ * red. Con una tarifa de `120000` esa búsqueda daría positivos por accidente (un
+ * `Content-Length`, un tamaño de bundle, un hash). Con estos seis valores, que no
+ * comparten prefijo entre sí ni con ningún número frecuente, un acierto solo
+ * puede venir del dato.
+ *
+ * `margen = tarifa - pago`, y el margen también se busca: una pantalla que no
+ * mande la tarifa pero sí la resta sigue rompiendo la frontera.
+ */
+export const CIFRAS_FINANCIERAS = {
+  /** Tarifa al huésped del apartamento A. **Prohibida en el árbol del aseador.** */
+  tarifaA: 137731,
+  /** Lo que se le paga a la aseadora por el apartamento A. Esto SÍ lo ve. */
+  pagoA: 41117,
+  /** `tarifaA - pagoA`. **Prohibido en el árbol del aseador.** */
+  margenA: 96614,
+
+  tarifaB: 152909,
+  pagoB: 48211,
+  margenB: 104698,
+
+  /** El gasto reembolsado del periodo reciente. Esto SÍ lo ve el aseador. */
+  gasto: 33517,
+} as const;
+
+/**
+ * Los bytes del recibo sembrado: un JPEG de 1×1 blanco.
+ *
+ * Existe porque el bucket `evidencia` tiene `allowed_mime_types` limitado a
+ * jpeg, png y webp, así que no vale cualquier relleno con extensión `.jpg`: la
+ * subida lo rechaza. Y tiene que ser un JPEG DECODIFICABLE, no solo con la
+ * cabecera correcta: si el navegador no lo puede pintar, el manejador de error
+ * de la etiqueta `<img>` sustituye la foto por el estado de ausencia y la
+ * aserción de que el recibo se ve vuelve a ser inalcanzable.
+ */
+const BYTES_DEL_RECIBO = Buffer.from(
+  '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a' +
+    'HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIy' +
+    'MjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIA' +
+    'AhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQA' +
+    'AAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3' +
+    'ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWm' +
+    'p6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEB' +
+    'AAA/AP/Z',
+  'base64',
+);
+
+/** Un periodo de pago, de cierre a cierre. Las dos fechas son reales (D7-5). */
+export interface PeriodoDePago {
+  desde: string;
+  hasta: string;
+}
+
+/** Lo que `sembrarFinanzas()` deja en la base y `limpiarFinanzas()` borra. */
+export interface EscenarioFinanciero {
+  /** Gestionada, con `tarifaA` / `pagoA`. */
+  aptoA: UnidadSembrada;
+  /** Gestionada, con `tarifaB` / `pagoB`. Tarifas DISTINTAS a propósito: sin eso, el margen por fila no se distingue de una constante. */
+  aptoB: UnidadSembrada;
+  /** `gestion_vivaguest = false`. No puede aparecer en ningún número ni en el combobox (FIN-05). */
+  externa: UnidadSembrada;
+
+  /** `aseador1` de la semilla. Es con quien `mis-pagos.spec.ts` abre sesión. */
+  aseadoraUna: AseadoraSembrada;
+  /** `aseador2`. Su pago es el que el aseador1 NO puede ver. */
+  aseadoraDos: AseadoraSembrada;
+
+  /** El periodo que contiene hoy. **Sin cerrar.** El aseador no lo ve (D7-4.3). */
+  enCurso: PeriodoDePago;
+  /** El cerrado más reciente. Pago de la Una PENDIENTE, pago de la Dos PAGADO. */
+  reciente: PeriodoDePago;
+  /** El cerrado más antiguo. Pago de la Una PAGADO. */
+  viejo: PeriodoDePago;
+
+  /** El aseo cuya fecha programada y cuya fecha de ejecución caen en periodos DISTINTOS (D7-8). */
+  aseoCruzado: {
+    id: string;
+    /** Cae en el último día del periodo `viejo`. */
+    programado: string;
+    /** Cae dentro del periodo `reciente`. Es el que decide en qué pago entra. */
+    hecho: string;
+  };
+
+  /** El aseo cuyas dos fechas COINCIDEN. La línea de las dos fechas tiene que salir igual. */
+  aseoAlineado: { id: string; fecha: string };
+
+  /** El gasto del periodo `reciente`, con su fila de foto de recibo. */
+  gasto: { id: string; concepto: string; fotoId: string };
+
+  /**
+   * Los identificadores de los tres pagos que dejó el cierre.
+   *
+   * Hacen falta para dos aserciones que no se pueden escribir sin ellos: el
+   * desglose del aseador se abre por dirección directa, y **el desglose del
+   * compañero también** —que es justo la que comprueba que no se muestra—.
+   */
+  pagos: {
+    /** Aseadora Una, periodo reciente. **PENDIENTE.** */
+    unaReciente: string;
+    /** Aseadora Una, periodo viejo. **PAGADO.** */
+    unaVieja: string;
+    /** Aseadora Dos, periodo reciente. El que la Una no puede ver. */
+    dosReciente: string;
+  };
+
+  /** Los ids de los aseos sembrados, para la limpieza y para poder afirmar conteos. */
+  aseos: string[];
+
+  sufijo: string;
+}
+
+/**
+ * Un cliente de Supabase SIN el genérico `Database`, para hablar con lo que
+ * todavía no está en `lib/database.types.ts`.
+ *
+ * ── POR QUÉ NO SE EDITA `lib/database.types.ts` A MANO ───────────────────────
+ * Ese archivo lo genera el CLI y la puerta `db:types:check` de CI compara la
+ * generación contra el disco: añadirle a mano las tres tablas de la Fase 7 pone
+ * esa puerta en rojo hasta que la migración exista, y el rojo no diría nada útil.
+ * El plan 07-04 lo regenera; cuando eso pase, este cliente puede desaparecer y
+ * las llamadas de abajo pasan a tiparse solas.
+ *
+ * El alcance es lo más estrecho posible: solo lo usan las cuatro llamadas de este
+ * bloque. Todo lo demás del archivo sigue yendo por el cliente tipado.
+ */
+function clienteSinTipar(url: string, clave: string) {
+  return createClient(url, clave, { auth: { persistSession: false, autoRefreshToken: false } });
+}
+
+/** El cliente de servicio, sin el genérico. Mismo secreto, mismos privilegios. */
+function servicioSinTipar() {
+  const { NEXT_PUBLIC_SUPABASE_URL } = publicEnv();
+  return clienteSinTipar(NEXT_PUBLIC_SUPABASE_URL, readServerSecret('SUPABASE_SECRET_KEY'));
+}
+
+/**
+ * Un cliente con la sesión REAL del admin de la semilla.
+ *
+ * ── POR QUÉ EL CIERRE NO SE HACE CON EL CLIENTE DE SERVICIO ──────────────────
+ * `public.cerrar_periodo` es `security definer` con guarda `private.is_admin()`,
+ * que resuelve `auth.uid()` contra `profiles`. La clave de servicio no tiene
+ * `auth.uid()`, así que la guarda diría que no y el sembrador tendría que
+ * insertar las filas del snapshot A MANO, columna por columna. Eso sería peor que
+ * lento: sembraría un periodo cerrado que la función de cierre nunca produjo, y
+ * las specs afirmarían sobre datos que el sistema no sabe generar.
+ *
+ * Con una sesión de admin de verdad, el escenario que las specs ven es
+ * exactamente el que produce el camino de producción.
+ */
+async function clienteComoAdmin() {
+  const { NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY } = publicEnv();
+  const credenciales = leerCredenciales();
+  const admin = credenciales.admin;
+  if (!admin) throw new Error('No hay credenciales de admin en la corrida.');
+
+  const cliente = clienteSinTipar(NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+  const { error } = await cliente.auth.signInWithPassword({
+    email: admin.email,
+    password: admin.password,
+  });
+  if (error) throw new Error(`No se pudo abrir sesión de admin para sembrar: ${error.message}`);
+  return cliente;
+}
+
+/**
+ * El periodo de pago que contiene un día, PREGUNTÁNDOSELO A LA BASE.
+ *
+ * `public.periodo_de_cierre(date)` devuelve una fila con las dos fechas. Lo
+ * construye el plan 07-04; hasta entonces esto lanza con un mensaje que dice
+ * quién lo trae.
+ */
+async function periodoDeCierre(dia: string): Promise<PeriodoDePago> {
+  const { data, error } = await servicioSinTipar().rpc('periodo_de_cierre', { p_dia: dia });
+  if (error) {
+    throw new Error(
+      `No se pudo resolver el periodo de ${dia}: ${error.message}\n` +
+        'Si dice que la función no existe, es lo esperado hasta el plan 07-04: ' +
+        'public.periodo_de_cierre(date) todavía no está en ninguna migración.',
+    );
+  }
+
+  const filas = (data ?? []) as { periodo_desde: string; periodo_hasta: string }[];
+  const fila = filas[0];
+  if (!fila) throw new Error(`periodo_de_cierre(${dia}) no devolvió ninguna fila.`);
+  return { desde: fila.periodo_desde, hasta: fila.periodo_hasta };
+}
+
+/** Un instante de Bogotá a partir de un día de negocio y una hora del reloj. */
+function instanteBog(dia: string, hora: string): string {
+  return `${dia}T${hora}:00-05:00`;
+}
+
+/**
+ * Siembra dos periodos cerrados, uno en curso, y el cierre ya ejecutado.
+ *
+ * Lo que deja, y cada pieza está aquí porque una aserción la necesita:
+ *
+ * | Pieza | La aserción que la necesita |
+ * |---|---|
+ * | Dos gestionadas con tarifas distintas | El margen por fila no puede ser una constante disfrazada |
+ * | Una de gestión externa | FIN-05: no aparece ni en la tabla, ni en el combobox, ni en los totales |
+ * | Un aseo con fechas en periodos distintos | D7-8: la línea `Programado … · Hecho …` con las dos fechas de verdad |
+ * | Un aseo con las dos fechas iguales | D7-8 otra vez, en el caso que tienta a abreviar |
+ * | Un gasto con su foto de recibo | El desglose abre el recibo; la columna `GASTOS` no es `$ 0` |
+ * | Un daño | La fila `Con daños` del bloque 2, y la línea de que no se descuenta |
+ * | Un periodo en curso con aseos | D7-4.3: el aseador NO lo ve |
+ * | Un pago pagado y otro pendiente | Las dos columnas de estado de la tabla de pagos |
+ */
+export async function sembrarFinanzas(servicio: Servicio): Promise<EscenarioFinanciero> {
+  const sufijo = randomUUID().slice(0, 8);
+  const hoy = await diaDeNegocio(servicio);
+  const credenciales = leerCredenciales();
+
+  // Las dos aseadoras SON las de la semilla. Ver la cuarta regla de la cabecera.
+  const aseadoraUna: AseadoraSembrada = {
+    id: await idPorEmail(servicio, credenciales.aseador1.email),
+    nombre: 'Aseador Uno E2E',
+  };
+  const aseadoraDos: AseadoraSembrada = {
+    id: await idPorEmail(servicio, credenciales.aseador2.email),
+    nombre: 'Aseador Dos E2E',
+  };
+
+  // ── LOS TRES PERIODOS, TODOS DERIVADOS DE LA BASE ─────────────────────────
+  // Se encadenan hacia atrás restando UN día a `desde`: el día anterior al
+  // comienzo de un periodo es, por definición de D7-5, el día de cierre del
+  // anterior, y dos periodos consecutivos son contiguos y no se solapan.
+  const enCurso = await periodoDeCierre(hoy);
+  const reciente = await periodoDeCierre(sumarDias(enCurso.desde, -1));
+  const viejo = await periodoDeCierre(sumarDias(reciente.desde, -1));
+
+  const aptoA = await crearUnidadFinanciera(
+    servicio,
+    `E2E Fin Bogota ${sufijo}`,
+    sufijo,
+    aseadoraUna.id,
+    aseadoraDos.id,
+    CIFRAS_FINANCIERAS.tarifaA,
+    CIFRAS_FINANCIERAS.pagoA,
+  );
+  const aptoB = await crearUnidadFinanciera(
+    servicio,
+    `E2E Fin Medellin ${sufijo}`,
+    sufijo,
+    aseadoraUna.id,
+    aseadoraDos.id,
+    CIFRAS_FINANCIERAS.tarifaB,
+    CIFRAS_FINANCIERAS.pagoB,
+  );
+
+  const { data: externa, error: errorExterna } = await servicio
+    .from('properties')
+    .insert({
+      nombre: `E2E Fin Externa ${sufijo}`,
+      cluster: `E2E Fin ${sufijo}`,
+      gestion_vivaguest: false,
+      contacto_externo: `Administración Externa ${sufijo}`,
+      is_active: true,
+    })
+    .select('id, nombre')
+    .single();
+  if (errorExterna || !externa) {
+    throw new Error(`No se pudo sembrar la unidad externa: ${errorExterna?.message}`);
+  }
+
+  // ── LOS DÍAS DE CADA ASEO ────────────────────────────────────────────────
+  // Días DISTINTOS por apartamento dentro de cada periodo: el índice único
+  // parcial `(property_id, scheduled_date) where estado <> 'cancelado'` deja un
+  // solo aseo activo por apartamento y fecha, y una colisión aquí se lee como un
+  // fallo del sembrador tres archivos más allá.
+  const diaViejo = viejo.desde;
+  const diaCruzadoProgramado = viejo.hasta; // último día del periodo viejo
+  const diaCruzadoHecho = sumarDias(reciente.desde, 1); // ya dentro del reciente
+  const diaAlineado = sumarDias(reciente.desde, 2);
+  const diaDeLaDos = sumarDias(reciente.desde, 3);
+  const diaExterno = sumarDias(reciente.desde, 4);
+
+  const completado = (dia: string, aseador: string) => ({
+    estado: 'completada' as const,
+    aseador,
+    confirmadoEn: instanteBog(dia, '07:00'),
+    iniciadoEn: instanteBog(dia, '09:00'),
+    terminadoEn: instanteBog(dia, '11:30'),
+    huespedes: 2,
+  });
+
+  // El aseo del periodo VIEJO: es lo que hace que ese periodo tenga un pago que
+  // cerrar. Sin él, `cerrar_periodo` dejaría una cabecera sin pagos y la tarjeta
+  // pagada del teléfono no existiría.
+  const [aseoViejo] = await sembrarAseos(servicio, [
+    { propiedad: aptoA.id, fecha: diaViejo, ...completado(diaViejo, aseadoraUna.id) },
+  ]);
+
+  // Los del periodo RECIENTE.
+  const [aseoCruzadoId, aseoAlineadoId, aseoDeLaDos] = await sembrarAseos(servicio, [
+    // ── EL ASEO QUE HACE VISIBLE D7-8 ────────────────────────────────────────
+    // Programado el último día del periodo viejo, ejecutado ya dentro del
+    // reciente. Es el que se paga en el periodo del 2 y no en el del 28, y es la
+    // única razón por la que la línea de las dos fechas existe. Sin él, la
+    // aserción de D7-8 pasaría con las dos fechas iguales y no probaría nada.
+    {
+      propiedad: aptoA.id,
+      fecha: diaCruzadoProgramado,
+      ...completado(diaCruzadoHecho, aseadoraUna.id),
+    },
+    // Y su contraparte: las dos fechas coinciden. La línea tiene que salir IGUAL.
+    { propiedad: aptoB.id, fecha: diaAlineado, ...completado(diaAlineado, aseadoraUna.id) },
+    // El de la otra aseadora, que es el pago que el aseador1 no puede ver.
+    { propiedad: aptoB.id, fecha: diaDeLaDos, ...completado(diaDeLaDos, aseadoraDos.id) },
+  ]);
+
+  // El de gestión externa: nace INERTE por CHECK (`cl_unmanaged_is_inert`), así
+  // que no se le pasa ni estado ni aseador ni instantes. Parte de FIN-05 sale de
+  // ahí sola; lo que las specs miden es que tampoco aparezca en pantalla.
+  const [aseoExterno] = await sembrarAseos(servicio, [
+    { propiedad: externa.id, fecha: diaExterno },
+  ]);
+
+  // El periodo EN CURSO, con un aseo completado de la aseadora Una. Es lo que el
+  // teléfono NO puede mostrar (D7-4.3): un acumulado que todavía puede bajar.
+  const [aseoEnCurso] = await sembrarAseos(servicio, [
+    { propiedad: aptoA.id, fecha: hoy, ...completado(hoy, aseadoraUna.id) },
+  ]);
+
+  // ── EL GASTO Y SU RECIBO ─────────────────────────────────────────────────
+  const concepto = `Jabón y trapos ${sufijo}`;
+  const { data: gasto, error: errorGasto } = await servicio
+    .from('expenses')
+    .insert({
+      cleaning_id: aseoCruzadoId,
+      property_id: aptoA.id,
+      concepto,
+      monto: CIFRAS_FINANCIERAS.gasto,
+      reported_by: aseadoraUna.id,
+      created_at: instanteBog(diaCruzadoHecho, '11:00'),
+    })
+    .select('id')
+    .single();
+  if (errorGasto || !gasto) {
+    throw new Error(`No se pudo sembrar el gasto: ${errorGasto?.message}`);
+  }
+
+  // La ruta la impone un CHECK de la migración 10:
+  // `starts_with(storage_path, cleaning_id || '/' || kind || '/')`.
+  const rutaDelRecibo = `${aseoCruzadoId}/gasto/recibo-${sufijo}.jpg`;
+
+  const { data: foto, error: errorFoto } = await servicio
+    .from('cleaning_photos')
+    .insert({
+      cleaning_id: aseoCruzadoId,
+      kind: 'gasto',
+      expense_id: gasto.id,
+      storage_path: rutaDelRecibo,
+      mime_type: 'image/jpeg',
+      bytes: BYTES_DEL_RECIBO.length,
+      uploaded_by: aseadoraUna.id,
+    })
+    .select('id')
+    .single();
+  if (errorFoto || !foto) {
+    throw new Error(`No se pudo sembrar la foto del recibo: ${errorFoto?.message}`);
+  }
+
+  // ── Y LOS BYTES DE VERDAD, QUE LA FILA SOLA NO BASTA ─────────────────────
+  //
+  // AÑADIDO EN EL 07-12. Hasta aquí la siembra escribía la fila de
+  // `cleaning_photos` y nada más, así que en el bucket no había ningún objeto en
+  // esa ruta. Con eso, `createSignedUrl` falla —el almacenamiento comprueba que
+  // el objeto exista— y aunque no fallara, la etiqueta `<img>` recibiría una URL
+  // que devuelve 404 y caería en su manejador de error. En los dos caminos, el
+  // diálogo del recibo pinta su estado de ausencia y **no existe ninguna imagen
+  // que mirar**: la aserción de que el recibo se ve no la podía apagar ninguna
+  // pantalla.
+  //
+  // Un JPEG de 1×1 blanco, que es lo mínimo que el bucket acepta: su
+  // `allowed_mime_types` solo admite jpeg, png y webp, así que un archivo de
+  // texto con extensión `.jpg` lo rechaza la subida.
+  const subida = await servicio.storage
+    .from('evidencia')
+    .upload(rutaDelRecibo, BYTES_DEL_RECIBO, { contentType: 'image/jpeg', upsert: true });
+  if (subida.error) {
+    throw new Error(`No se pudieron subir los bytes del recibo: ${subida.error.message}`);
+  }
+
+  // ── EL DAÑO ──────────────────────────────────────────────────────────────
+  // Igual que en `historial.spec.ts`: hoy nadie escribe `damages` fuera de la PWA
+  // del aseador, así que la fila `Con daños` del bloque 2 solo se puede ejercer
+  // sembrando a mano. Queda dicho para que nadie lea el verde como "esto ocurre".
+  await sembrarDanos(servicio, [
+    {
+      aseo: aseoAlineadoId,
+      propiedad: aptoB.id,
+      descripcion: `Se rompió la ducha ${sufijo}`,
+      reportadoPor: aseadoraUna.id,
+      creadoEnMs: Date.parse(instanteBog(diaAlineado, '12:00')),
+    },
+  ]);
+
+  // ── EL CIERRE, EN ORDEN CRONOLÓGICO ──────────────────────────────────────
+  // Del viejo al reciente, que es el orden en que ocurre en producción. Al revés
+  // no daría el mismo resultado si algún día el cierre mirara el periodo anterior.
+  const admin = await clienteComoAdmin();
+  await cerrarPeriodo(admin, viejo);
+  await cerrarPeriodo(admin, reciente);
+
+  // ── LOS DOS ESTADOS DE PAGO ──────────────────────────────────────────────
+  // El pago del periodo viejo de la aseadora Una: PAGADO. El del reciente:
+  // PENDIENTE. Y el del reciente de la aseadora Dos: PAGADO. Con eso, la tabla
+  // del admin tiene las dos columnas de estado dentro de UN mismo bloque de
+  // periodo, y el teléfono de la Una tiene una tarjeta de cada clase.
+  const unaVieja = await idDePago(viejo, aseadoraUna.id);
+  const unaReciente = await idDePago(reciente, aseadoraUna.id);
+  const dosReciente = await idDePago(reciente, aseadoraDos.id);
+
+  await marcarPagado(admin, unaVieja);
+  await marcarPagado(admin, dosReciente);
+
+  // ── `scope: 'local'`, Y NO EL DEFECTO. ES LA DIFERENCIA ENTRE UNA SUITE
+  //    VERDE Y VEINTITRÉS ROJOS QUE NO SON DE NADIE. ─────────────────────────
+  //
+  // MEDIDO el 2026-09-13, en la primera corrida en que este sembrador llegó
+  // hasta el final: `signOut()` sin argumento usa `scope: 'global'`, que REVOCA
+  // TODOS los refresh tokens del usuario, no solo el de este cliente de Node.
+  // Y el admin de esta sesión es EL MISMO de la semilla cuyo `storageState`
+  // comparten `paginaAdmin` y todas las specs de la suite.
+  //
+  // Consecuencia, exactamente la que se vio: a partir de aquí el middleware
+  // llama `getUser()`, el servidor de Auth responde que la sesión ya no existe,
+  // y todo spec posterior que use la sesión de admin rebota a `/login`.
+  // `historial`, `operacion`, `operacion-alertas` y `ruteo` se pusieron rojos
+  // los 23 juntos, sin que ninguno tuviera nada que ver con finanzas.
+  //
+  // El defecto llevaba aquí desde el plan 07-03 y estaba TAPADO: hasta el plan
+  // 07-09, `marcarPagado` reventaba porque la función no existía, así que esta
+  // línea nunca se ejecutaba. Arreglar la función es lo que lo destapó.
+  //
+  // `local` cierra la sesión de ESTE cliente y no toca las demás, que es lo
+  // único que este sembrador necesita: ya escribió todo lo que tenía que
+  // escribir y no quiere dejar una sesión viva en el proceso de Node.
+  await admin.auth.signOut({ scope: 'local' });
+
+  return {
+    aptoA,
+    aptoB,
+    externa,
+    aseadoraUna,
+    aseadoraDos,
+    enCurso,
+    reciente,
+    viejo,
+    aseoCruzado: {
+      id: aseoCruzadoId,
+      programado: diaCruzadoProgramado,
+      hecho: diaCruzadoHecho,
+    },
+    aseoAlineado: { id: aseoAlineadoId, fecha: diaAlineado },
+    gasto: { id: gasto.id, concepto, fotoId: foto.id },
+    pagos: { unaReciente, unaVieja, dosReciente },
+    aseos: [aseoViejo, aseoCruzadoId, aseoAlineadoId, aseoDeLaDos, aseoExterno, aseoEnCurso],
+    sufijo,
+  };
+}
+
+/** Una gestionada con tarifas explícitas. Ver `crearUnidadGestionada` para el resto. */
+async function crearUnidadFinanciera(
+  servicio: Servicio,
+  nombre: string,
+  sufijo: string,
+  responsable: string,
+  suplente: string,
+  tarifa: number,
+  pago: number,
+): Promise<UnidadSembrada> {
+  const { data, error } = await servicio
+    .from('properties')
+    .insert({
+      nombre,
+      cluster: `E2E Fin ${sufijo}`,
+      gestion_vivaguest: true,
+      hora_limite: '10:15',
+      tarifa_huesped: tarifa,
+      pago_aseador: pago,
+      responsable_id: responsable,
+      suplente_id: suplente,
+      is_active: true,
+    })
+    .select('id, nombre')
+    .single();
+
+  if (error || !data) throw new Error(`No se pudo sembrar ${nombre}: ${error?.message}`);
+  return data;
+}
+
+/** Invoca el cierre real, con sesión de admin. Lo construye el plan 07-07. */
+async function cerrarPeriodo(
+  admin: ReturnType<typeof clienteSinTipar>,
+  periodo: PeriodoDePago,
+): Promise<void> {
+  // Los nombres de los argumentos son el ÚNICO acoplamiento de este archivo con
+  // la firma de 07-07. Si allá se llaman distinto, se cambia AQUÍ y en ningún
+  // otro sitio.
+  const { error } = await admin.rpc('cerrar_periodo', {
+    p_desde: periodo.desde,
+    p_hasta: periodo.hasta,
+  });
+  if (error) {
+    throw new Error(
+      `No se pudo cerrar el periodo ${periodo.desde}…${periodo.hasta}: ${error.message}\n` +
+        'Si dice que la función no existe, es lo esperado hasta el plan 07-07.',
+    );
+  }
+}
+
+/**
+ * El identificador del pago de una persona en un periodo.
+ *
+ * Se lee con el cliente de SERVICIO y no con el de admin porque las tres tablas
+ * del snapshot no tienen grant para `authenticated`: todo lo que el admin ve de
+ * ellas sale por función con guarda, y aquí no se está probando esa función, se
+ * está sembrando.
+ */
+async function idDePago(periodo: PeriodoDePago, aseadora: string): Promise<string> {
+  const { data, error } = await servicioSinTipar()
+    .from('cleaner_payouts')
+    .select('id')
+    .eq('periodo_desde', periodo.desde)
+    .eq('aseador_id', aseadora)
+    .single();
+
+  if (error || !data) {
+    throw new Error(
+      `No hay pago de ${aseadora} en el periodo ${periodo.desde}: ${error?.message ?? 'sin fila'}\n` +
+        'Si dice que la relación no existe, es lo esperado hasta el plan 07-04.',
+    );
+  }
+  return (data as { id: string }).id;
+}
+
+/**
+ * Pone la marca de pagado por el camino real: la RPC, con sesión de admin.
+ *
+ * No es un `update` con la clave de servicio, y la diferencia importa: la marca
+ * lleva autoría, y un `update` a mano sembraría un pago marcado por nadie, que es
+ * un estado que el sistema no sabe producir (D7-4.2).
+ */
+async function marcarPagado(
+  admin: ReturnType<typeof clienteSinTipar>,
+  pago: string,
+): Promise<void> {
+  // Los nombres de los argumentos son el ÚNICO acoplamiento de este archivo con
+  // la firma de 07-09, igual que en `cerrarPeriodo`. La Wave 0 escribió aquí
+  // `p_pago` a ciegas, antes de que la función existiera; la migración 27 la
+  // definió como `p_payout`, que es el nombre que citan los planes 07-09, 07-12
+  // y 07-13. Se corrige AQUÍ y en ningún otro sitio: PostgREST resuelve los RPC
+  // por nombre de argumento, así que un nombre viejo da PGRST202 y el `beforeAll`
+  // de `finanzas.spec.ts` muere dejando su siembra a medias.
+  const { error } = await admin.rpc('marcar_pago_pagado', { p_payout: pago });
+  if (error) {
+    throw new Error(
+      `No se pudo marcar pagado ${pago}: ${error.message}\n` +
+        'Si dice que la función no existe, es lo esperado hasta el plan 07-09.',
+    );
+  }
+}
+
+/**
+ * Borra lo que sembró `sembrarFinanzas()`, EN ORDEN DE CLAVE FORÁNEA.
+ *
+ * ── LO QUE PASA SI ESTO NO CORRE, Y ES PEOR QUE DEJAR BASURA ─────────────────
+ * La lista de `/finanzas/pagos` es ACUMULATIVA: un periodo cerrado de una corrida
+ * anterior sigue ahí y se pinta como un bloque más. La aserción de "solo el más
+ * reciente viene desplegado" empezaría a mirar el bloque equivocado, y el vacío
+ * `Todavía no se ha cerrado ningún periodo.` no volvería a aparecer nunca. El
+ * síntoma es una spec que pasa sola y falla dentro de la suite, que es la clase
+ * de fallo que más caro sale de diagnosticar.
+ *
+ * Los usuarios NO se borran: son los de `global-setup`, compartidos con el resto
+ * de la suite, y los borra el teardown global al final de la corrida.
+ */
+export async function limpiarFinanzas(
+  servicio: Servicio,
+  escenario: EscenarioFinanciero,
+): Promise<void> {
+  const crudo = servicioSinTipar();
+  const periodos = [escenario.viejo.desde, escenario.reciente.desde];
+
+  // 1. Las líneas del desglose. Cuelgan del pago con cascada DENTRO del
+  //    snapshot, pero se borran explícitamente: si algún día la cascada se
+  //    revisa, esto sigue limpiando.
+  const pagos = await crudo.from('cleaner_payouts').select('id').in('periodo_desde', periodos);
+  const idsDePago = ((pagos.data ?? []) as { id: string }[]).map((p) => p.id);
+  if (idsDePago.length > 0) {
+    await crudo.from('cleaner_payout_lines').delete().in('payout_id', idsDePago);
+  }
+
+  // 2. Los pagos, y 3. la cabecera de periodo. En ese orden: la referencia del
+  //    pago a la cabecera es de borrado RESTRINGIDO, a propósito (07-04).
+  await crudo.from('cleaner_payouts').delete().in('periodo_desde', periodos);
+  await crudo.from('payout_periods').delete().in('periodo_desde', periodos);
+
+  // 3b. Los BYTES del recibo en el bucket. La cascada de la base se lleva la
+  //     fila de `cleaning_photos`, pero el objeto de almacenamiento no cuelga de
+  //     ninguna clave foránea: sin este borrado quedaría un huérfano por corrida
+  //     en un bucket que nadie mira. `remove` no falla si ya no está.
+  await servicio.storage
+    .from('evidencia')
+    .remove([`${escenario.aseoCruzado.id}/gasto/recibo-${escenario.sufijo}.jpg`]);
+
+  // 4. Los aseos. Gastos, fotos y daños caen por cascada desde aquí. Se borran
+  //    POR APARTAMENTO y no por la lista de ids: un aseo que haya creado un test
+  //    pulsando un botón no está en ninguna lista, y bloquearía el paso 5.
+  const propiedades = [escenario.aptoA.id, escenario.aptoB.id, escenario.externa.id];
+  const aseos = await servicio.from('cleanings').delete().in('property_id', propiedades);
+  if (aseos.error) throw new Error(`No se pudieron borrar los aseos: ${aseos.error.message}`);
+
+  // 5. Los apartamentos.
+  const props = await servicio.from('properties').delete().in('id', propiedades);
+  if (props.error) throw new Error(`No se pudieron borrar los apartamentos: ${props.error.message}`);
 }

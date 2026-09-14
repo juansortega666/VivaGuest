@@ -391,3 +391,108 @@ export function formatInstanteBog(instante: number | string | null | undefined):
   if (ms === null) return null;
   return `${formatFechaBog(HOY_BOGOTA.format(new Date(ms)))}, ${HORA_BOGOTA.format(new Date(ms))}`;
 }
+
+/**
+ * Dia de la semana de un dia de negocio `'YYYY-MM-DD'`: 0 es DOMINGO y 6 es
+ * SABADO, igual que `Date#getUTCDay`.
+ *
+ * VIVE AQUI Y NO EN CADA CONSUMIDOR, por la misma razon literal que `sumarDias`:
+ * lo necesitan DOS modulos de calendario que tienen PROHIBIDO importarse entre
+ * si (`lib/domain/mes.ts`, que resuelve el cierre de mes retrocediendo el fin de
+ * semana, y `lib/domain/periodo.ts`, que ancla la semana en lunes). Con una
+ * copia en cada uno, arreglar el off-by-one en una sola de las dos es lo que
+ * pasa, y ninguna de las dos pantallas mira a la otra.
+ *
+ * AQUI SI SE CONSTRUYE UN INSTANTE Y ES CORRECTO, misma distincion que
+ * `sumarDias`: es aritmetica de calendario sobre componentes YA resueltos,
+ * anclada explicitamente con `Date.UTC`. Lo prohibido es `new Date('2026-01-31')`
+ * sobre la cadena entera, que se parsea como medianoche UTC y en Bogota
+ * renderiza el dia anterior.
+ *
+ * NO devuelve `isodow` de Postgres (1 lunes .. 7 domingo). El equivalente en
+ * TypeScript de ese contrato es el de `Date`, y traducirlo aqui obligaria a
+ * traducirlo de vuelta en cada consumidor.
+ */
+export function diaDeLaSemana(iso: string): number {
+  const [ano, mes, dia] = iso.split('-').map(Number);
+  return new Date(Date.UTC(ano, mes - 1, dia)).getUTCDay();
+}
+
+/**
+ * Nombre largo del mes de un dia de negocio, EN MINUSCULA: `'2026-09-01'`
+ * produce `"septiembre"`.
+ *
+ * En minuscula porque es como lo escribe el resto del producto y como lo emite
+ * `es-CO`; una mayuscula suelta en la cabecera del filtro rompe la homogeneidad.
+ *
+ * Se usa `Intl` y no una tabla explicita, al reves que `MESES_CORTOS`: alli el
+ * motivo era que `es-CO` devuelve `"sept"` de cuatro letras y que la abreviatura
+ * la fija la version de ICU del runtime. El nombre LARGO no tiene ninguna de las
+ * dos variaciones, y `FECHA_LARGA` ya depende de el unos renglones mas arriba.
+ */
+const MES_LARGO = new Intl.DateTimeFormat('es-CO', {
+  month: 'long',
+  timeZone: 'UTC',
+});
+
+export function nombreDeMesBog(iso: string): string {
+  const [ano, mes, dia] = iso.split('-').map(Number);
+  return MES_LARGO.format(new Date(Date.UTC(ano, mes - 1, dia)));
+}
+
+/**
+ * Nombre largo del dia de la semana, EN MINUSCULA: `'2026-09-10'` produce
+ * `"jueves"`.
+ *
+ * Existe como formateador aparte y no como bandera de `formatFechaBog()`, misma
+ * regla que ya escribio `FECHA_LARGA`: cuando hace falta otra forma se anade un
+ * formateador, no un parametro.
+ *
+ * Y hace falta por un motivo concreto de copy: la etiqueta del filtro en rango
+ * de dia es `jueves 10 de septiembre` (07-UI-SPEC §11.2), SIN coma. Un unico
+ * `Intl` con `weekday` y `day` junta las dos partes con `", "` en es-CO, asi que
+ * la etiqueta se compone de dos formateadores en vez de recortar una coma a mano.
+ */
+const DIA_LARGO = new Intl.DateTimeFormat('es-CO', {
+  weekday: 'long',
+  timeZone: 'UTC',
+});
+
+export function nombreDeDiaBog(iso: string): string {
+  const [ano, mes, dia] = iso.split('-').map(Number);
+  return DIA_LARGO.format(new Date(Date.UTC(ano, mes - 1, dia)));
+}
+
+/**
+ * El primer dia del mes calendario que contiene `iso`, en la misma forma:
+ * `'2026-09-13'` produce `'2026-09-01'`.
+ *
+ * Recorte de cadena y no aritmetica: el primero de un mes no depende de su
+ * longitud, asi que no hace falta pasar por ningun instante.
+ */
+export function primeroDelMes(iso: string): string {
+  return `${iso.slice(0, 7)}-01`;
+}
+
+/**
+ * El ULTIMO dia del mes calendario que contiene `iso`: `'2028-02-14'` produce
+ * `'2028-02-29'`.
+ *
+ * Se calcula como "el dia anterior al primero del mes siguiente" y NO con una
+ * tabla de longitudes de mes escrita a mano. La tabla es exactamente donde falla
+ * el bisiesto, y `sumarDias` ya normaliza el desbordamiento.
+ *
+ * VIVE AQUI POR LA MISMA RAZON QUE `sumarDias`, y con un matiz que importa: lo
+ * necesitan `lib/domain/mes.ts` (el cierre de pago) y `lib/domain/periodo.ts`
+ * (el filtro del Resumen), y esos dos modulos tienen PROHIBIDO importarse entre
+ * si. La prohibicion es sobre la REGLA DE NEGOCIO (que dia cierra el mes), no
+ * sobre la aritmetica del calendario gregoriano: el ultimo dia de febrero es un
+ * hecho, no una decision del dueno. Ponerlo aqui deja una sola copia sin abrir
+ * el puente que la separacion existe para impedir.
+ */
+export function ultimoDiaDelMes(iso: string): string {
+  const [ano, mes] = iso.split('-').map(Number);
+  const anoSiguiente = mes === 12 ? ano + 1 : ano;
+  const mesSiguiente = mes === 12 ? 1 : mes + 1;
+  return sumarDias(`${anoSiguiente}-${String(mesSiguiente).padStart(2, '0')}-01`, -1);
+}

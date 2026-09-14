@@ -398,6 +398,567 @@ export async function sembrarEscenarioDeAseos(): Promise<EscenarioDeAseos> {
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// EL SEMBRADOR DE PERIODO FINANCIERO COMPLETO (Fase 7)
+//
+// Lo consumen la capa de integración del cálculo del cierre y los specs de
+// punta a punta. Vive AQUÍ y no en cada archivo por la razón de siempre: un
+// escenario financiero sembrado a mano en tres sitios diverge en el tercer mes
+// y entonces nadie sabe cuál es el bueno.
+//
+// ── LOS SEIS CASOS BORDE QUE DECIDEN LA CORRECCIÓN DE LA FASE ──────────────
+//
+//   1. Un aseo terminado a las 23:30 de Bogotá DEL DÍA DE CIERRE. Es la trampa
+//      central: `finished_at` es un instante y la pertenencia al periodo es una
+//      pregunta sobre días de negocio. Resuelta en tiempo universal, ese aseo
+//      cae al día SIGUIENTE y se va al periodo equivocado. Como un periodo
+//      cerrado no se recalcula nunca, el error sería permanente y le cambiaría
+//      el pago a una persona.
+//   2. Su espejo: uno terminado a las 00:30 de Bogotá del día siguiente al
+//      cierre, que SÍ pertenece al periodo siguiente. Sin el espejo, una
+//      implementación que desplazara todo un día pasaría el caso 1.
+//   3. Uno cuya fecha programada y cuya fecha de ejecución caen en periodos
+//      distintos (programado antes del cierre, hecho después). Es el que el
+//      desglose tiene que saber pintar con las dos fechas.
+//   4. Un gasto con su fila de foto de recibo.
+//   5. Un aseo del periodo que queda SIN COMPLETAR cuando el periodo cierra.
+//   6. Una unidad de gestión externa y una aseadora desactivada. La externa no
+//      puede aparecer en ningún total ni conteo; la aseadora de baja SÍ, porque
+//      se le debe el trabajo que hizo antes de la baja.
+//
+// ── POR QUÉ ESCRIBE CON EL CLIENTE DE SERVICIO ────────────────────────────
+//
+// Deliberado, igual que el resto de este archivo: lo que se prueba con grants y
+// policies es pgTAP, con roles reales. Un test que siembra con el mismo cliente
+// con el que comprueba pasa aunque la policy esté mal escrita.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Un periodo de pago, de cierre a cierre (D7-5). Los dos extremos incluidos. */
+export type PeriodoDeSiembra = {
+  /** Día siguiente al cierre del mes anterior. */
+  desde: string;
+  /** El día de cierre. Es donde se ancla el aseo de las 23:30. */
+  hasta: string;
+};
+
+/**
+ * Los objetos del escenario financiero, con nombre.
+ *
+ * Misma regla que `EscenarioDeAseos`: nunca un arreglo indexado por posición.
+ * El índice 3 sigue siendo un uuid válido después de reordenar la siembra, solo
+ * que ya no es el aseo que la aserción cree.
+ */
+export type EscenarioFinanciero = {
+  /** Gestionado. Tarifas propias, distintas de las del segundo. */
+  aptoUno: string;
+  /** Gestionado. Tarifas DISTINTAS a las del primero, a propósito. */
+  aptoDos: string;
+  /** `gestion_vivaguest = false`. No entra en ningún total ni en ningún conteo. */
+  aptoExterno: string;
+
+  /** Activa. Hace el grueso del periodo, incluidos los dos casos del filo. */
+  aseadoraUno: string;
+  /** Activa. La del daño y la del aseo que queda sin completar. */
+  aseadoraDos: string;
+  /**
+   * `is_active = false`, y CON trabajo completado dentro del periodo.
+   *
+   * No es un adorno: darla de baja no borra lo que ya hizo, y el cierre le tiene
+   * que seguir debiendo ese dinero. Un cálculo que filtre por aseadora activa
+   * deja a una persona sin cobrar, y este es el escenario que lo delata.
+   */
+  aseadoraDeBaja: string;
+
+  /** CASO 1. `finished_at` a las 23:30 de Bogotá del día de cierre. */
+  aseoAlFiloDelCierre: string;
+  /** CASO 2. `finished_at` a las 00:30 de Bogotá del día siguiente al cierre. */
+  aseoDeLaMadrugadaSiguiente: string;
+  /** CASO 3. Programado dentro del periodo, terminado en el siguiente. */
+  aseoProgramadoEnOtroPeriodo: string;
+  /** CASO 4. Completado, con su gasto y la fila de foto del recibo. */
+  aseoConGasto: string;
+  /** Completado, con un daño reportado. Alimenta el conteo del bloque 2. */
+  aseoConDano: string;
+  /** Completado por la aseadora que después se dio de baja. */
+  aseoDeLaAseadoraDeBaja: string;
+  /** CASO 5. Confirmado y asignado, pero nunca terminado. */
+  aseoSinCompletar: string;
+  /** CASO 6. Fila inerte de gestión externa: sin estado, sin aseadora, sin tarifas. */
+  aseoExterno: string;
+
+  /** El gasto del CASO 4, con su recibo. El monto va en pesos enteros. */
+  gasto: {
+    id: string;
+    monto: number;
+    /** La fila de `cleaning_photos` con `kind = 'gasto'`. */
+    fotoId: string;
+    /** Ruta con la convención `{cleaning_id}/{kind}/{uuid}.{ext}`. */
+    storagePath: string;
+  };
+
+  /** El daño del bloque 2. */
+  dano: string;
+
+  /** El periodo sembrado, calculado y nunca literal. */
+  periodo: PeriodoDeSiembra;
+
+  fechas: {
+    /** El día de negocio SEGÚN LA BASE, del que cuelga todo lo demás. */
+    hoy: string;
+    /** `periodo.hasta`, repetido aquí porque es la fecha que más se afirma. */
+    cierre: string;
+    /** El día siguiente al cierre: ya es del periodo siguiente. */
+    diaSiguienteAlCierre: string;
+    /** El día en que se ejecutó el aseo del CASO 3. Periodo siguiente. */
+    ejecucionTardia: string;
+  };
+
+  /** Las tarifas snapshoteadas, para afirmar totales sin releer la base. */
+  tarifas: {
+    aptoUno: { tarifaHuesped: number; pagoAseador: number };
+    aptoDos: { tarifaHuesped: number; pagoAseador: number };
+  };
+};
+
+/** Tarifas del primer apartamento gestionado. */
+const TARIFAS_UNO = { tarifaHuesped: 150_000, pagoAseador: 55_000 } as const;
+/** DISTINTAS a las del primero: un total correcto no puede salir de multiplicar. */
+const TARIFAS_DOS = { tarifaHuesped: 90_000, pagoAseador: 38_000 } as const;
+/** El monto del gasto del CASO 4, en pesos enteros. */
+const MONTO_DEL_GASTO = 23_400;
+
+/**
+ * El ÚLTIMO DÍA HÁBIL del mes al que pertenece `fecha`, como ancla de fixture.
+ *
+ * ⚠️ ESTO NO ES EL CALENDARIO DE NEGOCIO, Y LA DISTINCIÓN IMPORTA.
+ *
+ * El calendario de negocio vive en Postgres y tiene su gemelo en el dominio de
+ * la aplicación; su paridad se mide sobre 36 meses en un test dedicado. Esto de
+ * aquí es otra cosa: el ancla que el arnés necesita para colocar el aseo del
+ * filo en un día que de verdad sea un cierre, sin importar cuándo corra la
+ * suite. Vive en `lib/test/` porque el arnés de pruebas no importa módulos de
+ * aplicación —misma razón por la que `sumarDias` está duplicada arriba— y
+ * porque si algún día divergieran, es ESTE archivo el que se ajusta.
+ *
+ * Quien quiera el ancla autoritativa le pasa el periodo por parámetro a
+ * `sembrarPeriodoCompleto()` y esta función no se usa.
+ *
+ * Sábado retrocede al viernes; domingo retrocede al viernes. Sin festivos, por
+ * decisión explícita del ROADMAP. Aritmética de calendario anclada en UTC, como
+ * `sumarDias`: no hay ninguna zona horaria implicada.
+ */
+function cierreDelMesDe(fecha: string): string {
+  const [ano, mes] = fecha.split('-').map(Number);
+  // Día 0 del mes SIGUIENTE es el último día de este mes. Resuelve de paso el
+  // año bisiesto sin una tabla de longitudes de mes.
+  const dia = new Date(Date.UTC(ano, mes, 0));
+  while (dia.getUTCDay() === 0 || dia.getUTCDay() === 6) {
+    dia.setUTCDate(dia.getUTCDate() - 1);
+  }
+  return dia.toISOString().slice(0, 10);
+}
+
+/** El primer día del mes al que pertenece `fecha`. */
+function primerDiaDelMesDe(fecha: string): string {
+  return `${fecha.slice(0, 7)}-01`;
+}
+
+/**
+ * Un instante EN HORA DE BOGOTÁ a partir de un día de negocio y una hora.
+ *
+ * El desfase va explícito y fijo porque Colombia no tiene horario de verano
+ * desde 1993, y porque es exactamente lo que ya hace `lib/domain/dates.test.ts`
+ * para fijar sus instantes. Escribir estas marcas con `Z` las movería cinco
+ * horas y destruiría el único caso que el escenario existe para producir: a las
+ * 23:30 de Bogotá del día de cierre, el día universal YA es el siguiente.
+ */
+function instanteBog(dia: string, hora: string): string {
+  return `${dia}T${hora}:00-05:00`;
+}
+
+/**
+ * Deja en la base un PERIODO DE PAGO COMPLETO, con sus seis casos borde.
+ *
+ * ── POR QUÉ EL PERIODO SE CALCULA Y NUNCA SE ESCRIBE LITERAL ──────────────
+ *
+ * Un `'2026-01-30'` en la fixture hace que la suite empiece a fallar sola en
+ * 2027, y el día que falle nadie va a estar mirando este archivo.
+ *
+ * El ancla por defecto es el mes al que pertenece `hoy - 45 días`, y esos 45
+ * días no son un número redondo: garantizan que el mes ancla esté CERRADO
+ * corra cuando corra la suite, incluido el día 1. Con el mes anterior a secas,
+ * una corrida del día 2 dejaría el aseo de ejecución tardía (cierre + 3 días)
+ * en el FUTURO, que es un estado que el cierre real nunca produce.
+ *
+ * ── QUIEN TENGA EL PERIODO AUTORITATIVO, QUE LO PASE ──────────────────────
+ *
+ * `opciones.periodo` existe para que la capa de integración le dé el periodo
+ * que devuelve Postgres en vez del ancla local. Así el arnés no se convierte en
+ * una tercera opinión sobre cuándo cierra el mes.
+ */
+export async function sembrarPeriodoCompleto(opciones?: {
+  periodo?: PeriodoDeSiembra;
+}): Promise<EscenarioFinanciero> {
+  const admin = clienteAdminDePruebas();
+  const sufijo = randomUUID().slice(0, 8);
+
+  const hoy = await hoySegunLaBase(admin);
+
+  const mesAncla = sumarDias(hoy, -45);
+  const cierre = opciones?.periodo?.hasta ?? cierreDelMesDe(mesAncla);
+  const periodo: PeriodoDeSiembra = {
+    desde:
+      opciones?.periodo?.desde ??
+      sumarDias(cierreDelMesDe(sumarDias(primerDiaDelMesDe(mesAncla), -1)), 1),
+    hasta: cierre,
+  };
+
+  const diaSiguienteAlCierre = sumarDias(cierre, 1);
+  const ejecucionTardia = sumarDias(cierre, 3);
+
+  const aseadoraUno = await crearAseador(admin, 'Aseadora Uno de finanzas', `f1.${sufijo}`);
+  const aseadoraDos = await crearAseador(admin, 'Aseadora Dos de finanzas', `f2.${sufijo}`);
+  const aseadoraDeBaja = await crearAseador(
+    admin,
+    'Aseadora Tres de finanzas',
+    `f3.${sufijo}`,
+  );
+
+  // El aseo de la aseadora de baja se siembra DESPUÉS de desactivarla, y sigue
+  // entrando: la baja no borra lo que ya hizo. Es el escenario que delata un
+  // cálculo que filtre por aseadora activa.
+  // `profiles_deactivation_coherent` exige que las dos columnas se muevan a la
+  // vez; escribir solo una da 23514.
+  const { error: errorBaja } = await admin
+    .from('profiles')
+    .update({ is_active: false, deactivated_at: new Date().toISOString() })
+    .eq('id', aseadoraDeBaja);
+  if (errorBaja) {
+    throw new Error(`No se pudo desactivar a la aseadora de baja: ${errorBaja.message}`);
+  }
+
+  const crearApartamento = async (
+    etiqueta: string,
+    tarifas: { tarifaHuesped: number; pagoAseador: number },
+    responsable: string,
+  ): Promise<string> => {
+    const { data, error } = await admin
+      .from('properties')
+      .insert({
+        nombre: `Int Fin ${etiqueta} ${sufijo}`,
+        cluster: 'Int Cluster Finanzas',
+        gestion_vivaguest: true,
+        hora_limite: '10:45',
+        tarifa_huesped: tarifas.tarifaHuesped,
+        pago_aseador: tarifas.pagoAseador,
+        responsable_id: responsable,
+        is_active: true,
+      })
+      .select('id')
+      .single();
+
+    if (error || !data) {
+      throw new Error(`No se pudo sembrar el apartamento ${etiqueta}: ${error?.message}`);
+    }
+    propiedadesSembradas.push(data.id);
+    return data.id;
+  };
+
+  const aptoUno = await crearApartamento('Uno', TARIFAS_UNO, aseadoraUno);
+  const aptoDos = await crearApartamento('Dos', TARIFAS_DOS, aseadoraDos);
+
+  // `props_assignees_only_when_managed` exige que la unidad informativa NO
+  // tenga responsable ni suplente: quien la atiende va en `contacto_externo`.
+  // Y `props_active_requires_rates` no le pide tarifas, a propósito: no hay
+  // nada que cobrar ni que pagar en una unidad que no es negocio propio.
+  const { data: externo, error: errorExterno } = await admin
+    .from('properties')
+    .insert({
+      nombre: `Int Fin Externo ${sufijo}`,
+      cluster: 'Int Cluster Finanzas',
+      gestion_vivaguest: false,
+      contacto_externo: `Administracion externa ${sufijo}`,
+      is_active: true,
+    })
+    .select('id')
+    .single();
+
+  if (errorExterno || !externo) {
+    throw new Error(`No se pudo sembrar el apartamento externo: ${errorExterno?.message}`);
+  }
+  propiedadesSembradas.push(externo.id);
+
+  const confirmado = instanteBog(periodo.desde, '08:00');
+
+  // ── LAS FECHAS, Y POR QUÉ NINGUNA COLISIONA ──────────────────────────────
+  //
+  // `cleanings_one_active_per_property_date` es único y PARCIAL sobre
+  // (property_id, scheduled_date) excluyendo lo cancelado. Aquí no hay ningún
+  // aseo cancelado, así que las fechas de un mismo apartamento tienen que ser
+  // todas distintas o el insert devuelve 23505:
+  //
+  //   apto uno → cierre, cierre+1, cierre-2, cierre-5
+  //   apto dos → cierre-5, cierre-3, cierre-1
+  //   externo  → cierre-3
+  //
+  // El desplazamiento máximo hacia atrás es de cinco días, muy por dentro del
+  // periodo más corto posible (febrero da unos veintisiete días), así que todo
+  // lo que se declara "dentro del periodo" lo está de verdad.
+  //
+  // Las filas se declaran `Partial` y se castean al insertar por la misma razón
+  // que el sembrador de operación: `hora_limite`, `is_managed` y las tarifas las
+  // pone `tg_cleanings_snapshot()` en el BEFORE INSERT, y los CHECK de tabla se
+  // evalúan DESPUÉS de los triggers BEFORE. Escribirlas a mano permitiría
+  // sembrar un aseo cuyo snapshot contradice a su apartamento, que es un estado
+  // que la base nunca produce.
+  const filas = [
+    // CASO 1. El filo. 23:30 de Bogotá del día de cierre = 04:30 universal del
+    // día SIGUIENTE. Si la pertenencia al periodo se resuelve sin convertir a
+    // día de negocio, este aseo se va al periodo siguiente y una persona cobra
+    // de menos, para siempre.
+    {
+      property_id: aptoUno,
+      origin: 'ical',
+      state: 'completada',
+      scheduled_date: cierre,
+      aseador_id: aseadoraUno,
+      confirmado_at: confirmado,
+      num_huespedes: 2,
+      started_at: instanteBog(cierre, '22:00'),
+      finished_at: instanteBog(cierre, '23:30'),
+    },
+    // CASO 2. El espejo. 00:30 de Bogotá = 05:30 universal del MISMO día. Este
+    // sí pertenece al periodo siguiente. Sin él, una implementación que
+    // desplazara todo un día pasaría el caso 1 y seguiría estando mal.
+    {
+      property_id: aptoUno,
+      origin: 'ical',
+      state: 'completada',
+      scheduled_date: diaSiguienteAlCierre,
+      aseador_id: aseadoraUno,
+      confirmado_at: confirmado,
+      num_huespedes: 3,
+      started_at: instanteBog(diaSiguienteAlCierre, '00:05'),
+      finished_at: instanteBog(diaSiguienteAlCierre, '00:30'),
+    },
+    // CASO 3. Programado dentro del periodo, hecho en el siguiente. Cuenta en el
+    // periodo en que SE TERMINÓ (D7-8), y el desglose lo pinta con las dos
+    // fechas: un aseo de enero en el recibo de febrero parece un error si solo
+    // se ve una.
+    {
+      property_id: aptoUno,
+      origin: 'ical',
+      state: 'completada',
+      scheduled_date: sumarDias(cierre, -2),
+      aseador_id: aseadoraUno,
+      confirmado_at: confirmado,
+      num_huespedes: 2,
+      started_at: instanteBog(ejecucionTardia, '13:30'),
+      finished_at: instanteBog(ejecucionTardia, '15:00'),
+    },
+    // CASO 4. El del gasto con recibo.
+    {
+      property_id: aptoUno,
+      origin: 'ical',
+      state: 'completada',
+      scheduled_date: sumarDias(cierre, -5),
+      aseador_id: aseadoraUno,
+      confirmado_at: confirmado,
+      num_huespedes: 4,
+      started_at: instanteBog(sumarDias(cierre, -5), '14:00'),
+      finished_at: instanteBog(sumarDias(cierre, -5), '16:00'),
+    },
+    // El del daño. En el SEGUNDO apartamento, con tarifas distintas: así un
+    // total correcto no se puede obtener multiplicando el número de aseos por
+    // una tarifa única.
+    {
+      property_id: aptoDos,
+      origin: 'ical',
+      state: 'completada',
+      scheduled_date: sumarDias(cierre, -5),
+      aseador_id: aseadoraDos,
+      confirmado_at: confirmado,
+      num_huespedes: 2,
+      started_at: instanteBog(sumarDias(cierre, -5), '09:00'),
+      finished_at: instanteBog(sumarDias(cierre, -5), '11:00'),
+    },
+    // El de la aseadora ya desactivada. Se le sigue debiendo.
+    {
+      property_id: aptoDos,
+      origin: 'ical',
+      state: 'completada',
+      scheduled_date: sumarDias(cierre, -3),
+      aseador_id: aseadoraDeBaja,
+      confirmado_at: confirmado,
+      num_huespedes: 1,
+      started_at: instanteBog(sumarDias(cierre, -3), '09:30'),
+      finished_at: instanteBog(sumarDias(cierre, -3), '11:15'),
+    },
+    // CASO 5. Confirmado y asignado, nunca terminado. Es el contador de no
+    // computados: el periodo cierra y este aseo no entra en ningún total.
+    // `cl_pendiente_shape` exige las dos marcas de ejecución nulas.
+    {
+      property_id: aptoDos,
+      origin: 'ical',
+      state: 'pendiente',
+      scheduled_date: sumarDias(cierre, -1),
+      aseador_id: aseadoraDos,
+      confirmado_at: confirmado,
+      num_huespedes: 2,
+    },
+    // CASO 6. Gestión externa. `tg_cleanings_snapshot` fuerza el estado a nulo;
+    // se manda explícito para que el contrato quede escrito aquí y no dependa
+    // de que el trigger siga haciéndolo.
+    {
+      property_id: externo.id,
+      origin: 'ical',
+      state: null,
+      scheduled_date: sumarDias(cierre, -3),
+    },
+  ] satisfies Partial<Database['public']['Tables']['cleanings']['Insert']>[];
+
+  const { data: aseos, error: errorAseos } = await admin
+    .from('cleanings')
+    .insert(filas as Database['public']['Tables']['cleanings']['Insert'][])
+    .select('id, property_id, state, scheduled_date, finished_at');
+
+  if (errorAseos || !aseos) {
+    throw new Error(`No se pudieron sembrar los aseos del periodo: ${errorAseos?.message}`);
+  }
+  const sembrados = aseos;
+  for (const aseo of sembrados) aseosSembrados.push(aseo.id);
+
+  // Identificación por PROPIEDAD del dato y nunca por el orden del arreglo:
+  // PostgREST no garantiza que un insert múltiple devuelva las filas en el
+  // orden en que se mandaron, y confiar en eso es un fallo intermitente.
+  const buscar = (apartamento: string, fecha: string, que: string): string => {
+    const hallado = sembrados.filter(
+      (a) => a.property_id === apartamento && a.scheduled_date === fecha,
+    );
+    if (hallado.length !== 1) {
+      throw new Error(`Se esperaba exactamente un aseo ${que}, hay ${hallado.length}.`);
+    }
+    return hallado[0].id;
+  };
+
+  const aseoAlFiloDelCierre = buscar(aptoUno, cierre, 'al filo del cierre');
+  const aseoDeLaMadrugadaSiguiente = buscar(
+    aptoUno,
+    diaSiguienteAlCierre,
+    'de la madrugada siguiente',
+  );
+  const aseoProgramadoEnOtroPeriodo = buscar(
+    aptoUno,
+    sumarDias(cierre, -2),
+    'programado en otro periodo',
+  );
+  const aseoConGasto = buscar(aptoUno, sumarDias(cierre, -5), 'con gasto');
+  const aseoConDano = buscar(aptoDos, sumarDias(cierre, -5), 'con daño');
+  const aseoDeLaAseadoraDeBaja = buscar(aptoDos, sumarDias(cierre, -3), 'de la aseadora de baja');
+  const aseoSinCompletar = buscar(aptoDos, sumarDias(cierre, -1), 'sin completar');
+  const aseoExterno = buscar(externo.id, sumarDias(cierre, -3), 'de gestión externa');
+
+  const { data: gasto, error: errorGasto } = await admin
+    .from('expenses')
+    .insert({
+      cleaning_id: aseoConGasto,
+      property_id: aptoUno,
+      concepto: 'Bolsas de basura y desinfectante',
+      monto: MONTO_DEL_GASTO,
+      reported_by: aseadoraUno,
+    })
+    .select('id')
+    .single();
+
+  if (errorGasto || !gasto) {
+    throw new Error(`No se pudo sembrar el gasto: ${errorGasto?.message}`);
+  }
+
+  // ── EL RECIBO: LA LÍNEA CONTABLE, NO EL OBJETO ───────────────────────────
+  //
+  // NO se sube nada a Storage a propósito. Lo que este escenario tiene que
+  // producir es la fila que enlaza el gasto con su recibo, que es lo que el
+  // desglose recorre. El estado "recibo ausente" es un estado DECLARADO de la
+  // interfaz, no un fallo, así que un test que abra el recibo y no encuentre el
+  // objeto sigue midiendo algo cierto.
+  //
+  // La convención de ruta es contrato duro: `{cleaning_id}/{kind}/{uuid}.{ext}`.
+  // Las policies de Storage autorizan comparando el PRIMER segmento con el aseo
+  // del aseador, así que una ruta con otra forma rompe la autorización en
+  // silencio.
+  const storagePath = `${aseoConGasto}/gasto/${randomUUID()}.jpg`;
+  const { data: foto, error: errorFoto } = await admin
+    .from('cleaning_photos')
+    .insert({
+      cleaning_id: aseoConGasto,
+      kind: 'gasto',
+      expense_id: gasto.id,
+      storage_bucket: 'evidencia',
+      storage_path: storagePath,
+      mime_type: 'image/jpeg',
+      bytes: 204_800,
+      width: 1280,
+      height: 960,
+      uploaded_by: aseadoraUno,
+    })
+    .select('id')
+    .single();
+
+  if (errorFoto || !foto) {
+    throw new Error(`No se pudo sembrar la foto del recibo: ${errorFoto?.message}`);
+  }
+
+  const { data: dano, error: errorDano } = await admin
+    .from('damages')
+    .insert({
+      cleaning_id: aseoConDano,
+      property_id: aptoDos,
+      descripcion: 'Puerta del closet descuadrada',
+      reported_by: aseadoraDos,
+    })
+    .select('id')
+    .single();
+
+  if (errorDano || !dano) {
+    throw new Error(`No se pudo sembrar el daño: ${errorDano?.message}`);
+  }
+
+  return {
+    aptoUno,
+    aptoDos,
+    aptoExterno: externo.id,
+    aseadoraUno,
+    aseadoraDos,
+    aseadoraDeBaja,
+    aseoAlFiloDelCierre,
+    aseoDeLaMadrugadaSiguiente,
+    aseoProgramadoEnOtroPeriodo,
+    aseoConGasto,
+    aseoConDano,
+    aseoDeLaAseadoraDeBaja,
+    aseoSinCompletar,
+    aseoExterno,
+    gasto: {
+      id: gasto.id,
+      monto: MONTO_DEL_GASTO,
+      fotoId: foto.id,
+      storagePath,
+    },
+    dano: dano.id,
+    periodo,
+    fechas: {
+      hoy,
+      cierre,
+      diaSiguienteAlCierre,
+      ejecucionTardia,
+    },
+    tarifas: {
+      aptoUno: { ...TARIFAS_UNO },
+      aptoDos: { ...TARIFAS_DOS },
+    },
+  };
+}
+
 /**
  * La fila CRUDA del aseo, sin ningún embed.
  *
@@ -438,6 +999,19 @@ export async function leerAseo(id: string): Promise<FilaDeAseo | null> {
  * admin —y que este arnés no registró— se borran también, filtrando por
  * apartamento: un aseo huérfano bloquearía el borrado del apartamento con 23503
  * y dejaría la base sucia, que es el fallo que contamina el archivo siguiente.
+ *
+ * ── TAMBIÉN LIMPIA EL ESCENARIO FINANCIERO ─────────────────────────────────
+ *
+ * `sembrarPeriodoCompleto()` registra sus apartamentos y sus usuarios en los
+ * MISMOS tres registros de arriba, así que esta función los borra sin ninguna
+ * rama aparte. Y eso es deliberado: dos funciones de limpieza son dos sitios
+ * donde acordarse, y el segundo se queda atrás en silencio.
+ *
+ * Los gastos, los daños y las fotos NO se nombran aquí porque cuelgan del aseo
+ * con `on delete cascade` y caen con él. Lo que sí importa es el orden, que ya
+ * está resuelto: los aseos primero, y con ellos sus hijas, antes de tocar los
+ * apartamentos —`damages.property_id` y `expenses.property_id` son `on delete
+ * restrict` contra `properties`, así que al revés daría 23503—.
  */
 export async function limpiarAseos(): Promise<void> {
   const admin = clienteAdminDePruebas();

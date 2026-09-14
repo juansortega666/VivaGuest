@@ -38,8 +38,19 @@ export const PUBLICAS: readonly string[] = ['/login'];
  */
 const ZONA_ADMIN: readonly string[] = ['/operacion', '/apartamentos', '/aseadores'];
 
-/** Prefijos de la zona del aseador. */
-const ZONA_ASEADOR: readonly string[] = ['/mis-aseos'];
+/**
+ * Prefijos de la zona del aseador.
+ *
+ * `/mis-pagos` entra en la Fase 7 (plan 07-13) y NO es cosmetico: sus dos
+ * pantallas leen funciones con guarda de aseador activo, asi que un admin que
+ * escriba esa direccion recibe una denegacion de la base y la pantalla se cae
+ * con un error de servidor. Sin la zona, el ruteo no lo devuelve a su raiz y el
+ * admin ve un error donde deberia ver su propia pantalla.
+ *
+ * La frontera sigue siendo la de siempre —la guarda de la funcion, no esto—:
+ * lo que esta tabla evita es una pantalla incomoda, nunca un acceso.
+ */
+const ZONA_ASEADOR: readonly string[] = ['/mis-aseos', '/mis-pagos'];
 
 const enZona = (pathname: string, zona: readonly string[]): boolean =>
   zona.some((p) => pathname === p || pathname.startsWith(`${p}/`));

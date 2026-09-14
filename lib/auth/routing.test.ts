@@ -30,12 +30,19 @@ const CASOS: ReadonlyArray<readonly [string, Rol | undefined, string | null]> = 
   ['/apartamentos', 'aseador', '/mis-aseos'],
   ['/operacion', 'aseador', '/mis-aseos'],
   ['/aseadores', 'aseador', '/mis-aseos'],
+  // Sin esta fila, un admin que escribe la direccion de los pagos del aseador
+  // aterriza en una denegacion de la base convertida en error de servidor, no
+  // en su propia pantalla (Fase 7, plan 07-13).
+  ['/mis-pagos', 'admin', '/operacion'],
+  ['/mis-pagos/8f2d1e40-0000-4000-8000-000000000001', 'admin', '/operacion'],
 
   // Cada quien en su zona: no se toca.
   ['/apartamentos/8f2d1e40-0000-4000-8000-000000000001/calendario', 'admin', null],
   ['/aseadores', 'admin', null],
   ['/operacion', 'admin', null],
   ['/mis-aseos', 'aseador', null],
+  ['/mis-pagos', 'aseador', null],
+  ['/mis-pagos/8f2d1e40-0000-4000-8000-000000000001', 'aseador', null],
 ];
 
 describe('resolverRedireccion', () => {

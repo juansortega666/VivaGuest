@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 06
-current_phase_name: pwa-del-aseador
+current_phase: 07
+current_phase_name: financiero
 status: planning
-stopped_at: "2026-09-12. AUDITORIA DE COORDINACION. Fase 6 mergeada a main (10/10). Fase 5 mergeada INCOMPLETA: 15/17, sin VERIFICATION.md, y sus 7 criterios sin verificar. Defecto vivo: /instalar no existe y los cuatro enlaces del banner del aseador caen en 404 (PWA-02 sin cumplir). HALLAZGO: la suite e2e se estaba corriendo contra OTRO proyecto (Playwright usa el puerto 3000 con reuseExistingServer, y ahi corre Alfa-MVP con Next 15.5.18). Los rojos e2e atribuidos a la Fase 5 son falsos rojos de esa confusion de puerto. Correr siempre con PLAYWRIGHT_PORT en un puerto libre."
-last_updated: "2026-09-12T05:10:00.000Z"
-last_activity: 2026-09-12
-last_activity_desc: plan-phase 6 cerrado: 10 planes, y seis requisitos propagados desde las decisiones de la conversacion
+stopped_at: Completado 07-14-PLAN.md (fase 07 cerrada salvo el checkpoint humano de 07-13)
+last_updated: "2026-09-14T02:30:02.392Z"
+last_activity: 2026-09-13
+last_activity_desc: "Wave 2 cerrada: 07-05 (migracion 24, la frontera del aseador) y 07-06 (dominio financiero en TypeScript)"
 progress:
   total_phases: 9
-  completed_phases: 4
-  total_plans: 65
-  completed_plans: 63
-  percent: 44
+  completed_phases: 5
+  total_plans: 89
+  completed_plans: 85
+  percent: 56
 ---
 
 # Project State
@@ -28,10 +28,215 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 
 ## Current Position
 
-Phase: 05 (notificaciones-push-e-instalacion-de-la-pwa) — DISCUSION CERRADA
-Plan: 0 of TBD. `05-CONTEXT.md` escrito el 2026-09-10 con 8 decisiones (D-01 a D-08)
-Status: Listo para `ui-phase 5`. La fase trae `UI hint: yes` (banner de permiso e instrucciones de instalacion)
-Last activity: 2026-09-10 - discuss-phase 5 cerrado; ROADMAP §Phase 5 actualizado con los criterios 6 y 7
+Phase: 07 (financiero) — **CONSTRUIDA. Falta UN checkpoint humano.**
+Plan: 14 of 14 ejecutados. `07-13` esta parado en su `checkpoint:human-verify`.
+Status: **Lo unico que falta para cerrar la fase es el recorrido de nueve puntos en un iPhone real.** Todo lo automatizable esta en verde.
+Last activity: 2026-09-13 - las ocho waves ejecutadas; el filtro del Resumen arreglado tras el hallazgo de 07-14
+
+### Las cuatro suites, medidas con el arbol quieto y la base reseteada
+
+| Capa | Al empezar la fase | Ahora |
+|---|---|---|
+| pgTAP | 275 | **376** |
+| Unitarios | 1006 | **1201** |
+| Integracion | 169 | **196** |
+| E2E | 112 + 1 saltado | **134 + 1 saltado** |
+
+**Cero rojas en las cuatro.** `tsc`, `lint`, `ci:arch` y `build` limpios.
+
+### LO UNICO PENDIENTE: el recorrido en el iPhone (Task 3 de `07-13`)
+
+`07-13` NO escribio su SUMMARY a proposito: el resultado punto por punto es parte
+de su contenido. No esta aprobado, no se simulo, y no se debe dar por bueno.
+
+Preparacion, ya lista:
+
+```
+npm run db:reset
+node scripts/dev/sembrar-mis-pagos.mjs      # imprime credenciales y los tres periodos
+cloudflared tunnel --url http://127.0.0.1:54321   # -> NEXT_PUBLIC_SUPABASE_URL
+cloudflared tunnel --url http://localhost:3001    # -> APP_BASE_URL
+NEXT_PUBLIC_VIVAGUEST_FEED_LOCAL=1 npm run build && npm run start -- --port 3001
+```
+
+**Los dos tuneles, y el segundo no es opcional:** la URL firmada del recibo se
+construye sobre `NEXT_PUBLIC_SUPABASE_URL`. Con un solo tunel apunta a
+`127.0.0.1:54321`, que el telefono no alcanza, y el punto 6 mostraria una imagen
+rota indistinguible de un defecto real. Las dos variables van en `.env.local`
+ANTES del build, y las URLs cambian en cada arranque de `cloudflared`.
+
+Los nueve puntos estan escritos en `07-13-PLAN.md` Task 3. Los mas importantes:
+que el periodo EN CURSO no aparezca (punto 5), que recorriendo las dos pantallas
+enteras no se vea ninguna cifra de huesped (punto 7), y que un recibo ya purgado
+diga que no esta disponible en vez de mostrar una imagen rota (punto 9).
+
+### Lo que esta fase descubrio y ninguna suite veia
+
+Cinco defectos vivos, ninguno previsto en los planes:
+
+1. **La fuga de la tarifa al huesped era real**, y la asercion 13 la imprimio con
+   su cifra: `have: 90000 / want: ERROR:42501`. Cerrada por las dos vias.
+2. **Cerrar la fuga habria roto `activarApartamento`** (un `select('*')` sobre
+   `properties`), sin error visible. Ningun apartamento se habria podido activar.
+3. **Un gasto reportado por una aseadora sobre el aseo de otra desaparecia** del
+   pago con un `left join`. Con `full outer join` produce las dos lineas.
+4. **Ninguna foto de recibo cargaba con el service worker activo**, sobre archivos
+   que el servidor sirve con 200. Y la misma regla guardaba una hora, en cache del
+   navegador, toda respuesta de Supabase, que sobrevive al cierre de sesion: en un
+   telefono compartido, la siguiente persona podia ver lo de la anterior.
+5. **El filtro del Resumen se colgaba al cambiar de rango** por su `loading.tsx`.
+
+Y dos defectos en las PROPIAS PRUEBAS, que habrian pasado en verde sobre un
+sistema roto:
+
+- El control de metodo del spec del aseador **no podia dispararse nunca**:
+  buscaba las cifras solo en el formato que no viaja. La prueba de la fuga habria
+  pasado siempre, incluso con la fuga abierta.
+- **Dos de los cinco senuelos no pusieron nada en rojo.** FIN-05 la sostenia un
+  CHECK y no el filtro; la idempotencia, el indice unico y no la salida temprana.
+  Salieron siete aserciones nuevas.
+
+## Lo unico que bloquea el cierre de la fase
+
+**07-13, tarea de verificacion en un iPhone real.** El recorrido de nueve puntos solo lo
+puede hacer el dueno. El plan dejo todo preparado (`scripts/dev/sembrar-mis-pagos.mjs`,
+los dos tuneles y los nueve puntos escritos) y **no escribio su SUMMARY a proposito**,
+porque el resultado punto por punto es parte de su contenido. No esta aprobado, no se
+simulo, y no se puede dar por bueno desde aqui.
+
+### Las cuatro suites al cerrar la fase (2026-09-13, base reseteada y arbol quieto)
+
+| Capa | Antes de la Fase 7 | Ahora | Delta |
+|---|---|---|---|
+| pgTAP | 11 archivos, 275 | **12 archivos, 376** | +101 |
+| unidad | 55 archivos, 1006 | **63 archivos, 1201** | +195 |
+| integracion | 19 archivos, 169 | **22 archivos, 196** | +27 |
+| E2E | 112 pasando, 1 saltado | **132 pasando, 1 saltado, 2 rojos** | +20 |
+
+Los dos rojos E2E son de `finanzas.spec.ts` y **son del producto, no del spec**: la causa
+esta aislada con ocho corridas y escrita en la seccion de consecuencias de esta fase y en
+`deferred-items.md`. `npm run build`, `lint`, `tsc --noEmit`, `ci:arch`, `db:lint`,
+`db:advisors` y `db:types:check` pasan todos.
+
+### Los seis senuelos de la fase, corridos en los dos sentidos
+
+Estan en la cabecera de `supabase/tests/11_financiero.test.sql`. Dos de ellos (el filtro
+de gestion propia y la salida temprana del cierre) **no pusieron nada en rojo a la
+primera**: eran dos garantias que descansaban en una segunda capa y que ninguna asercion
+podia distinguir. De ahi salieron los bloques N y O del archivo y las siete aserciones
+nuevas, mas el test de concurrencia real
+`lib/domain/cierre-concurrente.integration.test.ts`.
+
+### Bitacora de la ejecucion de la Fase 7 (historico, tal como se fue escribiendo)
+
+> Se conserva integra y sin tocar: son las mediciones wave a wave, con las
+> cifras del dia en que se tomaron. Lo de arriba es el estado FINAL; esto es
+> como se llego.
+
+Phase: 07 (financiero) — EN EJECUCION
+Plan: 12 of 14. Waves 0 a 6 cerradas (07-01 a 07-10). LA BASE DE LA FASE ESTA COMPLETA
+Y LA PRIMERA PANTALLA TAMBIEN.
+Status: WAVE 6 CERRADA. 07-10 construyo el chasis de la seccion y la sub-pestana Resumen.
+
+`11_financiero.test.sql` queda ENTERO EN VERDE por primera vez desde que empezo la fase:
+94 aserciones, 369 en la suite pgTAP completa, cero `not ok`. Eso es lo que desbloquea
+los cuatro planes de interfaz (07-10 a 07-13).
+
+E2E medido tras 07-10: **117 pasando, 1 saltado, 17 rojos**, todos declarados y con plan
+responsable: 9 de `finanzas.spec.ts` (07-11 y 07-12) y 6 de `mis-pagos.spec.ts` (07-13).
+Cero rojos nuevos. Unitarios: **1120 verdes** (1111 + 9 de `lib/data/finanzas.test.ts`).
+
+**Dos de los rojos que quedan en `finanzas.spec.ts` son de 07-10 solo a medias**, y
+conviene saberlo antes de leerlos como defecto: `:381` y `:411` pasan TODAS sus
+aserciones sobre el Resumen (el enlace de cada conteo lleva `filtro`, `ancla` y `rango`,
+y la fila con cifra cero se renderiza y navega) y caen en la ultima, que ya mira
+`/finanzas/aseos`, la ruta de 07-11. Lo mismo con `:796`: `/finanzas` SI rebota desde una
+sesion de aseadora; las otras dos rutas del recorrido todavia no existen y un 404 no pasa
+por el layout que rebota.
+
+E2E medido tras 07-09: 113 pasando, 1 saltado, 21 rojos, y los 21 son los declarados de
+`finanzas.spec.ts` y `mis-pagos.spec.ts`. Los dos falsos rojos colaterales de
+`operacion.spec.ts:210` y `operacion-alertas.spec.ts:215` DESAPARECIERON, como estaba
+previsto. La causa real del colateral no era la que se creia: era un `signOut()` global
+en el sembrador de finanzas, arreglado en 07-09.
+
+`07-05` ejecutado (migracion 24, la frontera del aseador): la tarifa al huesped y el pago
+al aseador salen del grant por columna de `authenticated` en `cleanings` y `properties`,
+y el admin las recupera por `public.tarifas_de_apartamentos(uuid[])`, definer con guarda
+de rol como primera sentencia. Fuga medida y cerrada: las cuatro consultas de dinero dan
+42501 desde una sesion de aseadora, y la misma sesion sigue leyendo su apartamento y su
+aseo. FIN-01 verificado ejecutando. Bloque D de `11_financiero.test.sql`: 6 de 10 en verde
+(las 4 que faltan son de `rentabilidad_aseos` y `resumen_financiero`, del plan 07-08).
+
+`07-06` ejecutado en la Wave 2 (dominio financiero en TypeScript: el gemelo del
+calendario de cierre con paridad medida contra Postgres, el filtro del Resumen separado
+fisicamente del calendario de pago, la agregacion de presentacion y las iniciales).
+
+`07-07` ejecutado (Wave 3, migracion 25: el cierre del periodo). `07-08` ejecutado
+(Wave 4, migracion 26: las seis lecturas financieras del admin). Las seis son definer
+con guarda de admin como primera sentencia: `resumen_financiero`, `costo_por_aseadora`,
+`rentabilidad_aseos` (FIN-02), `aseos_de_aseadora`, `gastos_de_aseadora` y
+`aseo_en_curso_de_aseadora`. La conciliacion Resumen <-> detalle y Resumen <-> bloque 3
+esta afirmada, no supuesta. Bloque L nuevo en `11_financiero.test.sql`, 18 aserciones
+(60 a 77), todas en verde.
+
+Siguiente: Wave 5 (`07-09`, migracion 27: las dos lecturas del aseador), que es lo unico
+que queda rojo del contrato pgTAP (aserciones 38 a 43).
+Last activity: 2026-09-13 - Wave 2 cerrada: 07-05 (migracion 24, la frontera del aseador) y 07-06 (dominio financiero en TypeScript)
+
+**La suite esta ROJA a proposito y lo va a estar durante ocho waves.** Es el diseño
+de `07-VALIDATION.md`: los tests se escriben antes del codigo que los satisface.
+El estado medido, wave a wave:
+
+| Capa | Al cerrar la Wave 0 | Al cerrar la Wave 1 (07-04) | Tras `07-06` (Wave 2) |
+|---|---|---|---|
+| pgTAP | 275 verdes + **47 rojas de 52** en `11_financiero.test.sql` | 275 verdes + **33 rojas de 52**. 14 nuevas verdes, cero regresiones | sin cambio: `07-06` no toca la base |
+| Unitarios | 1006 verdes + **83 rojos** en tres archivos de `lib/domain/` | sin cambio: 1006 verdes + 3 archivos rojos | **1106 verdes, CERO rojos.** Los 83 en verde, mas 17 nuevos (7 de `personas`, 10 de `dates`) |
+| Integracion | **186 verdes** (169 + 17 del sembrador nuevo) + 1 archivo rojo | sin cambio: 186 verdes + 1 archivo rojo | **el archivo rojo esta verde**: `mes.integration.test.ts` 4/4, 144 valores comparados contra Postgres sin una divergencia |
+| E2E | 112 pasando y 1 saltado + **22 specs rojos** en dos archivos nuevos | no re-corrido: 07-04 no toca interfaz | no re-corrido: `07-06` es dominio puro, sin interfaz |
+
+Tras `07-08` (Wave 4): pgTAP en **352 aserciones con solo 6 rojas**, las declaradas del
+plan 07-09. Unitarios 1111 verdes, integracion 190 verdes. E2E no re-corrido: 07-08 es
+base de datos pura, sin interfaz.
+
+Lo que `07-06` cerro: los tres archivos de contrato de `lib/domain/` que la Wave 0
+dejo en rojo, y la paridad del calendario. **Las tres declaraciones `.d.ts` de la
+Wave 0 estan borradas** (`mes.d.ts`, `periodo.d.ts`, `finanzas.d.ts`): eran el
+andamio que mantenia `tsc` util durante la wave, y un `.d.ts` que sobrevive a su
+implementacion queda invisible y muerto porque TypeScript resuelve el `.ts` primero.
+~~**Deuda declarada con fecha:** `iniciales()` esta hoy en dos sitios
+(`lib/domain/personas.ts` y `app/(admin)/_components/TopNav.tsx`); la borra `07-10`.~~
+**CERRADA el 2026-09-13 por `07-10`**: la definicion vieja de `TopNav.tsx` esta borrada,
+el circulo vive en `app/(admin)/_components/CirculoIniciales.tsx`, y la nota de caducidad
+de la cabecera de `personas.ts` tambien se fue.
+
+Lo que `07-04` cerro, bloque por bloque (el detalle esta en `07-04-SUMMARY.md`):
+**B (calendario del cierre) 6/6** y **J (el recibo dura cinco anos) 3/3**, mas las
+dos aserciones de `dia_bog` del bloque C y la del tipo `bigint` del bloque E. Las
+aserciones 47 y 51 (borrar un aseo y un gasto NO falla) siguen verdes, y ahora por
+**ausencia de cascada** y no por ausencia de tablas, que era el riesgo que 07-01
+habia senalado. **Ojo:** las aserciones 11 y 34 estan verdes **por vacuidad** (las
+tablas existen y estan vacias); solo miden algo cuando 07-07 escriba lineas.
+
+Cada plan de migracion tiene una tarea que anota, bloque por bloque, que paso de
+rojo a verde y que sigue rojo con su plan responsable. Un rojo NUEVO no se puede
+esconder entre los declarados.
+
+**Lo que la Wave 0 ya demostro, y es el hallazgo mas incomodo de la fase:** la
+fuga de la tarifa al huesped no es teorica. La asercion 13 la imprime:
+
+```
+
+# Failed test 13: "D7-7 FUGA: una aseadora NO puede leer cleanings.tarifa_huesped"
+
+#         have: 90000
+
+#         want: ERROR:42501
+
+```
+
+Eso es la tarifa real de un apartamento, leida desde una sesion de aseadora. La
+cierra `07-05` en la Wave 2, por las dos vias.
 
 Las 8 decisiones de la Fase 5, en una linea cada una (el detalle y el porque estan en `05-CONTEXT.md`):
 
@@ -173,6 +378,19 @@ Progress: [██████████] 100%
 | Phase 04 P13 | 35min | 3 tasks | 8 files |
 | Phase 04 P14 | 3h 40m | 3 tasks | 14 files |
 | Quick 260907-703 | 1h 25m | 3 tasks | 5 files |
+| Phase 07 P01 | 62min | 2 tasks | 1 files |
+| Phase 07 P02 | 21min | 3 tasks | 9 files |
+| Phase 07 P03 | 68min | 2 tasks | 4 files |
+| Phase 07 P04 | 25min | 3 tasks | 2 files |
+| Phase 07 P06 | 30min | 2 tasks | 7 files |
+| Phase 07 P05 | 60min | 3 tasks | 6 files |
+| Phase 07 P07 | 95min | 3 tasks | 5 files |
+| Phase 07 P08 | 55min | 3 tasks | 3 files |
+| Phase 07 P09 | 145min | 3 tasks | 4 files |
+| Phase 07 P10 | 58min | 3 tasks | 17 files |
+| Phase 07 P11 | 75min | 2 tasks | 11 files |
+| Phase 07 P12 | 135min | 3 tasks | 13 files |
+| Phase 07 P14 | 4h30m | 4 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -212,6 +430,46 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Phase ?]: 04-14: las nueve Server Actions de /operacion NO llaman revalidatePath; colgaba el navegador y el refresco lo pide router.refresh() en el cliente
 - [Phase ?]: 04-14: cn() usa extendTailwindMerge con los max-w-* del proyecto; sin eso el Sheet de confirmacion medía 8px
 - [Quick 260907-703]: los anchos de las primitivas de shadcn van en tokens `--container-<nombre-propio>`, nunca con nombre de talla: `max-w-<nombre>` resuelve contra `--spacing-*` antes que contra `--container-*`, y todo token nuevo se registra ademas en el grupo `max-w` de cn()
+- [Phase 07]: El contrato pgTAP de la Fase 7 nace en rojo y fija el contrato de NOMBRES del schema financiero en la cabecera del test, no en una migracion — Es Wave 0: tres planes de waves distintas (07-04, 07-07, 07-09) escriben contra esos nombres sin verse entre si. Si un nombre cambia, cambia primero en 11_financiero.test.sql
+- [Phase 07]: La fuga del Hallazgo 1 queda MEDIDA en vivo: una aseadora autenticada lee 90000 pesos de tarifa al huesped desde cleanings y desde properties — Los dos grants de la migracion 07 son de TABLA y en Supabase admin y aseadora comparten el rol authenticated: la policy acota filas, no columnas. Las aserciones 13 y 14 de 11_financiero.test.sql lo imprimen en el have del TAP. Las cierra 07-05
+- [Fase 7] 07-02: el sembrador financiero acepta el periodo por parametro para que el autoritativo sea el de Postgres, no el ancla local del arnes
+- [Fase 7] 07-02: el rojo de una Wave 0 se produce por resolucion de modulo, no por una asercion que falla: es inconfundible y no se puede leer como un defecto real
+- [Fase 7] 07-02: el contrato de un modulo que aun no existe se declara en un `.d.ts` SIN `.ts`; tsc queda verde y vitest sigue rojo, y ningun bundle puede importar un stub
+- [Fase 7] 07-02: las fechas de una fixture se anclan 45 dias atras y nunca en literales de calendario, o la suite falla sola al ano siguiente y deja fechas en el futuro los dias 1 y 2 de cada mes
+- [Phase 7]: El cierre de un periodo se siembra en E2E invocando cerrar_periodo con una sesion de admin real, no escribiendo el snapshot con la clave de servicio: un periodo cerrado que la funcion nunca produjo haria que las specs afirmaran sobre datos que el sistema no sabe generar
+- [Phase 7]: Toda asercion de no-divulgacion en E2E lleva su control de metodo: si ninguna carga de red trae un dato que el usuario SI puede ver, el interceptor no miro nada y la ausencia del dato prohibido no prueba nada
+- [Phase 7]: 07-04: tres tablas y no dos en el snapshot financiero. payout_periods existe para que un periodo sin ninguna aseadora con aseos deje rastro, y para que la idempotencia de D7-3 sea por PERIODO y no por persona
+- [Phase 7]: 07-04: los punteros de cleaner_payout_lines al mundo vivo (cleaning_id, expense_id, property_id) van SIN clave foranea, ni siquiera debil. Con cascada la purga de la Fase 9 borraria el desglose de un pago ya cobrado; con FK restrictiva la purga fallaria con 23503 y no borraria nunca nada
+- [Phase 7]: 07-04 CONSECUENCIA PARA LA FASE 9: el recibo de gasto dura 1825 dias (app_settings.expense_photo_retention_days) y public.foto_vencida(kind, created_at) es el unico punto que decide si una foto vencio. Purgar por photo_retention_days a secas borra los recibos y rompe D7-2
+- [Phase ?]: 07-06: los helpers de calendario compartidos viven en lib/domain/dates.ts; mes.ts y periodo.ts NO se importan entre si, y la separacion se verifica por grep
+- [Phase ?]: 07-06: la etiqueta de un periodo de pago que cruza el ano lleva los dos anos aunque se pida sin ano; sin ellos la etiqueta es falsa, no escueta
+- [Phase ?]: 07-06: la agregacion LANZA cuando un monto llega como cadena, nombrando el campo; un cero silencioso le borraria el pago a una persona
+- [Phase ?]: 07-05: la tarifa al huesped y el pago al aseador salen del grant por columna de authenticated en cleanings y properties. Admin y aseador comparten el rol Postgres, asi que 'solo el admin' no existe como categoria de grant: el admin las recupera por public.tarifas_de_apartamentos(uuid[]), definer con guarda de rol como primera sentencia
+- [Phase ?]: 07-05: pago_aseador tambien sale del grant, contra lo que el research daba por inocuo. El riesgo no es el dato sino el AGREGADO: fila a fila una aseadora arma el acumulado del periodo en curso, que D7-4 decidio no ensenar porque se mueve y puede bajar
+- [Phase ?]: 07-05: tg_cleanings_snapshot() NO pasa a definer y NO se le devuelve el grant. authenticated no tiene DML sobre cleanings, asi que el trigger nunca corre con ese rol. FIN-01 verificado EJECUTANDO por las tres vias reales (RPC definer, insert directo, reimposicion tras estado terminal), no leyendo el archivo
+- [Phase ?]: 07-05 TRAMPA MEDIDA: con grants por columna un is_empty() de pgTAP no puede pedir el comodin. El 42501 ABORTA el archivo entero en vez de dar un not ok (00_rls_aseos: 16 planeadas, 3 corridas). Lo mismo vale para el RETURNING * de una escritura: el insert pasa y la lectura de vuelta da 42501
+- [Phase ?]: 07-05 PARA LOS PLANES 07-10 a 07-14: toda columna nueva de cleanings o properties hay que anadirla al grant de la migracion 24 Y a COLUMNAS_DE_PROPIEDAD en lib/data/apartamentos.ts, o nacera invisible para la aplicacion
+- [Phase ?]: 07-07: el arnés de pgTAP se corrigió, no la guarda de admin del cierre — relajarla habría dejado entrar a la clave de servicio, contra lo que e2e/fixtures.ts documenta y depende
+- [Phase ?]: 07-07: el snapshot del pago y su desglose se escriben en UNA sentencia con CTEs que modifican datos — dos sentencias tomarían dos snapshots y un aseo completado entre medias entraría en el desglose sin entrar en el total
+- [Phase ?]: 07-07: la guarda de calendario del cierre vive dentro de la función y no en la expresión del cron — el comodín de último día del mes de pg_cron es el último día CALENDARIO, y cae en fin de semana en 8 de 24 meses
+- [Phase 07]: Toda lectura financiera nace por funcion definer con guarda de rol como PRIMERA sentencia del cuerpo, nunca por grant: admin y aseador comparten el rol Postgres authenticated y 'solo el admin' no existe como categoria de grant (migraciones 16, 24 y 26)
+- [Phase 07]: El Resumen es lectura VIVA y Pagos es snapshot congelado: los dos conviven y ninguno reemplaza al otro. El Resumen SI ve un aseo que entro a un periodo ya cerrado, y eso no contradice D7-3, que congela el PAGO y no la metrica
+- [Phase 07]: La conciliacion entre dos pantallas del mismo periodo se afirma como IGUALDAD entre las funciones que las alimentan, con un seguro contra la vacuidad, en vez de como dos literales que alguien puede actualizar a la vez (aserciones 60, 62 y 69)
+- [Phase 07]: Una regla de producto que prohibe un dato (ubicacion, cifra de huesped, URL firmada) se mide contra el returns table en pg_proc y no contra la fila: el dato viaja al navegador aunque la pantalla no lo pinte
+- [Phase 07]: 07-09: el filtro por dueño del aseador vive DENTRO de la función definer y nunca en el where de la pantalla
+- [Phase 07]: 07-09: mis_pagos_cerrados devuelve payout_id, adición declarada al contrato: sin él la pantalla de desglose del aseador sería inalcanzable
+- [Phase 07]: 07-09: el sembrador E2E de finanzas cierra sesión con scope local; el signOut global revocaba los refresh tokens del admin y tumbaba 23 specs
+- [Phase ?]: 07-10: el orden del bloque por aseadora vive en estado de cliente y NO en la URL, al reves que el rango y el ancla. En la URL, un enlace compartido llevaria el podio puesto y el refresco lo conservaria
+- [Phase ?]: 07-10: recalcular no es navegar. Al cambiar el filtro las cifras viejas se quedan visibles y atenuadas en vez de sustituirse por un esqueleto, porque lo que el admin esta haciendo es comparar
+- [Phase ?]: 07-11: el pie del detalle SUMA LAS FILAS QUE SE PINTAN, no una segunda consulta agregada. Dos consultas divergen en un caso de borde y dejan dos cifras sin forma de saber cuál vale
+- [Phase ?]: 07-11: la señal de gasto de la tabla del detalle es un icono mudo, NO el disparador del recibo. rentabilidad_aseos solo devuelve la bandera por diseño y firmar una URL por fila contradice T-07-54. El recibo se abre desde la ficha
+- [Phase ?]: 07-11: la señal de periodo cruzado compara el PERIODO DE CIERRE de las dos fechas, no el mes calendario: lo que explica es en qué pago entró el aseo
+- [Phase ?]: 07-12: el desglose de un pago vive en la direccion (?pago={id}) y no en estado de cliente: asi las URL firmadas de los recibos se emiten solo para el pago que alguien esta mirando, en vez de firmar los ocho de cada periodo al cargar la pagina
+- [Phase ?]: 07-12: nada de otro origen pasa por el service worker. MEDIDO: con la regla comodin de defaultCache puesta, 4 de 5 fotos de recibo terminaban en net::ERR_FAILED; y esa regla ademas guardaba una hora, en una cache del navegador, toda respuesta de Supabase
+- [Phase ?]: 07-14: dos de los cinco senuelos declarados NO pusieron nada en rojo. FIN-05 la sostenia el CHECK cl_unmanaged_is_inert y la idempotencia el indice unico, no los filtros que el senuelo ataca. De ahi salen los bloques N y O de 11_financiero.test.sql
+- [Phase ?]: 07-14: la concurrencia del cierre se mide con dos procesos psql de verdad (docker exec al contenedor del stack local) sincronizados con pg_sleep_until, no con dos llamadas en paralelo a PostgREST. El test EXIGE que los intervalos de las dos sesiones se solapen: sin esa asercion, dos llamadas que se estorbaron por casualidad dejarian el mismo estado que dos simultaneas
+- [Phase ?]: 07-14: page.waitForURL y expect(page).toHaveURL NUNCA ven el cambio de URL de FiltroPeriodo, ni con 20 s de plazo, porque su sondeo corre dentro del documento y se traba con el commit de la transicion de React. Se sondea page.url() desde Node y la asercion sobre la URL se escribe despues
+- [Phase ?]: 07-14: app/(admin)/finanzas/loading.tsx cuelga el filtro de periodo. Aislado con ocho corridas: sin el archivo 4/4 en verde, con el archivo 6 fallos en 4. loading.tsx es el fallback de Suspense DEL SEGMENTO y tambien se aplica al cambio de parametros de la misma ruta. No se arregla desde 07-14 por alcance: afecta a cuatro rutas
 
 ### Pending Todos
 
@@ -224,6 +482,11 @@ Ninguno.
 - **[Fase 1] Abierto de producto:** la lista definitiva de tareas del checklist bloquea el seed del catálogo, no el schema. Se arranca con el catálogo provisional (máximo 3 tareas por tipo de cuarto), editable sin migración
 - **[Fase 5] Riesgo aceptado:** push como único canal, sin semáforo de entregabilidad. Si en el piloto de Bogotá un aseo confirmado nunca llega al aseador, entra el semáforo (NOTIF-V2-01)
 - ~~ALTA (04-14): AlertDialog (~32px) y Tooltip (4px) colapsados~~ **RESUELTO 2026-09-07** por el quick `260907-703`. Tokens `--container-alerta` (320px), `--container-alerta-ancha` (384px) y `--container-tooltip` (320px) dentro de las dos primitivas, medidos en el CSS de produccion. La colision de fondo `--spacing-*` vs `--container-*` SIGUE viva: cualquier primitiva nueva con `max-w-md`/`max-w-lg` nace rota, y la regla queda escrita en `app/globals.css`
+- ~~STATE.md en current_phase 05~~ **RESUELTO el 2026-09-13 por el orquestador**, al cerrar la Wave 0. La seccion Current Position ya refleja la Fase 7 con sus 14 planes y el estado rojo declarado de las cuatro suites. Lo anotaron 07-01 y 07-02 y era correcto: un ejecutor de plan no podia arreglarlo con tres planes corriendo sobre el mismo arbol.
+- ~~FIN-02 a FIN-05 marcados `Complete` en REQUIREMENTS.md~~ **RESUELTO el 2026-09-13 por el orquestador**: pasan a `In Progress`. Venian del frontmatter `requirements` de planes de Wave 0, que escriben el CONTRATO y no lo satisfacen. Dejarlos en `Complete` habria hecho que el verificador de fase diera por buena una fase a medias, que es exactamente el modo de fallo que esta fase esta tratando de evitar en todos los demas frentes.
+- **[Fase 7] Requisitos marcados Complete antes de tiempo:** FIN-03, FIN-04 y FIN-05 quedaron en `Complete` en REQUIREMENTS.md porque figuran en el frontmatter `requirements` de los planes de la Wave 0, y la Wave 0 solo escribe CONTRATOS: sus 87 casos estan en rojo hasta que 07-04 y 07-06 los pongan en verde. No se revierte desde un ejecutor de plan (tres planes corren en paralelo sobre el mismo arbol); lo reconcilia el verificador de fase
+- Los casos 2 y 3 de e2e/finanzas.spec.ts (la sub-pestana Resumen) estan rojos: 5 de 6 en aislamiento. No son del 07-12, que no toca ninguno de sus archivos y los vio en verde en las primeras corridas del dia. Medido y fechado en .planning/phases/07-financiero/deferred-items.md
+- La Fase 7 NO cierra hasta el checkpoint humano de 07-13: el recorrido de nueve puntos en un iPhone real. 07-13 no tiene SUMMARY a proposito, porque el resultado punto por punto es parte de su contenido
 
 ### Quick Tasks Completed
 
@@ -240,6 +503,38 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 - **[Fase 4] Toda mutación de `cleanings` necesita RPC nueva, incluida la del admin.** `cleanings` queda con `grant select` puro para `authenticated`, y admin y aseador comparten ese rol de Postgres, así que "solo el admin" no existe como categoría de grant. La Fase 1 entrega 6 RPC (`reveal_access_code`, `confirm_cleaning`, `start_cleaning`, `finish_cleaning`, `decline_cleaning`, `toggle_checklist_item`). La Fase 4 tendrá que crear al menos: `reassign_cleaning` (ASEO-04), creación manual de aseo (ASEO-05), `reschedule_cleaning` (ASEO-06), `close_cleaning` (ASEO-08) y `cancel_cleaning` (ASEO-09). No es un vacío de diseño, es el patrón deliberado, pero hay que presupuestarlo.
 - **[Fase 6] Los RPC de reporte** (`report_damage`, `report_expense`, `report_missing_items`) se difirieron a esa fase. Sus tablas, grants y policies ya quedan listos en la Fase 1.
 - **[Fase 1, deuda menor]** La aserción 6 de `00_rls_aseos.test.sql` (fuga por embed) se ejecuta con un aseador que ya tiene cero aseos propios, así que el join da cero filas por construcción y no probaría un hueco real en la policy de `properties`. La protección de `properties` sí queda probada, sola, por la aserción 5. Debilidad heredada del research, no del plan.
+
+## Consecuencias de la Fase 7 para fases posteriores
+
+Registradas por el plan 07-14 el 2026-09-13 al cerrar la fase. **Los planners de la Fase 8 y sobre todo de la Fase 9 deben leer esto antes de escribir una línea.**
+
+### (a) Para la Fase 9, que es la purga, y es lo más importante
+
+- **[Fase 9] LOS RECIBOS DE GASTO DURAN CINCO AÑOS, NO TREINTA DÍAS.** La política vive en datos, en la clave `app_settings.expense_photo_retention_days` (1825 días, sembrada por la migración 23), y la decide `public.foto_vencida(text, timestamptz)`, que **existe exactamente para que la purga la consuma**. Una purga que borre las fotos con `kind = 'gasto'` a los 30 días junto con las demás **rompe D7-2**, que exige poder llegar desde cada gasto del desglose a la foto que lo sustenta, y rompe con ello un requisito de la Fase 7 sobre pagos que una persona ya cobró. El coste está calculado y es marginal: **los recibos son el 1,6% del volumen de fotos**, así que cinco años de recibos ocupan menos de 1 GB, mientras que las de checklist son ~10 GB al año y siguen con `photo_retention_days` sin cambios. Lo miden las aserciones 44 a 46 de `supabase/tests/11_financiero.test.sql`.
+- **[Fase 9] LAS TRES TABLAS DEL SNAPSHOT NO TIENEN NINGUNA CLAVE FORÁNEA HACIA EL MUNDO VIVO, Y ES A PROPÓSITO.** `cleaner_payout_lines.cleaning_id`, `.expense_id` y `.property_id` son identificadores desnudos; todo lo legible (nombre del apartamento, concepto, monto, las dos fechas, la ruta de la evidencia) va COPIADO como valor. No es un olvido del schema: es el requisito FIN-04. Quien "arregle" esto añadiendo claves foráneas rompe el criterio 4 del ROADMAP **y además atasca la propia purga con un 23503**. Hay un señuelo que lo mide: poner `on delete cascade` en esos dos punteros pone en rojo las aserciones 50, 52, 82 y 92, medido el 2026-09-13.
+- **[Fase 9] El desglose SOBREVIVE al borrado, y está medido ejecutando el borrado.** Borrar a mano un aseo y un gasto de un periodo ya cerrado deja la cabecera del periodo, el pago de la aseadora con el MISMO total, y las dos líneas legibles con su concepto, su monto y sus dos fechas. Las filas huérfanas que la purga va a encontrar en el snapshot **son deliberadas y no son basura que limpiar**.
+- **[Fase 9] La retención legal y la alerta de almacenamiento salieron de esta fase** por decisión del dueño del 2026-09-13 (RET-03 y RET-07). Viven como issues **#5 y #6**, asignados a la Fase 9. **El análisis técnico ya está hecho** en `07-RESEARCH.md` y en D7-9 de `07-CONTEXT.md` (incluido el detalle de que un valor nuevo del enum `notification_type` no se puede usar en la misma migración que lo añade). No hay que rehacerlo.
+
+### (b) Para el piloto de la Fase 8
+
+- **[Fase 8] El primer cierre real todavía no ha ocurrido.** La verificación manual del cierre contra el cálculo a mano del admin está PENDIENTE y depende de que exista un mes completo de operación real. Es la única fila del mapa de verificación de la fase que no se puede automatizar hoy.
+- **[Fase 8] El cierre automático corre todos los días y 364 de cada 365 no hace nada**, que es lo correcto: la guarda de calendario vive dentro de `public.cerrar_periodo_si_toca()` y no en la expresión del cron. Si el job falla el día que toca, el admin tiene el aviso de `public.periodo_pendiente_de_cierre()` y el botón de reintento en la pantalla de Pagos.
+
+### (c) La deuda que la Fase 7 deja, con su detonante
+
+| Deuda | Detonante |
+|---|---|
+| No hay histórico mes contra mes. La DEFINICION lo dejó sin definir a propósito | Cuando el dueño quiera comparar periodos |
+| El bloque de «qué está haciendo ahora» no se refresca solo | Si el admin lo empieza a usar como panel de control del equipo |
+| El umbral del buscador del bloque por aseadora es una interpretación | Si el dueño lo quiere siempre visible: es cambiar una constante |
+| La palabra «aseadora» frente a «aseadores» queda inconsistente en una etiqueta | Es una decisión de vocabulario de todo el producto, no de esta fase |
+| No se puede exportar ni imprimir el cálculo. Está confirmado fuera (FIN-V2-01) | El admin copia las cifras a mano para transferir, que es donde se cometen los errores de dígito. **Es la deuda más cara en operación real** |
+| La pantalla de Pagos no paginará bien a los dos años | Pasar de 18 periodos cerrados |
+| La segunda vía de la fuga se cerró con grants ENUMERADOS a mano | Cualquier columna nueva en `cleanings` o en `properties` hay que añadirla a esos dos `grant select (...)` de la migración 24, o nace invisible para la aplicación |
+
+### (d) Un defecto VIVO que la Fase 7 deja con la causa aislada
+
+- **`app/(admin)/finanzas/loading.tsx` cuelga el filtro de periodo.** Medido con ocho corridas: sin el archivo, 4/4 en verde; con el archivo, 6 fallos en 4 corridas. `loading.tsx` es el `fallback` de Suspense DEL SEGMENTO y se aplica también al cambio de parámetros de la misma ruta, que es justo lo que su propio comentario da por hecho que no pasa. El arreglo (mover el esqueleto a un `<Suspense>` dentro de `page.tsx`) y las seis sospechas descartadas están escritos en `.planning/phases/07-financiero/deferred-items.md`. **Afecta también a `/finanzas/aseos` y a `/finanzas/aseadoras/[id]`, que llevan el mismo patrón.** Deja dos pruebas E2E en rojo a propósito.
 
 ## Restricciones nuevas (2026-08-31)
 
@@ -265,10 +560,10 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-12
-Stopped at: **Fase 06 ejecutada, 10/10 planes.** Las doce puertas en verde con conteo reconciliado: pgTAP `Files=11, Tests=269` (= suma exacta de los `plan(N)`), `test:unit` 55 archivos / 1005 tests, `test:integration` 19 archivos / 169 tests, `test:e2e` 107 en Chromium, `lint` 0 errores, `ci:arch`, `build` y `tsc` limpios.
+Last session: 2026-09-14T02:29:36.832Z
+Stopped at: Completado 07-14-PLAN.md. Fase 07 ejecutada entera salvo el checkpoint humano de 07-13.
 
-**Abierto (unico):** el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real. Los cinco criterios de fallo estan escritos en `06-10-SUMMARY.md`. Nada mas bloquea la fase.
+**Abiertos:** (1) el checkpoint humano de **07-13**, el recorrido de nueve puntos en un iPhone real; sin el, la Fase 7 no cierra y 07-13 no tiene SUMMARY a proposito. (2) el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real, con sus cinco criterios de fallo en `06-10-SUMMARY.md`.
 
 **Diferidos por decision del desarrollador:** 05-12 (wizard `/instalar` con sus 5 capturas), 05-17 (validacion en dispositivo fisico) y el criterio 4 de la Fase 6 (offline, D-08, registrado en `.planning/BACKLOG.md`).
 
@@ -311,4 +606,4 @@ migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` **29 ar
    segundos, `db:test` 2,3 s y la integracion completa 9,7 s.
 
 Siguiente: cerrar el checkpoint humano de la Fase 6 en un telefono real, o arrancar la Fase 7 (Financiero), que es la que consume el `monto` entero que esta fase empezo a capturar.
-Resume file: .planning/phases/06-pwa-del-aseador-offline-first/06-10-SUMMARY.md
+Resume file: None

@@ -1,14 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  diaDeLaSemana,
   formatFechaBog,
   formatFechaCortaBog,
   formatFechaLargaBog,
   formatHoraLimite,
   horasDesdeDtstamp,
   hoyBog,
+  nombreDeDiaBog,
+  nombreDeMesBog,
+  primeroDelMes,
   sumarDias,
   tiempoRelativo,
+  ultimoDiaDelMes,
 } from './dates';
 
 /**
@@ -302,5 +307,96 @@ describe('tiempoRelativo', () => {
     process.env.TZ = 'America/Bogota';
     expect(tiempoRelativo(Date.parse('2026-09-02T23:30:00-05:00'), AHORA)).toBe(enUtc);
     expect(enUtc).toBe('ayer 23:30');
+  });
+});
+
+/**
+ * LOS CINCO HELPERS DE CALENDARIO QUE ANADIO LA FASE 7.
+ *
+ * Viven aqui y no en `mes.ts` ni en `periodo.ts` porque los usan LOS DOS, y esos
+ * dos modulos tienen prohibido importarse entre si: uno resuelve el periodo de
+ * pago (de cierre a cierre) y el otro el filtro del Resumen (mes calendario).
+ * Lo que se comparte es aritmetica del calendario gregoriano, nunca una regla de
+ * negocio.
+ */
+describe('diaDeLaSemana', () => {
+  it('numera como `Date`: 0 es domingo y 6 es sabado', () => {
+    // Semana del 7 al 13 de septiembre de 2026: lunes a domingo.
+    expect(diaDeLaSemana('2026-09-07')).toBe(1);
+    expect(diaDeLaSemana('2026-09-12')).toBe(6);
+    expect(diaDeLaSemana('2026-09-13')).toBe(0);
+  });
+
+  it('acierta en los dias que deciden el cierre de mes', () => {
+    // Los tres casos de `ultimoDiaHabilDelMes`: entre semana, sabado y domingo.
+    expect(diaDeLaSemana('2026-09-30')).toBe(3); // miercoles
+    expect(diaDeLaSemana('2026-01-31')).toBe(6); // sabado
+    expect(diaDeLaSemana('2026-05-31')).toBe(0); // domingo
+  });
+
+  it('no depende de la zona del proceso', () => {
+    // El caso que rompe `new Date('2026-09-13')` a secas: en Bogota ese parseo
+    // cae en el dia anterior y devolveria sabado en vez de domingo.
+    const enUtc = diaDeLaSemana('2026-09-13');
+    process.env.TZ = 'America/Bogota';
+    expect(diaDeLaSemana('2026-09-13')).toBe(enUtc);
+    expect(enUtc).toBe(0);
+  });
+});
+
+describe('nombreDeMesBog y nombreDeDiaBog', () => {
+  it('devuelven el nombre largo EN MINUSCULA', () => {
+    expect(nombreDeMesBog('2026-09-01')).toBe('septiembre');
+    expect(nombreDeMesBog('2027-01-31')).toBe('enero');
+    expect(nombreDeDiaBog('2026-09-10')).toBe('jueves');
+    expect(nombreDeDiaBog('2026-09-13')).toBe('domingo');
+  });
+
+  it('el nombre del mes NO depende del dia del mes', () => {
+    // La etiqueta del filtro se compone desde el primer dia del rango, pero
+    // nadie deberia tener que acordarse de eso.
+    expect(nombreDeMesBog('2026-02-01')).toBe(nombreDeMesBog('2026-02-28'));
+  });
+
+  it('ninguno depende de la zona del proceso', () => {
+    process.env.TZ = 'America/Bogota';
+    expect(nombreDeMesBog('2026-09-01')).toBe('septiembre');
+    expect(nombreDeDiaBog('2026-09-10')).toBe('jueves');
+  });
+});
+
+describe('primeroDelMes y ultimoDiaDelMes', () => {
+  it('el primero del mes sale de cualquier dia del mes', () => {
+    expect(primeroDelMes('2026-09-13')).toBe('2026-09-01');
+    expect(primeroDelMes('2026-09-01')).toBe('2026-09-01');
+    expect(primeroDelMes('2026-12-31')).toBe('2026-12-01');
+  });
+
+  it('el ultimo del mes resuelve los meses de 30, de 31 y los dos febreros', () => {
+    // El caso donde una tabla de longitudes escrita a mano falla es el bisiesto.
+    expect(ultimoDiaDelMes('2026-09-13')).toBe('2026-09-30');
+    expect(ultimoDiaDelMes('2026-01-15')).toBe('2026-01-31');
+    expect(ultimoDiaDelMes('2026-02-14')).toBe('2026-02-28');
+    expect(ultimoDiaDelMes('2028-02-14')).toBe('2028-02-29');
+  });
+
+  it('DICIEMBRE cruza el ano sin desviarse', () => {
+    // El caso donde una implementacion que hace `mes + 1` sin tocar el ano
+    // devuelve el ultimo dia de un mes 13 que no existe.
+    expect(ultimoDiaDelMes('2026-12-05')).toBe('2026-12-31');
+    expect(ultimoDiaDelMes('2028-12-31')).toBe('2028-12-31');
+  });
+
+  it('el dia siguiente al ultimo del mes es SIEMPRE el primero del siguiente', () => {
+    // Propiedad sobre los 36 meses de 2026 a 2028, que es el rango que mide la
+    // paridad del calendario de cierre contra Postgres.
+    for (const ano of [2026, 2027, 2028]) {
+      for (let mes = 1; mes <= 12; mes += 1) {
+        const iso = `${ano}-${String(mes).padStart(2, '0')}-15`;
+        const siguiente = sumarDias(ultimoDiaDelMes(iso), 1);
+        expect(siguiente.slice(8, 10), `${iso} no cerro en fin de mes`).toBe('01');
+        expect(siguiente).toBe(primeroDelMes(siguiente));
+      }
+    }
   });
 });
