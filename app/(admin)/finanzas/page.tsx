@@ -22,6 +22,46 @@ export const metadata: Metadata = {
 };
 
 /**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ESTA RUTA NO TIENE `loading.tsx`, Y ES DELIBERADO. MEDIDO EL 2026-09-13.
+ *
+ * Lo tuvo, con un esqueleto de geometria real que reproducia las cuatro cards y
+ * los dos bloques. Su cabecera afirmaba que **cambiar de rango no pasaba por
+ * ahi**, porque el filtro resuelve su propia espera atenuando las cifras viejas
+ * con `useTransition`.
+ *
+ * **Esa afirmacion era falsa, y el precio no era un esqueleto de mas: era que el
+ * filtro se colgaba.** En el App Router, `loading.tsx` es el fallback de Suspense
+ * DEL SEGMENTO, y tambien se aplica cuando solo cambian los parametros de la
+ * consulta. Con el archivo puesto, al cambiar de rango la transicion no
+ * terminaba nunca: `aria-busy` se quedaba en `true` para siempre y volver a
+ * pulsar no recuperaba. El filtro es el control principal de esta pantalla.
+ *
+ * Aislado con ocho corridas y las dos variantes del arbol: **sin el archivo,
+ * 15 de 15 casos de `e2e/finanzas.spec.ts` en verde; con el, dos rojos
+ * reproducibles.** Descartados con medicion: el service worker, el servidor, la
+ * hidratacion, el orden entre casos, el prefetch y el reintento.
+ *
+ * Hallazgo lateral, util para quien depure algo parecido: `page.waitForURL` y
+ * `expect(page).toHaveURL` **nunca** ven esa navegacion, ni con 20 s de espera,
+ * porque su sondeo corre dentro del documento y se traba con el commit de React.
+ * Desde Node la URL aparece en ~200 ms.
+ *
+ * **Lo que se pierde:** el esqueleto de la PRIMERA carga de esta ruta. Es un
+ * coste real y acotado, y es mucho menor que un filtro que se cuelga.
+ *
+ * **Lo que NO se toca:** las otras tres rutas de Finanzas (`/aseos`, `/pagos`,
+ * `/aseadoras/[id]`) conservan su `loading.tsx` y sus casos siguen en verde. El
+ * defecto es de esta pantalla, que es donde el filtro reescribe los parametros
+ * sin cambiar de ruta.
+ *
+ * **El arreglo fino, si algun dia se quiere recuperar el esqueleto:** envolver
+ * solo los bloques de datos en un `Suspense` propio dentro de este archivo, con
+ * una `key` que NO dependa de los parametros. Queda en `deferred-items.md`.
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+
+/**
  * `/finanzas` — la sub-pestana Resumen (FIN-02, FIN-05, 07-UI-SPEC §6).
  *
  * ════════════════════════════════════════════════════════════════════════════

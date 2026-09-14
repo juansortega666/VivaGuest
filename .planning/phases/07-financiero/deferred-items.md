@@ -246,3 +246,39 @@ ni con 20 segundos de plazo, ni siquiera en las corridas en las que la navegaci�
 SÍ funciona: su sondeo se ejecuta dentro del documento y se traba con el commit
 de la transición de React. Sondeando `page.url()` desde Node aparece en ~200 ms.
 Eso era un defecto del instrumento y está arreglado en `esperarUrlDeCliente`.
+
+## El esqueleto de carga de `/finanzas`, retirado el 2026-09-13
+
+**Qué se retiró:** `app/(admin)/finanzas/loading.tsx`, el esqueleto de geometría
+real del Resumen.
+
+**Por qué:** con el archivo puesto, **cambiar de rango en el filtro colgaba la
+pantalla**. No era un esqueleto de más: la transición no terminaba nunca,
+`aria-busy` se quedaba en `true` y volver a pulsar no recuperaba. El filtro es el
+control principal de esa pantalla.
+
+La causa es que en el App Router `loading.tsx` es el fallback de Suspense **del
+segmento**, y también se aplica cuando solo cambian los parámetros de la consulta.
+El comentario del propio archivo afirmaba lo contrario.
+
+**Medición:** ocho corridas, las dos variantes del árbol. Sin el archivo, 15 de 15
+casos de `e2e/finanzas.spec.ts` en verde; con él, dos rojos reproducibles.
+Descartados con medición: service worker, servidor, hidratación, orden entre
+casos, prefetch y reintento.
+
+**Qué se perdió:** el esqueleto de la primera carga de `/finanzas`. Solo de esa
+ruta: `/finanzas/aseos`, `/finanzas/pagos` y `/finanzas/aseadoras/[id]` conservan
+el suyo y siguen en verde.
+
+**El arreglo fino, para cuando alguien quiera recuperarlo:** envolver únicamente
+los bloques de datos en un `Suspense` propio dentro de `page.tsx`, con una `key`
+que **no** dependa de los parámetros de la consulta. Así la primera carga muestra
+esqueleto y el cambio de rango no lo dispara.
+
+**El detonante para hacerlo:** que alguien note la primera carga en blanco y le
+moleste. Mientras tanto, el coste es menor que el defecto que evita.
+
+**Hallazgo lateral que conviene no volver a sufrir:** `page.waitForURL` y
+`expect(page).toHaveURL` **nunca** ven esa navegación, ni con 20 s, porque su
+sondeo corre dentro del documento y se traba con el commit de React. Desde Node la
+URL aparece en ~200 ms.
