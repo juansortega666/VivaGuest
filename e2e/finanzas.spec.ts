@@ -655,7 +655,19 @@ test.describe('Finanzas, con dos periodos cerrados y uno en curso', () => {
     expect(total, 'el total son sus aseos MÁS sus gastos, sin descuentos').toBe(porAseos + gastos);
 
     // Las dos columnas de estado, en el mismo bloque: una pendiente y una pagada.
-    const estados = await tabla.getByRole('row').locator('td').nth(5).allTextContents();
+    //
+    // ── CORREGIDO EN EL 07-12: EL LOCALIZADOR ANTERIOR ERA INSATISFACIBLE ────
+    // Decía `tabla.getByRole('row').locator('td').nth(5)`. Encadenar sobre un
+    // locator de VARIAS filas APLANA todas las celdas de todas ellas en una sola
+    // lista en orden de documento, así que `.nth(5)` devuelve UNA celda —la
+    // sexta de la primera fila— y `allTextContents()` un arreglo de UN elemento.
+    // Con un solo texto, las dos aserciones de abajo no pueden ser ciertas a la
+    // vez: es un rojo que ninguna pantalla podía apagar, no un defecto del
+    // producto. La intención está escrita en el comentario de arriba y se
+    // conserva entera: la celda `PAGADO` DE CADA FILA, que es la sexta columna
+    // de §9.1. `nth-child` es posición estructural, no clase de CSS: no rompe la
+    // regla de localización de la cabecera de este archivo.
+    const estados = await tabla.locator('tbody td:nth-child(6)').allTextContents();
     expect(estados.some((t) => /Pendiente/.test(t))).toBe(true);
     expect(estados.some((t) => /Pagado el/.test(t))).toBe(true);
   });
@@ -753,6 +765,17 @@ test.describe('Finanzas, con dos periodos cerrados y uno en curso', () => {
 
     const tabla = paginaAdmin.getByRole('table').first();
     const fila = tabla.getByRole('row').filter({ hasText: esc.aseadoraUna.nombre });
+
+    // ── ESTA ESPERA LA AÑADIÓ EL 07-12, Y NO ES CEREMONIA ──────────────────
+    // `allTextContents()` NO espera: lee el DOM que haya en ese instante. Y
+    // `goto` vuelve con el evento `load`, que en el App Router llega con el
+    // ESQUELETO de `loading.tsx` pintado y el contenido todavía en camino. Sin
+    // esta aserción, la línea de abajo leía un arreglo vacío cada vez que el
+    // servidor tardaba un poco más, y el caso moría con `undefined.trim()`: un
+    // rojo que no decía nada del producto. Los otros casos de este archivo no lo
+    // sufren porque empiezan con un `expect` que sí espera.
+    await expect(fila).toBeVisible();
+
     const total = pesos((await fila.getByRole('cell').allTextContents())[4]);
 
     const boton = fila.getByRole('button', { name: 'Marcar pagado' });

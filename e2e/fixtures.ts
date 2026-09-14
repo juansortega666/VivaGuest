@@ -989,6 +989,28 @@ export const CIFRAS_FINANCIERAS = {
   gasto: 33517,
 } as const;
 
+/**
+ * Los bytes del recibo sembrado: un JPEG de 1×1 blanco.
+ *
+ * Existe porque el bucket `evidencia` tiene `allowed_mime_types` limitado a
+ * jpeg, png y webp, así que no vale cualquier relleno con extensión `.jpg`: la
+ * subida lo rechaza. Y tiene que ser un JPEG DECODIFICABLE, no solo con la
+ * cabecera correcta: si el navegador no lo puede pintar, el manejador de error
+ * de la etiqueta `<img>` sustituye la foto por el estado de ausencia y la
+ * aserción de que el recibo se ve vuelve a ser inalcanzable.
+ */
+const BYTES_DEL_RECIBO = Buffer.from(
+  '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a' +
+    'HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIy' +
+    'MjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIA' +
+    'AhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQA' +
+    'AAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3' +
+    'ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWm' +
+    'p6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEB' +
+    'AAA/AP/Z',
+  'base64',
+);
+
 /** Un periodo de pago, de cierre a cierre. Las dos fechas son reales (D7-5). */
 export interface PeriodoDePago {
   desde: string;
@@ -1286,21 +1308,44 @@ export async function sembrarFinanzas(servicio: Servicio): Promise<EscenarioFina
 
   // La ruta la impone un CHECK de la migración 10:
   // `starts_with(storage_path, cleaning_id || '/' || kind || '/')`.
+  const rutaDelRecibo = `${aseoCruzadoId}/gasto/recibo-${sufijo}.jpg`;
+
   const { data: foto, error: errorFoto } = await servicio
     .from('cleaning_photos')
     .insert({
       cleaning_id: aseoCruzadoId,
       kind: 'gasto',
       expense_id: gasto.id,
-      storage_path: `${aseoCruzadoId}/gasto/recibo-${sufijo}.jpg`,
+      storage_path: rutaDelRecibo,
       mime_type: 'image/jpeg',
-      bytes: 1024,
+      bytes: BYTES_DEL_RECIBO.length,
       uploaded_by: aseadoraUna.id,
     })
     .select('id')
     .single();
   if (errorFoto || !foto) {
     throw new Error(`No se pudo sembrar la foto del recibo: ${errorFoto?.message}`);
+  }
+
+  // ── Y LOS BYTES DE VERDAD, QUE LA FILA SOLA NO BASTA ─────────────────────
+  //
+  // AÑADIDO EN EL 07-12. Hasta aquí la siembra escribía la fila de
+  // `cleaning_photos` y nada más, así que en el bucket no había ningún objeto en
+  // esa ruta. Con eso, `createSignedUrl` falla —el almacenamiento comprueba que
+  // el objeto exista— y aunque no fallara, la etiqueta `<img>` recibiría una URL
+  // que devuelve 404 y caería en su manejador de error. En los dos caminos, el
+  // diálogo del recibo pinta su estado de ausencia y **no existe ninguna imagen
+  // que mirar**: la aserción de que el recibo se ve no la podía apagar ninguna
+  // pantalla.
+  //
+  // Un JPEG de 1×1 blanco, que es lo mínimo que el bucket acepta: su
+  // `allowed_mime_types` solo admite jpeg, png y webp, así que un archivo de
+  // texto con extensión `.jpg` lo rechaza la subida.
+  const subida = await servicio.storage
+    .from('evidencia')
+    .upload(rutaDelRecibo, BYTES_DEL_RECIBO, { contentType: 'image/jpeg', upsert: true });
+  if (subida.error) {
+    throw new Error(`No se pudieron subir los bytes del recibo: ${subida.error.message}`);
   }
 
   // ── EL DAÑO ──────────────────────────────────────────────────────────────
@@ -1518,6 +1563,14 @@ export async function limpiarFinanzas(
   //    pago a la cabecera es de borrado RESTRINGIDO, a propósito (07-04).
   await crudo.from('cleaner_payouts').delete().in('periodo_desde', periodos);
   await crudo.from('payout_periods').delete().in('periodo_desde', periodos);
+
+  // 3b. Los BYTES del recibo en el bucket. La cascada de la base se lleva la
+  //     fila de `cleaning_photos`, pero el objeto de almacenamiento no cuelga de
+  //     ninguna clave foránea: sin este borrado quedaría un huérfano por corrida
+  //     en un bucket que nadie mira. `remove` no falla si ya no está.
+  await servicio.storage
+    .from('evidencia')
+    .remove([`${escenario.aseoCruzado.id}/gasto/recibo-${escenario.sufijo}.jpg`]);
 
   // 4. Los aseos. Gastos, fotos y daños caen por cascada desde aquí. Se borran
   //    POR APARTAMENTO y no por la lista de ids: un aseo que haya creado un test
