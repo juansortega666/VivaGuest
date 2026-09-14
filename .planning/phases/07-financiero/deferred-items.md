@@ -178,16 +178,59 @@ En la otra mitad de las corridas la URL cambia en ~200 ms y todo va bien.
 | Falta de hidratación | Se espera a que el nodo tenga su `__reactProps$…onClick` antes de pulsar, y aun así falla |
 | El orden de las pruebas | Se reproduce con la prueba aislada |
 | La tormenta de prefetch | Reproducido con los prefetch bloqueados |
-| `app/(admin)/finanzas/loading.tsx` | Quitarlo dio 15/15 en una corrida, pero al reponerlo dio 15/15 otra vez: no concluyente |
+| ~~`app/(admin)/finanzas/loading.tsx`~~ | **NO se descartó: ES LA CAUSA. Ver abajo.** |
 | Un reintento del clic | `expect(...).toPass()` reintentando 30 s NO recupera el estado colgado |
+
+### LA CAUSA, aislada con ocho corridas (2026-09-13)
+
+`app/(admin)/finanzas/loading.tsx`. Separación limpia, sin una sola excepción:
+
+| Estado del archivo | Corridas | Resultado |
+|---|---|---|
+| **Sin** `loading.tsx` | 4 | **15/15 en verde las cuatro**, y en 16-17 s cada una |
+| **Con** `loading.tsx` | 4 | **6 fallos repartidos en las cuatro**, y 32-50 s cada una |
+
+El propio `loading.tsx` lleva escrito el supuesto que lo rompe:
+
+> *«Esto se ve al LLEGAR a la ruta por primera vez. **Cambiar de rango es otra
+> cosa y no pasa por aqui**: ahi las cifras viejas se quedan visibles y atenuadas
+> mientras llegan las nuevas. Lo resuelve el filtro con su transicion, no este
+> archivo.»*
+
+**Ese supuesto es falso en el App Router de Next.** `loading.tsx` es el
+`fallback` de Suspense DEL SEGMENTO, y se aplica a toda navegación que entre en
+él, incluida una que solo cambia los parámetros de consulta de la misma ruta. Así
+que el caso A y el caso B del contrato de diseño (§12.2a y §12.2b) compiten por
+el mismo mecanismo, y el resultado no es que se vea el esqueleto donde no
+tocaba: es que **la transición se queda colgada y la pantalla deja de responder**.
+
+### El arreglo propuesto, y por qué NO se aplicó aquí
+
+Mover el esqueleto de `loading.tsx` a un `<Suspense>` declarado DENTRO de
+`page.tsx`, envolviendo solo la parte que depende de datos:
+
+* Al llegar a la ruta, la cabecera y el filtro se pintan de verdad y los bloques
+  muestran el esqueleto. Es el caso A, y encima cumple mejor lo que el propio
+  archivo dice que quiere («la cabecera se pinta con su titulo REAL»).
+* Al cambiar de rango dentro de una transición, React CONSERVA el contenido ya
+  montado en vez de enseñar el `fallback`. Es el caso B, literal.
+
+Obliga a partir `page.tsx` en dos (la cáscara y un componente de servidor
+asíncrono con las dos lecturas), y **el mismo patrón está en otras tres rutas**:
+`/finanzas/aseos`, `/finanzas/pagos` y `/finanzas/aseadoras/[id]`. Las dos que
+además llevan filtro de periodo tienen el mismo defecto latente.
+
+Eso es rehacer la estructura de carga de una sección entera que el dueño ya
+aceptó, sobre cuatro rutas, en el plan que CIERRA la fase. La regla 4 de
+desviación dice que eso se pregunta, no se adivina, y la regla de alcance dice
+que no se arregla desde aquí lo que no rompió este plan. **Queda con la causa
+aislada, el arreglo escrito y la medición al lado, para una decisión del dueño.**
 
 ### Qué NO se tocó, y por qué
 
-Arreglarlo obliga a entrar en la navegación del App Router de Next (la
-interacción entre `useTransition`, `loading.tsx` y el `AbortController` de la
-navegación). Es un cambio de arquitectura del árbol de `/finanzas`, no un
-arreglo puntual, y la regla 4 de desviación dice que eso se pregunta, no se
-adivina. **Queda para una decisión explícita del dueño.**
+Las dos pruebas se dejan EN ROJO a propósito. Ponerlas en verde sin tocar la
+causa exigiría debilitar lo que afirman, y lo que afirman es correcto: pulsar
+`Día` tiene que cambiar el periodo. El rojo es del producto.
 
 ### Dónde vive el instrumento
 
