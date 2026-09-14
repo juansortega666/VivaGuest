@@ -99,3 +99,48 @@ ocurre en el borde, de un solo salto y sin tocar la base.
 
 **Detonante:** el primer plan que tenga `lib/auth/routing.ts` entre sus archivos,
 o la primera vez que ese `no_autorizado` confunda a alguien leyendo registros.
+
+## Los casos 2 y 3 de `e2e/finanzas.spec.ts` (el Resumen) están rojos (2026-09-13, plan 07-12)
+
+**Qué pasa.** Dos casos de la sub-pestaña **Resumen** fallan, y no son de la
+pantalla que construyó el 07-12:
+
+| Caso | Línea | Síntoma |
+|---|---|---|
+| `los cuatro KPIs tienen su etiqueta exacta, su orden fijo…` | 270 | Las cuatro tarjetas devuelven `x = 0`: la página sigue en su esqueleto de carga cuando el caso mide las posiciones |
+| `cambiar el rango recalcula los KPIs y los conteos…` | 313 | `waitForURL(/rango=dia/)` agota los 30 s: el `router.push` del filtro de periodo no llega nunca |
+
+**Medido.**
+
+| Corrida | Resultado |
+|---|---|
+| Suite completa, base recién reseteada | 132 pasando, 1 saltado, estos 2 rojos |
+| Solo esos dos casos, `--repeat-each=3` (6 ejecuciones) | **5 rojos, 1 verde** |
+
+Los dos apuntan al mismo sitio: `/finanzas` tarda demasiado o se queda colgada
+al cambiar de rango. Los dos casos del Resumen que NO dependen de la transición
+del filtro (`el chevron de siguiente…`, `las tres filas del bloque 2…`) siguen
+en verde.
+
+**Por qué no es del 07-12.** Este plan no toca `app/(admin)/finanzas/page.tsx`,
+ni `FiltroPeriodo.tsx`, ni `TarjetaKPI.tsx`, ni `lib/data/finanzas.ts`. Sus
+cuatro casos (11 a 15 en el orden del archivo: los periodos cerrados, el
+desglose, marcar pagado, el aislamiento por rol y el vacío) están en verde en la
+misma corrida. Y hay una medición que lo fecha: **en las dos primeras corridas
+del día, con la pantalla de Pagos ya construida y antes de los commits `dbe3fa7`
+y `da34268`, estos dos casos estaban en VERDE.** La ventana está entre esos dos
+commits y el final de la wave 7.
+
+**Descartado como causa:** el cambio de `app/sw.ts` de este mismo plan. Los dos
+casos ya fallaban ANTES de tocarlo, y ese cambio solo deja pasar de largo lo que
+NO es de este origen; las transiciones de `/finanzas` son del mismo origen.
+
+**Por dónde empezar.** El esqueleto que se ve en la captura del caso 2 es el de
+`app/(admin)/finanzas/loading.tsx`, no el de la ruta hija: hay DOS fronteras de
+suspensión anidadas en `/finanzas/*` y manda la de fuera. Si el Resumen tarda,
+cualquier caso que lea el DOM sin esperar mide el gris. Y el cuelgue del caso 3
+es del `router.push` del filtro, que es justamente el patrón que el contrato
+declara en §12.2b.
+
+**Detonante:** el plan 07-14, o el primero que tenga `app/(admin)/finanzas/page.tsx`
+o `FiltroPeriodo.tsx` entre sus archivos.

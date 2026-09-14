@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 07
 current_phase_name: financiero
 status: planning
-stopped_at: Completado 07-11-PLAN.md (detalle de aseos y ficha de aseadora)
-last_updated: "2026-09-14T00:10:11.200Z"
+stopped_at: Completado 07-12-PLAN.md
+last_updated: "2026-09-14T00:40:36.924Z"
 last_activity: 2026-09-13
 last_activity_desc: "Wave 2 cerrada: 07-05 (migracion 24, la frontera del aseador) y 07-06 (dominio financiero en TypeScript)"
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 89
-  completed_plans: 84
+  completed_plans: 85
   percent: 56
 ---
 
@@ -29,7 +29,7 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 ## Current Position
 
 Phase: 07 (financiero) — EN EJECUCION
-Plan: 11 of 14. Waves 0 a 6 cerradas (07-01 a 07-10). LA BASE DE LA FASE ESTA COMPLETA
+Plan: 12 of 14. Waves 0 a 6 cerradas (07-01 a 07-10). LA BASE DE LA FASE ESTA COMPLETA
 Y LA PRIMERA PANTALLA TAMBIEN.
 Status: WAVE 6 CERRADA. 07-10 construyo el chasis de la seccion y la sub-pestana Resumen.
 
@@ -284,6 +284,7 @@ Progress: [██████████] 100%
 | Phase 07 P09 | 145min | 3 tasks | 4 files |
 | Phase 07 P10 | 58min | 3 tasks | 17 files |
 | Phase 07 P11 | 75min | 2 tasks | 11 files |
+| Phase 07 P12 | 135min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -357,6 +358,8 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Phase ?]: 07-11: el pie del detalle SUMA LAS FILAS QUE SE PINTAN, no una segunda consulta agregada. Dos consultas divergen en un caso de borde y dejan dos cifras sin forma de saber cuál vale
 - [Phase ?]: 07-11: la señal de gasto de la tabla del detalle es un icono mudo, NO el disparador del recibo. rentabilidad_aseos solo devuelve la bandera por diseño y firmar una URL por fila contradice T-07-54. El recibo se abre desde la ficha
 - [Phase ?]: 07-11: la señal de periodo cruzado compara el PERIODO DE CIERRE de las dos fechas, no el mes calendario: lo que explica es en qué pago entró el aseo
+- [Phase ?]: 07-12: el desglose de un pago vive en la direccion (?pago={id}) y no en estado de cliente: asi las URL firmadas de los recibos se emiten solo para el pago que alguien esta mirando, en vez de firmar los ocho de cada periodo al cargar la pagina
+- [Phase ?]: 07-12: nada de otro origen pasa por el service worker. MEDIDO: con la regla comodin de defaultCache puesta, 4 de 5 fotos de recibo terminaban en net::ERR_FAILED; y esa regla ademas guardaba una hora, en una cache del navegador, toda respuesta de Supabase
 
 ### Pending Todos
 
@@ -372,6 +375,7 @@ Ninguno.
 - ~~STATE.md en current_phase 05~~ **RESUELTO el 2026-09-13 por el orquestador**, al cerrar la Wave 0. La seccion Current Position ya refleja la Fase 7 con sus 14 planes y el estado rojo declarado de las cuatro suites. Lo anotaron 07-01 y 07-02 y era correcto: un ejecutor de plan no podia arreglarlo con tres planes corriendo sobre el mismo arbol.
 - ~~FIN-02 a FIN-05 marcados `Complete` en REQUIREMENTS.md~~ **RESUELTO el 2026-09-13 por el orquestador**: pasan a `In Progress`. Venian del frontmatter `requirements` de planes de Wave 0, que escriben el CONTRATO y no lo satisfacen. Dejarlos en `Complete` habria hecho que el verificador de fase diera por buena una fase a medias, que es exactamente el modo de fallo que esta fase esta tratando de evitar en todos los demas frentes.
 - **[Fase 7] Requisitos marcados Complete antes de tiempo:** FIN-03, FIN-04 y FIN-05 quedaron en `Complete` en REQUIREMENTS.md porque figuran en el frontmatter `requirements` de los planes de la Wave 0, y la Wave 0 solo escribe CONTRATOS: sus 87 casos estan en rojo hasta que 07-04 y 07-06 los pongan en verde. No se revierte desde un ejecutor de plan (tres planes corren en paralelo sobre el mismo arbol); lo reconcilia el verificador de fase
+- Los casos 2 y 3 de e2e/finanzas.spec.ts (la sub-pestana Resumen) estan rojos: 5 de 6 en aislamiento. No son del 07-12, que no toca ninguno de sus archivos y los vio en verde en las primeras corridas del dia. Medido y fechado en .planning/phases/07-financiero/deferred-items.md
 
 ### Quick Tasks Completed
 
@@ -413,8 +417,8 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-14T00:10:11.163Z
-Stopped at: Completado 07-11-PLAN.md (detalle de aseos y ficha de aseadora)
+Last session: 2026-09-14T00:40:31.604Z
+Stopped at: Completado 07-12-PLAN.md
 
 **Abierto (unico):** el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real. Los cinco criterios de fallo estan escritos en `06-10-SUMMARY.md`. Nada mas bloquea la fase.
 
