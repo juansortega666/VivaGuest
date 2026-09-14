@@ -28,12 +28,75 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 
 ## Current Position
 
-Phase: 07 (financiero) — CASI CERRADA
-Plan: 14 of 14. Waves 0 a 8 ejecutadas. **Falta UNA sola cosa: el checkpoint humano de 07-13.**
-Status: 13 de 14 planes con SUMMARY. 07-13 esta PARADO en un `checkpoint:human-verify`
-bloqueante y NO tiene SUMMARY a proposito.
+Phase: 07 (financiero) — **CONSTRUIDA. Falta UN checkpoint humano.**
+Plan: 14 of 14 ejecutados. `07-13` esta parado en su `checkpoint:human-verify`.
+Status: **Lo unico que falta para cerrar la fase es el recorrido de nueve puntos en un iPhone real.** Todo lo automatizable esta en verde.
+Last activity: 2026-09-13 - las ocho waves ejecutadas; el filtro del Resumen arreglado tras el hallazgo de 07-14
 
-### Lo unico que bloquea el cierre de la fase
+### Las cuatro suites, medidas con el arbol quieto y la base reseteada
+
+| Capa | Al empezar la fase | Ahora |
+|---|---|---|
+| pgTAP | 275 | **376** |
+| Unitarios | 1006 | **1201** |
+| Integracion | 169 | **196** |
+| E2E | 112 + 1 saltado | **134 + 1 saltado** |
+
+**Cero rojas en las cuatro.** `tsc`, `lint`, `ci:arch` y `build` limpios.
+
+### LO UNICO PENDIENTE: el recorrido en el iPhone (Task 3 de `07-13`)
+
+`07-13` NO escribio su SUMMARY a proposito: el resultado punto por punto es parte
+de su contenido. No esta aprobado, no se simulo, y no se debe dar por bueno.
+
+Preparacion, ya lista:
+
+```
+npm run db:reset
+node scripts/dev/sembrar-mis-pagos.mjs      # imprime credenciales y los tres periodos
+cloudflared tunnel --url http://127.0.0.1:54321   # -> NEXT_PUBLIC_SUPABASE_URL
+cloudflared tunnel --url http://localhost:3001    # -> APP_BASE_URL
+NEXT_PUBLIC_VIVAGUEST_FEED_LOCAL=1 npm run build && npm run start -- --port 3001
+```
+
+**Los dos tuneles, y el segundo no es opcional:** la URL firmada del recibo se
+construye sobre `NEXT_PUBLIC_SUPABASE_URL`. Con un solo tunel apunta a
+`127.0.0.1:54321`, que el telefono no alcanza, y el punto 6 mostraria una imagen
+rota indistinguible de un defecto real. Las dos variables van en `.env.local`
+ANTES del build, y las URLs cambian en cada arranque de `cloudflared`.
+
+Los nueve puntos estan escritos en `07-13-PLAN.md` Task 3. Los mas importantes:
+que el periodo EN CURSO no aparezca (punto 5), que recorriendo las dos pantallas
+enteras no se vea ninguna cifra de huesped (punto 7), y que un recibo ya purgado
+diga que no esta disponible en vez de mostrar una imagen rota (punto 9).
+
+### Lo que esta fase descubrio y ninguna suite veia
+
+Cinco defectos vivos, ninguno previsto en los planes:
+
+1. **La fuga de la tarifa al huesped era real**, y la asercion 13 la imprimio con
+   su cifra: `have: 90000 / want: ERROR:42501`. Cerrada por las dos vias.
+2. **Cerrar la fuga habria roto `activarApartamento`** (un `select('*')` sobre
+   `properties`), sin error visible. Ningun apartamento se habria podido activar.
+3. **Un gasto reportado por una aseadora sobre el aseo de otra desaparecia** del
+   pago con un `left join`. Con `full outer join` produce las dos lineas.
+4. **Ninguna foto de recibo cargaba con el service worker activo**, sobre archivos
+   que el servidor sirve con 200. Y la misma regla guardaba una hora, en cache del
+   navegador, toda respuesta de Supabase, que sobrevive al cierre de sesion: en un
+   telefono compartido, la siguiente persona podia ver lo de la anterior.
+5. **El filtro del Resumen se colgaba al cambiar de rango** por su `loading.tsx`.
+
+Y dos defectos en las PROPIAS PRUEBAS, que habrian pasado en verde sobre un
+sistema roto:
+
+- El control de metodo del spec del aseador **no podia dispararse nunca**:
+  buscaba las cifras solo en el formato que no viaja. La prueba de la fuga habria
+  pasado siempre, incluso con la fuga abierta.
+- **Dos de los cinco senuelos no pusieron nada en rojo.** FIN-05 la sostenia un
+  CHECK y no el filtro; la idempotencia, el indice unico y no la salida temprana.
+  Salieron siete aserciones nuevas.
+
+## Lo unico que bloquea el cierre de la fase
 
 **07-13, tarea de verificacion en un iPhone real.** El recorrido de nueve puntos solo lo
 puede hacer el dueno. El plan dejo todo preparado (`scripts/dev/sembrar-mis-pagos.mjs`,
