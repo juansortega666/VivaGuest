@@ -302,6 +302,140 @@ export async function esperarWorkerListo(pagina: Page): Promise<void> {
   );
 }
 
+/**
+ * Espera a que UN CONTROL CONCRETO esté hidratado, o sea: a que tenga de verdad
+ * el manejador de clic que su componente de cliente le va a poner.
+ *
+ * ── EL FALLO QUE ESTA FUNCIÓN EXISTE PARA MATAR (medido el 2026-09-13) ─────
+ *
+ * `page.goto()` espera al evento `load`, que ocurre cuando llegó el HTML del
+ * servidor. En ese instante la pantalla YA SE VE ENTERA y todas las aserciones
+ * sobre texto, atributos y roles pasan, porque el árbol de accesibilidad lo
+ * produce el HTML renderizado en el servidor. Lo que todavía NO existe es un
+ * solo manejador de `onClick`.
+ *
+ * Un `click()` en esa ventana no falla ni avisa: Playwright encuentra el botón,
+ * lo ve visible y habilitado, y lo pulsa. No pasa nada. La prueba muere después
+ * esperando una navegación que nadie disparó, y el fallo apunta al componente en
+ * vez de a la carrera. Es lo que le pasaba a dos pruebas de `finanzas.spec.ts`,
+ * y por eso pasaban aisladas y fallaban en grupo: la ventana la abre o la cierra
+ * el rendimiento de la máquina, que es la definición de prueba que miente.
+ *
+ * ── POR QUÉ POR CONTROL Y NO «LA PÁGINA YA HIDRATÓ» ───────────────────────
+ *
+ * El primer intento esperó al elemento `next-route-announcer`, que Next crea en
+ * un `useEffect` del enrutador. **No alcanzó, y está medido:** con esa espera
+ * puesta, la prueba del chevron seguía fallando 2 de cada 3 veces. La razón es
+ * que la hidratación de React es progresiva: que la raíz del enrutador haya
+ * montado no dice nada sobre un componente hoja que vive en otro fragmento de
+ * JavaScript y que puede hidratar segundos después.
+ *
+ * ── EL MARCADOR, Y POR QUÉ ES EXACTO ──────────────────────────────────────
+ *
+ * React DOM escribe las props del elemento en el propio nodo, bajo una clave
+ * `__reactProps$<aleatorio>`, EN EL MOMENTO en que hidrata ese nodo. Preguntar
+ * si esa clave existe y si lleva un `onClick` invocable no es una aproximación
+ * temporal: es la señal positiva de que ese botón concreto ya responde. Vale en
+ * las compilaciones de producción, que es como corre esta suite.
+ *
+ * El sondeo va con `expect.poll`, que reevalúa DESDE Node; el predicado se
+ * ejecuta en la página pero no deja ningún bucle vivo dentro del documento.
+ */
+export async function esperarControlHidratado(
+  control: import('@playwright/test').Locator,
+): Promise<void> {
+  await expect
+    .poll(
+      async () =>
+        control.evaluate((el) => {
+          const clave = Object.keys(el).find((k) => k.startsWith('__reactProps$'));
+          if (clave === undefined) return false;
+          const props = (el as unknown as Record<string, { onClick?: unknown }>)[clave];
+          return typeof props?.onClick === 'function';
+        }),
+      {
+        timeout: 20_000,
+        message: 'El control nunca llegó a tener su manejador de clic: React no hidrató este nodo.',
+      },
+    )
+    .toBe(true);
+}
+
+/**
+ * Espera a que una navegación DEL LADO DEL CLIENTE haya dejado la URL en su
+ * sitio, sondeando desde Node y NUNCA desde dentro del documento.
+ *
+ * ── EL ARTEFACTO DE MEDICIÓN QUE ESTO ESQUIVA (medido el 2026-09-13) ───────
+ *
+ * `FiltroPeriodo` navega con `router.push` dentro de `useTransition`. Cuando la
+ * prueba espera ese cambio con `page.waitForURL()` o con
+ * `expect(page).toHaveURL()`, LA TRANSICIÓN NO SE COMPLETA NUNCA: medido con un
+ * plazo de 20 segundos, la aserción seguía viendo la URL vieja. Con una sola
+ * lectura tras dormir un segundo, la URL nueva YA ESTABA. Y sondeando
+ * `page.url()` desde Node, aparece a los ~200 ms.
+ *
+ * La diferencia entre los dos grupos es DÓNDE se sondea: los dos primeros
+ * inyectan un sondeo dentro de la página y se reprograman con
+ * `requestAnimationFrame`, y ese bucle y el commit de la transición de React se
+ * traban entre sí. `page.url()` se lee del lado del navegador, sin ejecutar nada
+ * dentro del documento, y no perturba lo que está midiendo.
+ *
+ * **No es un defecto del producto, y conviene que quede dicho:** la navegación
+ * tarda ~200 ms de verdad. Lo que estaba roto era el instrumento. Es el mismo
+ * error que esta fase persigue en la base de datos, solo que del lado del
+ * navegador: un rojo que acusa a la pantalla equivocada.
+ *
+ * Esto NO es la aserción, es la espera. La aserción sobre la URL se escribe
+ * después, y se sigue escribiendo.
+ */
+export async function esperarUrlDeCliente(
+  pagina: Page,
+  patron: RegExp,
+  ms = 15_000,
+): Promise<void> {
+  const limite = Date.now() + ms;
+  while (Date.now() < limite) {
+    if (patron.test(pagina.url())) return;
+    await pagina.waitForTimeout(50);
+  }
+  throw new Error(
+    `La navegación de cliente no dejó la URL en ${patron} tras ${ms} ms. Sigue en ${pagina.url()}`,
+  );
+}
+
+/**
+ * Pulsa un control que navega DEL LADO DEL CLIENTE y espera a que la URL lo
+ * demuestre, sin sondear nada dentro del documento.
+ *
+ * Es la composición de las dos funciones de arriba, y existe porque las dos
+ * trampas van SIEMPRE juntas: hay que esperar a que el control tenga manejador
+ * ANTES de pulsar, y hay que esperar la URL DESDE Node después.
+ *
+ * ── LO QUE ESTA FUNCIÓN NO ARREGLA, Y HAY QUE SABERLO AL LEER UN ROJO ──────
+ *
+ * Queda un fallo VIVO, medido el 2026-09-13 y anotado en el `deferred-items.md`
+ * de la Fase 7: en aproximadamente una corrida de cada dos, y con el control ya
+ * hidratado, la transición de `FiltroPeriodo` en `/finanzas` NO SE COMPLETA
+ * NUNCA. El contenedor se queda con `aria-busy="true"` para siempre y la
+ * respuesta RSC de la navegación llega con 200 y acto seguido se aborta.
+ *
+ * Cuando eso pasa, ESTA FUNCIÓN FALLA, y tiene que fallar: el rojo es del
+ * producto, no del instrumento, y el mensaje dice exactamente en qué URL se
+ * quedó. Descartado por medición: no es el service worker (reproducido con
+ * `/sw.js` bloqueado), no es el servidor (la misma petición RSC pedida a mano
+ * con `fetch` devuelve el cuerpo entero en ~100 ms), no es falta de hidratación,
+ * no es el orden de las pruebas, y volver a pulsar NO lo recupera.
+ */
+export async function pulsarHastaNavegar(
+  pagina: Page,
+  control: import('@playwright/test').Locator,
+  patron: RegExp,
+): Promise<void> {
+  await esperarControlHidratado(control);
+  await control.click();
+  await esperarUrlDeCliente(pagina, patron);
+}
+
 export type { RolE2E };
 
 // ═══════════════════════════════════════════════════════════════════════════════

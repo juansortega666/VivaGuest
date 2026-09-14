@@ -144,3 +144,62 @@ declara en §12.2b.
 
 **Detonante:** el plan 07-14, o el primero que tenga `app/(admin)/finanzas/page.tsx`
 o `FiltroPeriodo.tsx` entre sus archivos.
+
+---
+
+## `FiltroPeriodo` se cuelga en `/finanzas`: la transición nunca termina
+
+**Descubierto:** 2026-09-13, plan 07-14, arreglando los rojos de `finanzas.spec.ts`.
+**Estado:** VIVO. Deja dos pruebas E2E en rojo aproximadamente una corrida de cada dos.
+**Severidad:** alta en operación real. El filtro de periodo es el control principal
+de `/finanzas`, y cuando se cuelga NO SE RECUPERA: hay que recargar la pantalla.
+
+### Qué se observa
+
+Al pulsar `Día`, `Semana`, `Mes` o cualquiera de los dos chevrons de
+`app/(admin)/finanzas/_components/FiltroPeriodo.tsx`:
+
+1. El clic llega al botón (verificado con un escucha en fase de captura).
+2. `router.push` dentro de `useTransition` arranca: el contenedor de los bloques
+   pasa a `aria-busy="true"`.
+3. La petición RSC de la navegación sale y **el servidor responde 200**.
+4. **La respuesta se aborta acto seguido (`net::ERR_ABORTED`) y la transición no
+   se completa jamás.** `aria-busy` se queda en `true`, la URL no cambia, y
+   volver a pulsar no cambia nada.
+
+En la otra mitad de las corridas la URL cambia en ~200 ms y todo va bien.
+
+### Qué se descartó, con la medición al lado
+
+| Sospecha | Cómo se descartó |
+|---|---|
+| El service worker (precedente: 07-12, las fotos de recibo) | Reproducido con `/sw.js` bloqueado en `page.route`, sin worker registrado: 2 fallos de 4 corridas |
+| El servidor | La MISMA URL pedida a mano con `fetch(..., { headers: { RSC: '1' } })` desde la propia página devuelve 200 y el cuerpo completo (23 461 bytes) en ~100 ms |
+| Falta de hidratación | Se espera a que el nodo tenga su `__reactProps$…onClick` antes de pulsar, y aun así falla |
+| El orden de las pruebas | Se reproduce con la prueba aislada |
+| La tormenta de prefetch | Reproducido con los prefetch bloqueados |
+| `app/(admin)/finanzas/loading.tsx` | Quitarlo dio 15/15 en una corrida, pero al reponerlo dio 15/15 otra vez: no concluyente |
+| Un reintento del clic | `expect(...).toPass()` reintentando 30 s NO recupera el estado colgado |
+
+### Qué NO se tocó, y por qué
+
+Arreglarlo obliga a entrar en la navegación del App Router de Next (la
+interacción entre `useTransition`, `loading.tsx` y el `AbortController` de la
+navegación). Es un cambio de arquitectura del árbol de `/finanzas`, no un
+arreglo puntual, y la regla 4 de desviación dice que eso se pregunta, no se
+adivina. **Queda para una decisión explícita del dueño.**
+
+### Dónde vive el instrumento
+
+`e2e/fixtures.ts`: `esperarControlHidratado`, `esperarUrlDeCliente` y
+`pulsarHastaNavegar`, las tres con su medición escrita. Las dos pruebas que lo
+destapan son `finanzas.spec.ts` «cambiar el rango recalcula…» y «el chevron de
+siguiente se apaga…».
+
+### Un hallazgo lateral, ya resuelto
+
+`page.waitForURL()` y `expect(page).toHaveURL()` **nunca** ven este cambio de URL,
+ni con 20 segundos de plazo, ni siquiera en las corridas en las que la navegación
+SÍ funciona: su sondeo se ejecuta dentro del documento y se traba con el commit
+de la transición de React. Sondeando `page.url()` desde Node aparece en ~200 ms.
+Eso era un defecto del instrumento y está arreglado en `esperarUrlDeCliente`.

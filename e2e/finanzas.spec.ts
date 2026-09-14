@@ -7,6 +7,7 @@ import {
   CIFRAS_FINANCIERAS,
   expect,
   limpiarFinanzas,
+  pulsarHastaNavegar,
   sembrarFinanzas,
   test,
   type EscenarioFinanciero,
@@ -274,6 +275,17 @@ test.describe('Finanzas, con dos periodos cerrados y uno en curso', () => {
 
     const ETIQUETAS = ['COBRADO', 'PAGADO A ASEADORES', 'GASTOS REEMBOLSADOS', 'GANANCIA'];
 
+    // ── LAS CUATRO TIENEN QUE ESTAR VISIBLES ANTES DE MEDIRLAS ────────────
+    // `evaluate()` espera a que el elemento esté ADJUNTO, no a que esté pintado,
+    // y un nodo que React acaba de reemplazar al hidratar sigue resolviendo:
+    // devuelve un rectángulo de ceros y las cuatro posiciones salen en x = 0.
+    // El síntoma es «GANANCIA no va a la derecha de GASTOS REEMBOLSADOS», que se
+    // lee como un defecto de maquetación y no como una medición prematura.
+    // Medido el 2026-09-13: las cuatro se pintan en x = 41, 353, 665 y 977.
+    for (const etiqueta of ETIQUETAS) {
+      await expect(paginaAdmin.getByText(etiqueta, { exact: true })).toBeVisible();
+    }
+
     // El orden se mide por la posición en el documento, que es lo que el ojo lee.
     const posiciones = await Promise.all(
       ETIQUETAS.map(async (etiqueta) =>
@@ -324,12 +336,21 @@ test.describe('Finanzas, con dos periodos cerrados y uno en curso', () => {
     const cobradoDelMes = await valorKPI(paginaAdmin, 'COBRADO');
     const aseosDelMes = await filaDeConteo(paginaAdmin, 'Aseos hechos');
 
-    await rango.getByRole('button', { name: 'Día' }).click();
-
     // ── EL RANGO Y EL ANCLA VIAJAN EN LA URL (§6.2) ────────────────────────
     // No es cosmética: es lo que hace el filtro enlazable y lo que permite que un
     // refresco no devuelva al usuario a hoy.
-    await paginaAdmin.waitForURL(/rango=dia/);
+    //
+    // El clic va por `pulsarHastaNavegar` y no a secas: el segmentado es un
+    // componente de cliente y su navegación es una transición de React. Las dos
+    // trampas medidas están escritas en el comentario de esa función. Las
+    // aserciones sobre la URL se siguen haciendo, aquí abajo, y sobre las dos
+    // mitades del contrato.
+    await pulsarHastaNavegar(
+      paginaAdmin,
+      rango.getByRole('button', { name: 'Día' }),
+      /rango=dia/,
+    );
+    await expect(paginaAdmin).toHaveURL(/rango=dia/);
     await expect(paginaAdmin).toHaveURL(new RegExp(`ancla=${diaLimpio}`));
     await expect(rango.getByRole('button', { name: 'Día' })).toHaveAttribute(
       'aria-pressed',
@@ -363,7 +384,14 @@ test.describe('Finanzas, con dos periodos cerrados y uno en curso', () => {
     await expect(paginaAdmin.getByRole('button', { name: 'Periodo anterior' })).toBeEnabled();
     await expect(paginaAdmin.getByRole('button', { name: 'Hoy' })).toHaveCount(0);
 
-    await paginaAdmin.getByRole('button', { name: 'Periodo anterior' }).click();
+    // Las tres aserciones de arriba se resuelven contra el HTML del servidor y
+    // pasan ANTES de que React hidrate; el clic, no. Misma razón que en la
+    // prueba anterior.
+    await pulsarHastaNavegar(
+      paginaAdmin,
+      paginaAdmin.getByRole('button', { name: 'Periodo anterior' }),
+      /ancla=/,
+    );
 
     // Aparecer y desaparecer es información: si está, es que te fuiste de hoy.
     await expect(paginaAdmin.getByRole('button', { name: 'Hoy' })).toBeVisible();
