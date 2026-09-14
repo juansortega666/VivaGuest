@@ -5,8 +5,8 @@ milestone_name: milestone
 current_phase: 07
 current_phase_name: financiero
 status: planning
-stopped_at: Completado 07-12-PLAN.md
-last_updated: "2026-09-14T00:40:36.924Z"
+stopped_at: Completado 07-14-PLAN.md (fase 07 cerrada salvo el checkpoint humano de 07-13)
+last_updated: "2026-09-14T02:30:02.392Z"
 last_activity: 2026-09-13
 last_activity_desc: "Wave 2 cerrada: 07-05 (migracion 24, la frontera del aseador) y 07-06 (dominio financiero en TypeScript)"
 progress:
@@ -27,6 +27,48 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 **Current focus:** Fase 5, notificaciones push e instalacion de la PWA. `discuss-phase 5` cerrado el 2026-09-10 con `05-CONTEXT.md`; siguiente paso `ui-phase 5`. Pendiente aparte y sin bloquear: el visto bueno humano sobre las tres verificaciones perceptuales del plan 04-14.
 
 ## Current Position
+
+Phase: 07 (financiero) — CASI CERRADA
+Plan: 14 of 14. Waves 0 a 8 ejecutadas. **Falta UNA sola cosa: el checkpoint humano de 07-13.**
+Status: 13 de 14 planes con SUMMARY. 07-13 esta PARADO en un `checkpoint:human-verify`
+bloqueante y NO tiene SUMMARY a proposito.
+
+### Lo unico que bloquea el cierre de la fase
+
+**07-13, tarea de verificacion en un iPhone real.** El recorrido de nueve puntos solo lo
+puede hacer el dueno. El plan dejo todo preparado (`scripts/dev/sembrar-mis-pagos.mjs`,
+los dos tuneles y los nueve puntos escritos) y **no escribio su SUMMARY a proposito**,
+porque el resultado punto por punto es parte de su contenido. No esta aprobado, no se
+simulo, y no se puede dar por bueno desde aqui.
+
+### Las cuatro suites al cerrar la fase (2026-09-13, base reseteada y arbol quieto)
+
+| Capa | Antes de la Fase 7 | Ahora | Delta |
+|---|---|---|---|
+| pgTAP | 11 archivos, 275 | **12 archivos, 376** | +101 |
+| unidad | 55 archivos, 1006 | **63 archivos, 1201** | +195 |
+| integracion | 19 archivos, 169 | **22 archivos, 196** | +27 |
+| E2E | 112 pasando, 1 saltado | **132 pasando, 1 saltado, 2 rojos** | +20 |
+
+Los dos rojos E2E son de `finanzas.spec.ts` y **son del producto, no del spec**: la causa
+esta aislada con ocho corridas y escrita en la seccion de consecuencias de esta fase y en
+`deferred-items.md`. `npm run build`, `lint`, `tsc --noEmit`, `ci:arch`, `db:lint`,
+`db:advisors` y `db:types:check` pasan todos.
+
+### Los seis senuelos de la fase, corridos en los dos sentidos
+
+Estan en la cabecera de `supabase/tests/11_financiero.test.sql`. Dos de ellos (el filtro
+de gestion propia y la salida temprana del cierre) **no pusieron nada en rojo a la
+primera**: eran dos garantias que descansaban en una segunda capa y que ninguna asercion
+podia distinguir. De ahi salieron los bloques N y O del archivo y las siete aserciones
+nuevas, mas el test de concurrencia real
+`lib/domain/cierre-concurrente.integration.test.ts`.
+
+### Bitacora de la ejecucion de la Fase 7 (historico, tal como se fue escribiendo)
+
+> Se conserva integra y sin tocar: son las mediciones wave a wave, con las
+> cifras del dia en que se tomaron. Lo de arriba es el estado FINAL; esto es
+> como se llego.
 
 Phase: 07 (financiero) — EN EJECUCION
 Plan: 12 of 14. Waves 0 a 6 cerradas (07-01 a 07-10). LA BASE DE LA FASE ESTA COMPLETA
@@ -285,6 +327,7 @@ Progress: [██████████] 100%
 | Phase 07 P10 | 58min | 3 tasks | 17 files |
 | Phase 07 P11 | 75min | 2 tasks | 11 files |
 | Phase 07 P12 | 135min | 3 tasks | 13 files |
+| Phase 07 P14 | 4h30m | 4 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -360,6 +403,10 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Phase ?]: 07-11: la señal de periodo cruzado compara el PERIODO DE CIERRE de las dos fechas, no el mes calendario: lo que explica es en qué pago entró el aseo
 - [Phase ?]: 07-12: el desglose de un pago vive en la direccion (?pago={id}) y no en estado de cliente: asi las URL firmadas de los recibos se emiten solo para el pago que alguien esta mirando, en vez de firmar los ocho de cada periodo al cargar la pagina
 - [Phase ?]: 07-12: nada de otro origen pasa por el service worker. MEDIDO: con la regla comodin de defaultCache puesta, 4 de 5 fotos de recibo terminaban en net::ERR_FAILED; y esa regla ademas guardaba una hora, en una cache del navegador, toda respuesta de Supabase
+- [Phase ?]: 07-14: dos de los cinco senuelos declarados NO pusieron nada en rojo. FIN-05 la sostenia el CHECK cl_unmanaged_is_inert y la idempotencia el indice unico, no los filtros que el senuelo ataca. De ahi salen los bloques N y O de 11_financiero.test.sql
+- [Phase ?]: 07-14: la concurrencia del cierre se mide con dos procesos psql de verdad (docker exec al contenedor del stack local) sincronizados con pg_sleep_until, no con dos llamadas en paralelo a PostgREST. El test EXIGE que los intervalos de las dos sesiones se solapen: sin esa asercion, dos llamadas que se estorbaron por casualidad dejarian el mismo estado que dos simultaneas
+- [Phase ?]: 07-14: page.waitForURL y expect(page).toHaveURL NUNCA ven el cambio de URL de FiltroPeriodo, ni con 20 s de plazo, porque su sondeo corre dentro del documento y se traba con el commit de la transicion de React. Se sondea page.url() desde Node y la asercion sobre la URL se escribe despues
+- [Phase ?]: 07-14: app/(admin)/finanzas/loading.tsx cuelga el filtro de periodo. Aislado con ocho corridas: sin el archivo 4/4 en verde, con el archivo 6 fallos en 4. loading.tsx es el fallback de Suspense DEL SEGMENTO y tambien se aplica al cambio de parametros de la misma ruta. No se arregla desde 07-14 por alcance: afecta a cuatro rutas
 
 ### Pending Todos
 
@@ -376,6 +423,7 @@ Ninguno.
 - ~~FIN-02 a FIN-05 marcados `Complete` en REQUIREMENTS.md~~ **RESUELTO el 2026-09-13 por el orquestador**: pasan a `In Progress`. Venian del frontmatter `requirements` de planes de Wave 0, que escriben el CONTRATO y no lo satisfacen. Dejarlos en `Complete` habria hecho que el verificador de fase diera por buena una fase a medias, que es exactamente el modo de fallo que esta fase esta tratando de evitar en todos los demas frentes.
 - **[Fase 7] Requisitos marcados Complete antes de tiempo:** FIN-03, FIN-04 y FIN-05 quedaron en `Complete` en REQUIREMENTS.md porque figuran en el frontmatter `requirements` de los planes de la Wave 0, y la Wave 0 solo escribe CONTRATOS: sus 87 casos estan en rojo hasta que 07-04 y 07-06 los pongan en verde. No se revierte desde un ejecutor de plan (tres planes corren en paralelo sobre el mismo arbol); lo reconcilia el verificador de fase
 - Los casos 2 y 3 de e2e/finanzas.spec.ts (la sub-pestana Resumen) estan rojos: 5 de 6 en aislamiento. No son del 07-12, que no toca ninguno de sus archivos y los vio en verde en las primeras corridas del dia. Medido y fechado en .planning/phases/07-financiero/deferred-items.md
+- La Fase 7 NO cierra hasta el checkpoint humano de 07-13: el recorrido de nueve puntos en un iPhone real. 07-13 no tiene SUMMARY a proposito, porque el resultado punto por punto es parte de su contenido
 
 ### Quick Tasks Completed
 
@@ -392,6 +440,38 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 - **[Fase 4] Toda mutación de `cleanings` necesita RPC nueva, incluida la del admin.** `cleanings` queda con `grant select` puro para `authenticated`, y admin y aseador comparten ese rol de Postgres, así que "solo el admin" no existe como categoría de grant. La Fase 1 entrega 6 RPC (`reveal_access_code`, `confirm_cleaning`, `start_cleaning`, `finish_cleaning`, `decline_cleaning`, `toggle_checklist_item`). La Fase 4 tendrá que crear al menos: `reassign_cleaning` (ASEO-04), creación manual de aseo (ASEO-05), `reschedule_cleaning` (ASEO-06), `close_cleaning` (ASEO-08) y `cancel_cleaning` (ASEO-09). No es un vacío de diseño, es el patrón deliberado, pero hay que presupuestarlo.
 - **[Fase 6] Los RPC de reporte** (`report_damage`, `report_expense`, `report_missing_items`) se difirieron a esa fase. Sus tablas, grants y policies ya quedan listos en la Fase 1.
 - **[Fase 1, deuda menor]** La aserción 6 de `00_rls_aseos.test.sql` (fuga por embed) se ejecuta con un aseador que ya tiene cero aseos propios, así que el join da cero filas por construcción y no probaría un hueco real en la policy de `properties`. La protección de `properties` sí queda probada, sola, por la aserción 5. Debilidad heredada del research, no del plan.
+
+## Consecuencias de la Fase 7 para fases posteriores
+
+Registradas por el plan 07-14 el 2026-09-13 al cerrar la fase. **Los planners de la Fase 8 y sobre todo de la Fase 9 deben leer esto antes de escribir una línea.**
+
+### (a) Para la Fase 9, que es la purga, y es lo más importante
+
+- **[Fase 9] LOS RECIBOS DE GASTO DURAN CINCO AÑOS, NO TREINTA DÍAS.** La política vive en datos, en la clave `app_settings.expense_photo_retention_days` (1825 días, sembrada por la migración 23), y la decide `public.foto_vencida(text, timestamptz)`, que **existe exactamente para que la purga la consuma**. Una purga que borre las fotos con `kind = 'gasto'` a los 30 días junto con las demás **rompe D7-2**, que exige poder llegar desde cada gasto del desglose a la foto que lo sustenta, y rompe con ello un requisito de la Fase 7 sobre pagos que una persona ya cobró. El coste está calculado y es marginal: **los recibos son el 1,6% del volumen de fotos**, así que cinco años de recibos ocupan menos de 1 GB, mientras que las de checklist son ~10 GB al año y siguen con `photo_retention_days` sin cambios. Lo miden las aserciones 44 a 46 de `supabase/tests/11_financiero.test.sql`.
+- **[Fase 9] LAS TRES TABLAS DEL SNAPSHOT NO TIENEN NINGUNA CLAVE FORÁNEA HACIA EL MUNDO VIVO, Y ES A PROPÓSITO.** `cleaner_payout_lines.cleaning_id`, `.expense_id` y `.property_id` son identificadores desnudos; todo lo legible (nombre del apartamento, concepto, monto, las dos fechas, la ruta de la evidencia) va COPIADO como valor. No es un olvido del schema: es el requisito FIN-04. Quien "arregle" esto añadiendo claves foráneas rompe el criterio 4 del ROADMAP **y además atasca la propia purga con un 23503**. Hay un señuelo que lo mide: poner `on delete cascade` en esos dos punteros pone en rojo las aserciones 50, 52, 82 y 92, medido el 2026-09-13.
+- **[Fase 9] El desglose SOBREVIVE al borrado, y está medido ejecutando el borrado.** Borrar a mano un aseo y un gasto de un periodo ya cerrado deja la cabecera del periodo, el pago de la aseadora con el MISMO total, y las dos líneas legibles con su concepto, su monto y sus dos fechas. Las filas huérfanas que la purga va a encontrar en el snapshot **son deliberadas y no son basura que limpiar**.
+- **[Fase 9] La retención legal y la alerta de almacenamiento salieron de esta fase** por decisión del dueño del 2026-09-13 (RET-03 y RET-07). Viven como issues **#5 y #6**, asignados a la Fase 9. **El análisis técnico ya está hecho** en `07-RESEARCH.md` y en D7-9 de `07-CONTEXT.md` (incluido el detalle de que un valor nuevo del enum `notification_type` no se puede usar en la misma migración que lo añade). No hay que rehacerlo.
+
+### (b) Para el piloto de la Fase 8
+
+- **[Fase 8] El primer cierre real todavía no ha ocurrido.** La verificación manual del cierre contra el cálculo a mano del admin está PENDIENTE y depende de que exista un mes completo de operación real. Es la única fila del mapa de verificación de la fase que no se puede automatizar hoy.
+- **[Fase 8] El cierre automático corre todos los días y 364 de cada 365 no hace nada**, que es lo correcto: la guarda de calendario vive dentro de `public.cerrar_periodo_si_toca()` y no en la expresión del cron. Si el job falla el día que toca, el admin tiene el aviso de `public.periodo_pendiente_de_cierre()` y el botón de reintento en la pantalla de Pagos.
+
+### (c) La deuda que la Fase 7 deja, con su detonante
+
+| Deuda | Detonante |
+|---|---|
+| No hay histórico mes contra mes. La DEFINICION lo dejó sin definir a propósito | Cuando el dueño quiera comparar periodos |
+| El bloque de «qué está haciendo ahora» no se refresca solo | Si el admin lo empieza a usar como panel de control del equipo |
+| El umbral del buscador del bloque por aseadora es una interpretación | Si el dueño lo quiere siempre visible: es cambiar una constante |
+| La palabra «aseadora» frente a «aseadores» queda inconsistente en una etiqueta | Es una decisión de vocabulario de todo el producto, no de esta fase |
+| No se puede exportar ni imprimir el cálculo. Está confirmado fuera (FIN-V2-01) | El admin copia las cifras a mano para transferir, que es donde se cometen los errores de dígito. **Es la deuda más cara en operación real** |
+| La pantalla de Pagos no paginará bien a los dos años | Pasar de 18 periodos cerrados |
+| La segunda vía de la fuga se cerró con grants ENUMERADOS a mano | Cualquier columna nueva en `cleanings` o en `properties` hay que añadirla a esos dos `grant select (...)` de la migración 24, o nace invisible para la aplicación |
+
+### (d) Un defecto VIVO que la Fase 7 deja con la causa aislada
+
+- **`app/(admin)/finanzas/loading.tsx` cuelga el filtro de periodo.** Medido con ocho corridas: sin el archivo, 4/4 en verde; con el archivo, 6 fallos en 4 corridas. `loading.tsx` es el `fallback` de Suspense DEL SEGMENTO y se aplica también al cambio de parámetros de la misma ruta, que es justo lo que su propio comentario da por hecho que no pasa. El arreglo (mover el esqueleto a un `<Suspense>` dentro de `page.tsx`) y las seis sospechas descartadas están escritos en `.planning/phases/07-financiero/deferred-items.md`. **Afecta también a `/finanzas/aseos` y a `/finanzas/aseadoras/[id]`, que llevan el mismo patrón.** Deja dos pruebas E2E en rojo a propósito.
 
 ## Restricciones nuevas (2026-08-31)
 
@@ -417,10 +497,10 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-14T00:40:31.604Z
-Stopped at: Completado 07-12-PLAN.md
+Last session: 2026-09-14T02:29:36.832Z
+Stopped at: Completado 07-14-PLAN.md. Fase 07 ejecutada entera salvo el checkpoint humano de 07-13.
 
-**Abierto (unico):** el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real. Los cinco criterios de fallo estan escritos en `06-10-SUMMARY.md`. Nada mas bloquea la fase.
+**Abiertos:** (1) el checkpoint humano de **07-13**, el recorrido de nueve puntos en un iPhone real; sin el, la Fase 7 no cierra y 07-13 no tiene SUMMARY a proposito. (2) el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real, con sus cinco criterios de fallo en `06-10-SUMMARY.md`.
 
 **Diferidos por decision del desarrollador:** 05-12 (wizard `/instalar` con sus 5 capturas), 05-17 (validacion en dispositivo fisico) y el criterio 4 de la Fase 6 (offline, D-08, registrado en `.planning/BACKLOG.md`).
 
