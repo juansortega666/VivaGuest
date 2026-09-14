@@ -67,3 +67,35 @@ persona» a «una por persona y moneda». Es un cambio de clave única en
 
 **Detonante:** el día que una pantalla ofrezca elegir moneda al reportar un
 gasto, o el día que entre la primera unidad fuera de Colombia.
+
+---
+
+## `/finanzas` no está en la zona del admin del ruteo (plan 07-11)
+
+**Qué se observó.** `ZONA_ADMIN` de `lib/auth/routing.ts` sigue siendo
+`['/operacion', '/apartamentos', '/aseadores']`. La sección de finanzas nunca se
+añadió. El efecto es que una sesión de aseadora que pide `/finanzas/aseos` **no**
+rebota en el middleware: entra, el layout de `(admin)` falla su guard y redirige
+a `/login`, y desde ahí el middleware la manda a `/mis-aseos`. El destino final
+es correcto y la suite lo afirma (caso T-07-09), pero el camino son dos saltos en
+vez de uno.
+
+**El síntoma visible.** En cada uno de esos saltos, el componente de servidor de
+la página alcanza a ejecutarse en paralelo con el layout, la función de la base
+levanta `42501`, y el proceso escribe un `Error: no_autorizado` en su registro.
+Se ve tal cual en la salida del servidor de la corrida E2E. **No es una fuga**:
+nada de esa página llega al navegador, porque la redirección gana. Es ruido en el
+registro y un salto de más.
+
+**Por qué no se arregló aquí.** `lib/auth/routing.ts` no está en los archivos de
+este plan, y la wave 7 tenía tres agentes escribiendo a la vez sobre el mismo
+árbol: tocar el ruteo compartido para quitar ruido de un registro no vale el
+riesgo de romperles la sesión a los otros dos. Además el defecto ya existía con
+`/finanzas` a secas desde el plan 07-10, así que no lo introduce esta pantalla.
+
+**Cómo se arregla.** Añadir `'/finanzas'` al arreglo `ZONA_ADMIN`. Es una línea,
+y `routing.test.ts` ya tiene el molde de casos para cubrirla. Con eso el rebote
+ocurre en el borde, de un solo salto y sin tocar la base.
+
+**Detonante:** el primer plan que tenga `lib/auth/routing.ts` entre sus archivos,
+o la primera vez que ese `no_autorizado` confunda a alguien leyendo registros.

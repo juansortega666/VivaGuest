@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 07
 current_phase_name: financiero
 status: planning
-stopped_at: Completed 07-10-PLAN.md
-last_updated: "2026-09-13T22:36:31.795Z"
+stopped_at: Completado 07-11-PLAN.md (detalle de aseos y ficha de aseadora)
+last_updated: "2026-09-14T00:10:11.200Z"
 last_activity: 2026-09-13
 last_activity_desc: "Wave 2 cerrada: 07-05 (migracion 24, la frontera del aseador) y 07-06 (dominio financiero en TypeScript)"
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 89
-  completed_plans: 83
+  completed_plans: 84
   percent: 56
 ---
 
@@ -29,7 +29,7 @@ Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 ## Current Position
 
 Phase: 07 (financiero) — EN EJECUCION
-Plan: 10 of 14. Waves 0 a 6 cerradas (07-01 a 07-10). LA BASE DE LA FASE ESTA COMPLETA
+Plan: 11 of 14. Waves 0 a 6 cerradas (07-01 a 07-10). LA BASE DE LA FASE ESTA COMPLETA
 Y LA PRIMERA PANTALLA TAMBIEN.
 Status: WAVE 6 CERRADA. 07-10 construyo el chasis de la seccion y la sub-pestana Resumen.
 
@@ -283,6 +283,7 @@ Progress: [██████████] 100%
 | Phase 07 P08 | 55min | 3 tasks | 3 files |
 | Phase 07 P09 | 145min | 3 tasks | 4 files |
 | Phase 07 P10 | 58min | 3 tasks | 17 files |
+| Phase 07 P11 | 75min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -353,6 +354,9 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Phase 07]: 07-09: el sembrador E2E de finanzas cierra sesión con scope local; el signOut global revocaba los refresh tokens del admin y tumbaba 23 specs
 - [Phase ?]: 07-10: el orden del bloque por aseadora vive en estado de cliente y NO en la URL, al reves que el rango y el ancla. En la URL, un enlace compartido llevaria el podio puesto y el refresco lo conservaria
 - [Phase ?]: 07-10: recalcular no es navegar. Al cambiar el filtro las cifras viejas se quedan visibles y atenuadas en vez de sustituirse por un esqueleto, porque lo que el admin esta haciendo es comparar
+- [Phase ?]: 07-11: el pie del detalle SUMA LAS FILAS QUE SE PINTAN, no una segunda consulta agregada. Dos consultas divergen en un caso de borde y dejan dos cifras sin forma de saber cuál vale
+- [Phase ?]: 07-11: la señal de gasto de la tabla del detalle es un icono mudo, NO el disparador del recibo. rentabilidad_aseos solo devuelve la bandera por diseño y firmar una URL por fila contradice T-07-54. El recibo se abre desde la ficha
+- [Phase ?]: 07-11: la señal de periodo cruzado compara el PERIODO DE CIERRE de las dos fechas, no el mes calendario: lo que explica es en qué pago entró el aseo
 
 ### Pending Todos
 
@@ -409,8 +413,8 @@ Registradas por `gsd-plan-checker` el 2026-08-31 al verificar los planes. Los pl
 
 ## Session Continuity
 
-Last session: 2026-09-13T22:36:31.782Z
-Stopped at: Completed 07-10-PLAN.md
+Last session: 2026-09-14T00:10:11.163Z
+Stopped at: Completado 07-11-PLAN.md (detalle de aseos y ficha de aseadora)
 
 **Abierto (unico):** el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real. Los cinco criterios de fallo estan escritos en `06-10-SUMMARY.md`. Nada mas bloquea la fase.
 
