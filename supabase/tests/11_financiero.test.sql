@@ -31,6 +31,8 @@
 --   K  las dos puertas del cierre ............. 07-07  (añadido por ese plan)
 --   L  las seis lecturas del admin ............ 07-08  (añadido por ese plan)
 --   M  los pagos del admin y la marca ........ 07-09  (añadido por ese plan)
+--   N  FIN-05 sin la red del CHECK ............. 07-14  (hallazgo del señuelo 1)
+--   O  la idempotencia que nadie medía ......... 07-14  (hallazgo del señuelo 2)
 --
 --   A PARTIR DE QUE UN BLOQUE SE PONE EN VERDE, UN `not ok` SUYO ES UNA
 --   REGRESIÓN, no un pendiente. La línea base con la que se mide: los once
@@ -157,10 +159,98 @@
 -- REGLA PARA QUIEN AMPLÍE ESTE ARCHIVO: todo bloque nuevo va AL FINAL y sube el
 -- argumento de `plan()`. Insertarlo en su sitio alfabético corre los números de
 -- todo lo que venga después, y esos números están citados en los planes.
+--
+-- ---------------------------------------------------------------------------
+-- BITÁCORA DE SEÑUELOS — 2026-09-13, plan 07-14
+--
+-- Una suite en verde demuestra que el código pasa los tests. NO demuestra que
+-- los tests puedan fallar. Por cada garantía que la Fase 7 promete se rompió a
+-- propósito la línea que la sostiene, se midió QUÉ ASERCIÓN CONCRETA se puso
+-- roja, se revirtió, y se volvió a medir en verde. Todo con `npm run db:reset`
+-- antes de cada corrida, sobre el árbol quieto y la base recién creada.
+--
+-- Esto es lo que le permite a quien toque este archivo dentro de un año saber
+-- que sus aserciones son CAPACES de fallar. Si amplías el archivo, amplía
+-- también esta tabla: una aserción sin señuelo corrido es una promesa sin
+-- recibo.
+--
+--   #  QUÉ SE ROMPIÓ                              QUÉ SE PUSO ROJO
+--   ─  ─────────────────────────────────────────  ──────────────────────────
+--   1  migración 25: `where c.is_managed` fuera    NADA. 369/369 en verde.
+--      del núcleo del cierre (las dos veces:       → HALLAZGO. Ver bloque N.
+--      el cálculo y el contador)                   Con el bloque N: 96 y 97.
+--
+--   2  migración 25: la salida temprana            NADA. 99/99 en verde.
+--      `if v_cabeceras = 0 then return 0`          → HALLAZGO. Ver bloque O.
+--                                                  Con el bloque O: 100 y 101.
+--
+--   3  migración 23: `references ... on delete     50, 52, 82 y 92. Las cuatro
+--      cascade` en `cleaning_id` y `expense_id`    de FIN-04: el desglose deja
+--      de `cleaner_payout_lines`                   de sobrevivir al borrado.
+--
+--   4  migración 24: `tarifa_huesped` devuelta     13, y el TAP imprime la
+--      al grant de columna de `cleanings`          cifra fugada: `have: 90000`.
+--
+--   5  migración 23: `at time zone 'America/       18 aserciones. Ver la nota
+--      Bogota'` fuera de `public.dia_bog`          de abajo: es correcto.
+--
+--   6  migración 25: `on conflict (periodo_desde)  NO en este archivo, pero SÍ
+--      do nothing` cambiado por un insert a        en `lib/domain/cierre-
+--      secas                                       concurrente.integration.
+--                                                  test.ts`: 3 de sus 6.
+--
+-- ── SEÑUELOS 1 Y 2: LOS DOS HALLAZGOS, Y POR QUÉ NO SON UN TRÁMITE ─────────
+--
+-- Ninguno de los dos puso NADA en rojo a la primera. No porque las líneas
+-- sobren, sino porque cada garantía la sostenían DOS capas y solo una estaba
+-- medida:
+--
+--   * FIN-05 la sostiene hoy `cl_unmanaged_is_inert` (migración 04), que impide
+--     que un informativo tenga estado, aseadora o `finished_at`. Con la fila
+--     inerte, el `c.state = 'completada'` ya lo deja fuera él solo e
+--     `is_managed` nunca llega a decidir nada. El bloque N apaga esa capa
+--     dentro de la transacción del test y deja al filtro solo.
+--
+--   * La idempotencia la sostiene el índice único de la cabecera, no la salida
+--     temprana. Sin la salida temprana el dinero SIGUE a salvo, pero la segunda
+--     corrida revienta con 23505 en vez de salir en silencio devolviendo cero,
+--     y eso rompe las dos puertas. El bloque O lo mide.
+--
+-- Los dos hallazgos valen más que los tres señuelos que salieron a la primera:
+-- eran dos filtros que nadie podía poner en rojo, o sea dos comentarios con
+-- sintaxis de SQL. Ahora se pueden.
+--
+-- ── SEÑUELO 5: 18 ROJOS NO ES FALTA DE PRECISIÓN, ES EL RADIO REAL ────────
+--
+-- `public.dia_bog` es la ÚNICA conversión que decide a qué periodo pertenece un
+-- aseo, así que quitarle la zona mueve UN aseo del fixture (el de las 23:30 del
+-- día del cierre) de julio a agosto y con él toda la aritmética del periodo:
+-- totales, desglose, KPIs y la vista del aseador. Las tres primeras rojas —8,
+-- 10 y 11— SON la garantía D7-8, y la 8 es lo más estrecho que se puede
+-- escribir: mide la función a solas sobre el instante frontera, con
+-- `have: 2026-08-01 / want: 2026-07-31`. Las otras quince son la consecuencia,
+-- y verlas es el punto: así se ve de un vistazo lo que cuesta esa línea.
+--
+-- ── SEÑUELO 6: LA CONCURRENCIA NO CABE EN pgTAP ───────────────────────────
+--
+-- pgTAP corre en una sola sesión, así que la única idempotencia que este
+-- archivo puede ejercer es la SECUENCIAL. La simultánea —las dos puertas
+-- disparando a la vez, que es el escenario que la garantía existe para
+-- cubrir— vive en `lib/domain/cierre-concurrente.integration.test.ts`, con dos
+-- procesos `psql` de verdad sincronizados por `pg_sleep_until`.
+--
+-- Resultado del señuelo 6, y conviene leerlo entero: quitar el `on conflict do
+-- nothing` NO duplicó el pago —el índice único lo impidió, y ésa es la garantía
+-- dura de D7-3— pero SÍ hizo reventar a la puerta del admin con 23505 mientras
+-- la del job ganaba la carrera. Las tres aserciones de ESTADO de aquel archivo
+-- siguieron en verde y las tres de COMPORTAMIENTO se pusieron rojas. Es
+-- exactamente la distinción que el bloque O explica, medida esta vez con las
+-- dos conexiones peleándose de verdad.
+-- ---------------------------------------------------------------------------
 -- ============================================================================
 
 begin;
-select plan(94);
+select plan(101);
 
 -- ---------------------------------------------------------------------------
 -- Limpieza del seed, en orden inverso de FK. El rollback la deshace.
@@ -2071,6 +2161,216 @@ select is(
     format($q$select * from public.detalle_de_mi_pago(%L::uuid)$q$, :'pago_de_7a')),
   '42501',
   'PLAT-04 una aseadora desactivada tampoco obtiene el desglose de un pago, aunque tenga su identificador');
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- N. FIN-05 SIN LA RED DEL CHECK: EL FILTRO `is_managed`, MEDIDO SOLO
+--    — 5 aserciones
+--
+--    ── POR QUÉ ESTE BLOQUE EXISTE, Y ES UN HALLAZGO DEL PLAN 07-14 ─────────
+--
+--    El señuelo 1 de la fase («quitar el filtro de gestión propia del núcleo
+--    del cierre») se corrió el 2026-09-13 y NO PUSO NADA EN ROJO. Las 369
+--    aserciones siguieron en verde con el filtro fuera.
+--
+--    La razón no es que el filtro sobre: es que la garantía FIN-05 la sostienen
+--    DOS capas independientes y solo una estaba medida.
+--
+--      Capa 1 (la que trabaja hoy): `cl_unmanaged_is_inert` de la migración 04.
+--        Un aseo informativo NO PUEDE tener estado, ni aseadora, ni
+--        `finished_at`, ni tarifas. Con esa fila inerte, el `c.state =
+--        'completada'` del núcleo ya lo deja fuera él solo, y `is_managed`
+--        nunca llega a decidir nada.
+--
+--      Capa 2 (la que el señuelo ataca): el `where c.is_managed` explícito del
+--        núcleo del cierre y de las lecturas del admin. Es exactamente la
+--        defensa que la migración 25 describe como necesaria «hasta el día en
+--        que alguien añada una columna con default», y hasta este bloque
+--        NINGUNA aserción del repo podía distinguir si estaba o no.
+--
+--    Un filtro que no se puede poner en rojo es un comentario con sintaxis de
+--    SQL. Este bloque APAGA LA CAPA 1 dentro de la transacción del test —el
+--    `rollback` final la repone— y deja a la capa 2 sola frente al informativo.
+--    A partir de aquí, quitar `is_managed` del núcleo SÍ pone rojo, y el rojo
+--    dice cuál de las dos capas se cayó.
+--
+--    ── POR QUÉ EL PERIODO ES JUNIO ────────────────────────────────────────
+--
+--    Julio y agosto ya se cerraron en los bloques E y F, y un periodo cerrado
+--    no se recalcula nunca (D7-3): reutilizarlos daría cero por la razón
+--    equivocada y el bloque pasaría en verde sin medir nada. Junio
+--    (2026-05-30 .. 2026-06-30, ver bloque B) está sin cerrar y sin un solo
+--    aseo, así que CUALQUIER cifra distinta de cero en su cierre viene del
+--    informativo y de nada más.
+--
+--    ── LAS DOS DEFENSAS SE APAGAN, Y HAY QUE APAGAR LAS DOS ────────────────
+--
+--    El CHECK prohíbe la FORMA de la fila; el trigger `cleanings_snapshot`
+--    reimpone `is_managed` y vigila la máquina de estados. Con solo una de las
+--    dos fuera, la fila no se puede escribir y el bloque entero pasaría en
+--    verde por vacuidad. Por eso la aserción 95 es el ARNÉS: comprueba que la
+--    fila tramposa EXISTE antes de afirmar nada sobre ella. Sin ella, este
+--    bloque sería justo el tipo de test que esta fase existe para desenmascarar.
+--
+--    Lo pone en verde: 07-07 (migración 25) y 07-08 (migración 26), que ya
+--    escribieron el filtro. Este bloque no pide código nuevo: pide poder medirlo.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- Fuera la capa 1. Es DDL dentro de la transacción del test: Postgres la
+-- revierte con el `rollback` del final, igual que revierte los `insert`.
+select pg_temp.correr($q$
+  alter table public.cleanings drop constraint cl_unmanaged_is_inert
+$q$) as n_check_fuera \gset
+
+select pg_temp.correr($q$
+  alter table public.cleanings disable trigger cleanings_snapshot
+$q$) as n_trigger_fuera \gset
+
+-- El informativo que NO debería poder existir: gestión externa, pero completado,
+-- con aseadora y con setecientos setenta y siete mil pesos de pago. Es la fila
+-- que produciría «alguien añade una columna con default» y que la capa 2 tiene
+-- que dejar fuera ella sola.
+--
+-- `hora_limite` va explícita y no es ruido: la rellenaba el trigger que este
+-- bloque acaba de apagar, y la columna es `not null`. Sin ella el insert muere
+-- con 23502 y las cuatro aserciones de abajo pasarían en verde sobre una fila
+-- que no existe. Medido el 2026-09-13, al escribir el bloque.
+select pg_temp.correr($q$
+  insert into public.cleanings
+    (id, property_id, scheduled_date, tipo, origin, is_managed, hora_limite,
+     aseador_id, confirmado_at, state, started_at, finished_at,
+     tarifa_huesped, pago_aseador)
+  values ('f7000000-0000-0000-0000-000000000901',
+          'b7000000-0000-0000-0000-000000000003',
+          date '2026-06-15', 'normal', 'manual', false, time '11:00',
+          'a7000000-0000-0000-0000-00000000000a', now(), 'completada',
+          (timestamp '2026-06-15 08:00') at time zone 'America/Bogota',
+          (timestamp '2026-06-15 14:00') at time zone 'America/Bogota',
+          777000::bigint, 777000::bigint)
+$q$) as n_informativo_vivo \gset
+
+-- 95 EL ARNÉS. Si esta se pone roja, las cuatro de abajo no miden nada y su
+--    verde es falso: el orden de lectura importa.
+select is(
+  pg_temp.escalar($q$
+    select count(*)::text
+        || '|' || pg_catalog.max(c.state::text)
+        || '|' || pg_catalog.max(c.pago_aseador)::text
+        || '|' || pg_catalog.max(public.dia_bog(c.finished_at))::text
+      from public.cleanings c
+     where c.id = 'f7000000-0000-0000-0000-000000000901'
+       and not c.is_managed
+  $q$),
+  '1|completada|777000|2026-06-15',
+  'FIN-05 arnes: con el CHECK de inercia y el trigger fuera, el informativo NO inerte existe y cae dentro del periodo de junio');
+
+-- El cierre de junio, por la puerta del job (el núcleo directo). Escritura en su
+-- propia sentencia: la trampa 1 de la cabecera aplica igual aquí.
+select pg_temp.correr($q$
+  select private.cerrar_periodo_core(date '2026-05-30', date '2026-06-30')
+$q$) as n_junio_cerrado \gset
+
+-- 96 EL DESGLOSE. Ni una línea del apartamento de gestión externa.
+select is(
+  pg_temp.escalar($q$
+    select count(*)::text
+      from public.cleaner_payout_lines l
+     where l.property_id = 'b7000000-0000-0000-0000-000000000003'
+  $q$),
+  '0',
+  'FIN-05 con el CHECK fuera, el filtro is_managed del nucleo deja al informativo fuera del desglose el solo');
+
+-- 97 EL MONTO Y EL CONTEO, que es la mitad de FIN-05 que el nulo nunca protegió.
+--    Junio no tiene ningún aseo gestionado, así que el cierre tiene que dejar
+--    la cabecera del periodo y CERO filas de pago. Un solo peso aquí es el
+--    informativo colándose.
+select is(
+  pg_temp.escalar($q$
+    select count(*)::text
+        || '|' || coalesce(sum(p.monto_total), 0)::text
+      from public.cleaner_payouts p
+     where p.periodo_desde = date '2026-05-30'
+  $q$),
+  '0|0',
+  'FIN-05 el cierre de junio no escribe ninguna fila de pago ni un solo peso por el informativo');
+
+-- 98 LAS LECTURAS DEL ADMIN, por la misma vía y con la misma fila tramposa.
+--    Es la otra superficie donde FIN-05 se puede romper, y la migración 26
+--    repite el filtro justamente por eso.
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', $q$
+    select r.aseos_hechos::text || '|' || r.pagado_aseadores::text
+      from public.resumen_financiero(date '2026-05-30', date '2026-06-30') r
+  $q$),
+  '0|0',
+  'FIN-05 los KPIs del Resumen tampoco cuentan ni suman al informativo sin la red del CHECK');
+
+-- 99 Y EL DETALLE. Cero filas, no una fila con las cifras en nulo.
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', $q$
+    select count(*)::text
+      from public.rentabilidad_aseos(date '2026-05-30', date '2026-06-30') r
+  $q$),
+  '0',
+  'FIN-05 el detalle de rentabilidad no lista al informativo sin la red del CHECK');
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- O. LA IDEMPOTENCIA, PERO LA MITAD QUE NADIE MEDÍA — 2 aserciones
+--
+--    ── SEGUNDO HALLAZGO DEL PLAN 07-14, Y HERMANO DEL BLOQUE N ────────────
+--
+--    El señuelo 2 de la fase («quitar la salida temprana cuando el periodo ya
+--    está cerrado») se corrió el 2026-09-13 y, igual que el 1, NO PUSO NADA EN
+--    ROJO. Las 99 aserciones siguieron en verde con la guarda comentada.
+--
+--    Medido con una sonda directa contra la base, para no especular: con la
+--    salida temprana fuera, la segunda corrida sobre un periodo ya cerrado
+--    revienta con **23505** sobre `cp_periodo_aseador_unico`.
+--
+--    Es decir: el dinero NUNCA estuvo en riesgo —el índice único lo impide, y
+--    esa es la garantía dura de D7-3—, pero el repo no distinguía entre las dos
+--    formas de «no pagar dos veces»:
+--
+--      (a) No pagar dos veces PORQUE LA SEGUNDA CORRIDA EXPLOTA. El dinero se
+--          salva; el job de `pg_cron` queda marcado como fallido en
+--          `cron.job_run_details`, y el botón «Cerrar el periodo ahora» del
+--          admin le devuelve un error a alguien que no hizo nada mal. La
+--          siguiente persona que mire el log va a buscar un defecto que no
+--          existe, o —peor— va a aprender a ignorar los cierres fallidos.
+--
+--      (b) No pagar dos veces PORQUE LA SEGUNDA CORRIDA SALE LIMPIA y devuelve
+--          cero. Que es lo que la migración 25 escribió, lo que sus comentarios
+--          prometen, y lo que las dos puertas necesitan para poder dispararse
+--          a la vez sin coordinarse.
+--
+--    Las aserciones 31 a 33 del bloque F miden el ESTADO después de repetir el
+--    cierre, y (a) y (b) dejan el mismo estado. El valor de retorno y el
+--    SQLSTATE de esas corridas se capturaban con `\gset` y no se afirmaban
+--    NUNCA. Este bloque los afirma.
+--
+--    Lo pone en verde: 07-07, migración 25, sin tocar una línea. No pide código
+--    nuevo: pide poder medir el código que ya está.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- 100 LAS TRES REPETICIONES DEL BLOQUE F, POR SU SQLSTATE. Se capturaron allí
+--     con `\gset` y las variables de psql siguen vivas hasta el final del
+--     archivo, así que esto no vuelve a cerrar nada: audita lo que ya pasó.
+select is(
+  :'segunda_corrida' || '|' || :'tercera_corrida' || '|' || :'cuarta_corrida',
+  'sin_error|sin_error|sin_error',
+  'D7-3 las tres corridas repetidas del cierre salieron SIN ERROR, no solo sin mover el pago');
+
+-- 101 Y UNA CORRIDA MÁS, ESTA MIDIENDO EL VALOR DE RETORNO. Cero pagos escritos
+--     es la respuesta correcta de un periodo ya cerrado, y es lo que la puerta
+--     del admin le enseña a la pantalla. `valor_como` devuelve 'ERROR:<estado>'
+--     si la llamada revienta, así que esta aserción distingue las dos formas de
+--     «no pagar dos veces» con una sola comparación.
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001',
+    $q$select public.cerrar_periodo(date '2026-07-01', date '2026-07-31')::text$q$),
+  '0',
+  'D7-3 una corrida mas sobre el periodo ya cerrado devuelve CERO pagos y no revienta');
 
 
 select * from finish();
