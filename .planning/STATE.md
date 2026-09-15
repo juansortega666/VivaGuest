@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 07
-current_phase_name: financiero
+current_phase: 08
+current_phase_name: paneles-laterales-en-el-admin
 status: planning
-stopped_at: Completado 07-14-PLAN.md (fase 07 cerrada salvo el checkpoint humano de 07-13)
-last_updated: "2026-09-14T02:30:02.392Z"
-last_activity: 2026-09-13
-last_activity_desc: "Wave 2 cerrada: 07-05 (migracion 24, la frontera del aseador) y 07-06 (dominio financiero en TypeScript)"
+stopped_at: Fase 08 con CONTEXT y UI-SPEC aprobado 6/6. Siguiente: plan-phase 8. La Fase 07 sigue abierta en su unico checkpoint humano (07-13, el recorrido en iPhone)
+last_updated: "2026-09-15T15:50:00.000Z"
+last_activity: 2026-09-15
+last_activity_desc: "Fase 08 abierta: el piloto sale del milestone, entran los paneles laterales. 08-CONTEXT con las 11 decisiones del dueno y 08-UI-SPEC aprobado por el checker en las 6 dimensiones tras una vuelta de revision"
 progress:
   total_phases: 9
   completed_phases: 5
