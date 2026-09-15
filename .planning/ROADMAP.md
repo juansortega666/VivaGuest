@@ -2,7 +2,7 @@
 
 ## Overview
 
-El proyecto se construye de adentro hacia afuera. Primero la base de datos: schema, migraciones, invariantes y RLS, porque `database.types.ts` y la forma de los RPC son el contrato de toda la UI y cambian con cada migración. Sobre esa base se monta el acceso y el catálogo real de la operación (39 unidades, 8 clusters), luego el motor de sincronización iCal que es el Core Value, y enseguida el dashboard del admin, que es lo que hace observable ese motor. Después la superficie del aseador (push primero, PWA después), el financiero, el piloto acotado a Bogotá 1, y de último el borrado automático, que no tiene nada que borrar hasta el mes 7.
+El proyecto se construye de adentro hacia afuera. Primero la base de datos: schema, migraciones, invariantes y RLS, porque `database.types.ts` y la forma de los RPC son el contrato de toda la UI y cambian con cada migración. Sobre esa base se monta el acceso y el catálogo real de la operación (39 unidades, 8 clusters), luego el motor de sincronización iCal que es el Core Value, y enseguida el dashboard del admin, que es lo que hace observable ese motor. Después la superficie del aseador (push primero, PWA después), el financiero, los paneles laterales que dejan la consulta del admin sin costo de navegación, y de último la retención, que no tiene nada que borrar hasta el mes 7.
 
 El equipo son dos personas, así que **las fases corren en secuencia estricta**. El grafo de paralelización que permitía el schema queda documentado abajo por si el equipo crece, pero no se asume.
 
@@ -20,8 +20,8 @@ El equipo son dos personas, así que **las fases corren en secuencia estricta**.
 - [ ] **Fase 5: Notificaciones push e instalación de la PWA** - El aseador instala la PWA y recibe cada asignación en el teléfono; el admin recibe cada evento de campo
 - [x] **Fase 6: PWA del aseador, offline-first** - El aseador ejecuta el aseo completo con o sin señal y nada del trabajo de campo se pierde
 - [ ] **Fase 7: Financiero** - Rentabilidad por aseo y cierre mensual persistido que sobrevive a la retención
-- [ ] **Fase 8: Piloto en Bogotá 1** - Los 23 apartamentos de personal propio operando dentro del sistema, sin WhatsApp ni Excel
-- [ ] **Fase 9: Borrado automático y retención** - El sistema se limpia solo sin destruir evidencia ni historial de pagos
+- [ ] **Fase 8: Paneles laterales en el admin** - Consultar una ficha deja de costar la pantalla donde estabas, y el estado de un aseo se mira en vez de preguntarse por WhatsApp
+- [ ] **Fase 9: Retención y borrado automático** - El sistema se limpia solo, avisa antes de llenarse, y no destruye ni evidencia en disputa ni historial de pagos
 
 ## Phase Details
 
@@ -294,28 +294,44 @@ Plans:
 > `.planning/phases/07-financiero/07-DEFINICION.md`. **Ese documento manda sobre
 > este resumen.**
 
-### Phase 8: Piloto en Bogotá 1
+### Phase 8: Paneles laterales en el admin
 
-**Goal**: Los 23 apartamentos de Bogotá 1, con personal propio, operan dentro del sistema sin WhatsApp ni Excel
-**Depends on**: Fases 4, 6 y 7
-**Requirements**: Ninguno nuevo (valida en operación real los requisitos ya entregados)
+**Goal**: Consultar una ficha deja de costar la pantalla donde estabas, y el estado de un aseo se mira en vez de preguntarse por WhatsApp
+**Depends on**: Fases 4 y 7
+**Requirements**: Ninguno nuevo (cambia la forma de consultar lo ya entregado; el detalle de aseo es lectura nueva sobre datos existentes)
+**Definición de alcance**: `.planning/DEFINICION-paneles-admin.md`, acordada con el dueño el 2026-09-14
 **Success Criteria** (qué debe ser VERDAD):
 
-  1. Existe una ruta `/instalar` que detecta navegador y webview, y una persona ajena al equipo completa la instalación de la PWA siguiéndola, tanto en iOS como en Android
-  2. Los 23 apartamentos de Bogotá 1 están cargados con feeds activos, cuartos, lista base de faltantes, tarifas y responsable/suplente
-  3. Durante el piloto, cada checkout detectado en calendario termina en un aseo confirmado, asignado y ejecutado con evidencia, con WhatsApp y Excel corriendo en paralelo solo como red de seguridad
-  4. El admin ve el estado de onboarding de cada aseador del cluster: instaló la PWA, concedió el permiso de push y completó su primer aseo
+  1. Desde la lista de apartamentos, tocar uno abre su ficha sin perder la lista, y cerrar devuelve exactamente donde estabas, con el mismo scroll y el mismo filtro
+  2. El enlace de esa ficha se puede pegar en un chat y abre lo mismo: el panel vive en la dirección
+  3. El botón atrás cierra el panel, no la sección
+  4. Desde Operación, tocar un aseo muestra en qué va: checklist, evidencia y los gastos o daños reportados, sin salir del día
+  5. Ninguna aserción de seguridad se debilitó para que el panel pasara: el admin sigue viendo cifras que el aseador no, y nadie ve lo que no debe
+  6. La app del aseador no cambió en nada
+
+**Alcance, pantalla por pantalla:**
+
+| Pasa a panel | Hoy es |
+|---|---|
+| Ficha de apartamento | `app/(admin)/apartamentos/[id]/page.tsx` |
+| Calendario del apartamento | `app/(admin)/apartamentos/[id]/calendario/page.tsx` |
+| Ficha de aseadora | `app/(admin)/finanzas/aseadoras/[id]/page.tsx` |
+| **Detalle de un aseo** | **no existe**: hoy tocar la fila en Operación no hace nada |
+
+**Se queda como página, y no es negociable:** Operación, Apartamentos, Aseadores, Finanzas, Aseos y Pagos son secciones, no fichas. Crear apartamento son ~12 campos con listas dinámicas y no cabe en 480px. Toda la app del aseador se descartó explícitamente: pantalla pequeña, de pie, con guantes.
+
+**El patrón ya existe en el repo:** `SheetDesglosePago.tsx` y `SheetConfirmar.tsx` ya abren así. No hay que inventar el componente ni decidir anchos.
 
 **Plans**: TBD
 **UI hint**: yes
 
-**Riesgo abierto:** no hay métrica de éxito definida para este piloto. Sin criterio de corte no hay forma de decidir cuándo se apagan WhatsApp y Excel. Está registrado como decisión pendiente, no como tarea de la fase.
+**Riesgo abierto:** hay specs E2E que afirman que tocar algo **navega a una ruta**. Al pasar a panel esas aserciones cambian de forma. Lo que se sigue probando es que el dato correcto aparece y que nadie ve lo que no debe.
 
-### Phase 9: Borrado automático y retención
+### Phase 9: Retención y borrado automático
 
-**Goal**: El sistema se limpia solo, cabe en el free tier y no destruye ni evidencia en disputa ni historial de pagos
+**Goal**: El sistema se limpia solo, avisa antes de llenarse, y no destruye ni evidencia en disputa ni historial de pagos
 **Depends on**: Fase 8
-**Requirements**: RET-01, RET-02, RET-04, RET-05, RET-06
+**Requirements**: RET-01, RET-02, RET-03, RET-04, RET-05, RET-06, RET-07
 **Success Criteria** (qué debe ser VERDAD):
 
   1. Las fotos de evidencia con más de 30 días se borran solas, y el registro del aseo con su checklist sigue completo y consultable
@@ -323,17 +339,28 @@ Plans:
   3. El borrado elimina los archivos en Storage además de las filas, sin dejar objetos huérfanos facturando, verificable comparando el bucket contra la tabla
   4. Un aseo marcado con retención legal nunca se borra, ni por la purga de fotos ni por la de 6 meses
   5. Los agregados de desempeño (timestamps de inicio y fin, eventos "no puedo") sobreviven al borrado del detalle
+  6. El admin ve el consumo de Storage y recibe alerta al superar el 70% del cupo, **antes** de que una aseadora no pueda subir una foto (RET-07)
 
 **Plans**: TBD
 
-**Por qué va de último:** el job de 6 meses no tiene nada que borrar hasta el mes 7 de operación, así que construirlo antes del piloto no se puede validar. Las columnas que sí necesitan existir desde el principio (`legal_hold`, `deleted_at`) están en el alcance de la Fase 1.
+**Tres de los siete ya tienen puesta su mitad de base de datos** y no arrancan de cero:
+
+| Requisito | Lo que ya existe | Lo que falta |
+|---|---|---|
+| RET-03 (retención legal) | columna `legal_hold` desde la migración 04 | la UI para marcarlo y el job que la respete |
+| RET-04 (objetos de Storage) | tabla `storage_deletion_queue` | quien la drene |
+| RET-07 (alerta al 70%) | `app_settings.storage_alert_threshold_pct = 70` y `storage.get_size_by_bucket()` | la lectura y la alerta |
+
+**Por qué va de último:** el job de 6 meses no tiene nada que borrar hasta el mes 7 de operación, así que construirlo antes no se puede validar. Las columnas que sí necesitan existir desde el principio (`legal_hold`, `deleted_at`) están en el alcance de la Fase 1.
+
+**La excepción, y conviene saberla:** RET-07 es el único de los siete que protege **antes** del daño. Si el free tier se llena sin aviso, el síntoma es una aseadora que no puede subir la foto en pleno aseo. Si la Fase 9 se corre mucho, RET-07 se saca aparte.
 
 ## Secuencia de ejecución
 
 Equipo de dos personas, ejecución secuencial estricta:
 
 ```
-1 Fundación → 2 Catálogo → 3 iCal → 4 Dashboard → 5 Push → 6 PWA → 7 Financiero → 8 Piloto → 9 Borrado
+1 Fundación → 2 Catálogo → 3 iCal → 4 Dashboard → 5 Push → 6 PWA → 7 Financiero → 8 Paneles → 9 Retención
 ```
 
 **Por qué la 4 antes que la 5 y la 6:** la Fase 3 genera aseos que nadie puede ver hasta que exista el dashboard. Poner el dashboard justo después del motor hace observable el Core Value lo antes posible y permite dogfooding del lado admin mientras se construye la PWA.
@@ -348,11 +375,10 @@ Fases que necesitan `--research-phase`:
 
 - **Fase 3 (motor iCal):** el comportamiento del iCal de Airbnb no tiene especificación pública y la estabilidad del `UID` está en contradicción directa entre documentos de research
 - **Fase 5 (push):** el comportamiento de Web Push en iOS (expiración de suscripciones, `pushsubscriptionchange`) requiere validación en dispositivos físicos
-- **Fase 8 (piloto):** no hay patrón estándar de rollout de PWA a una fuerza laboral con dispositivos heterogéneos
 
 Fases con patrón ya documentado en el research (se puede saltar):
 
-- Fase 1 (schema + RLS), Fase 6 (cola offline idempotente), Fase 7 (snapshot), Fase 9 (soft delete y purga de Storage)
+- Fase 1 (schema + RLS), Fase 6 (cola offline idempotente), Fase 7 (snapshot), Fase 8 (el patrón de panel ya está en el repo), Fase 9 (soft delete y purga de Storage)
 
 ## Progress
 
@@ -365,8 +391,8 @@ Fases con patrón ya documentado en el research (se puede saltar):
 | 5. Notificaciones push e instalación de la PWA | 15/17 | Executed — 05-12 (wizard `/instalar`) y 05-17 (validación en dispositivo) diferidos por el desarrollador | 2026-09-11 |
 | 6. PWA del aseador, offline-first | 10/10 | Executed — checkpoint humano en teléfono real abierto (06-10 tarea 3) | 2026-09-12 |
 | 7. Financiero | 12/14 | In Progress|  |
-| 8. Piloto en Bogotá 1 | 0/TBD | Not started | - |
-| 9. Borrado automático y retención | 0/TBD | Not started | - |
+| 8. Paneles laterales en el admin | 0/TBD | Not started | - |
+| 9. Retención y borrado automático | 0/TBD | Not started | - |
 
 ## Cobertura de requisitos
 
@@ -374,3 +400,5 @@ Fases con patrón ya documentado en el research (se puede saltar):
 
 ---
 *Roadmap creado: 2026-08-31. Resecuenciado para equipo de dos, con el job de borrado movido después del piloto. Google Calendar descartado como fuente: es otro suscriptor del mismo `.ics` de Airbnb.*
+
+*Actualizado 2026-09-15: el **piloto en Bogotá 1 se elimina del milestone** por decisión del dueño. El objetivo pasa a ser terminar el MVP de la plataforma limpio de punta a punta, y un piloto es operación, no producto. No huérfana ningún requisito: la fase no tenía REQ-IDs propios. En su lugar entra la Fase 8 (paneles laterales), y la retención conserva la Fase 9 con los siete RET completos, incluidos RET-03 y RET-07, que se le habían movido desde la Fase 7 el 2026-09-13 (issues #5 y #6) y que el texto de esta sección todavía no reflejaba.*
