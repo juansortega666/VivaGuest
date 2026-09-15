@@ -268,7 +268,25 @@ Un solo ancla por panel, declarado para que el executor no lo adivine.
 
 - **Abrir: `push`.** En la práctica, quitar la prop `replace` del `<Link>`. Es lo que hace verdadero el criterio 3.
 - **Cerrar: `router.replace(rutaBase, { scroll: false })`,** literal, como manda D8-8.
-- **`scroll: false` no es un detalle.** Sin él, cerrar el panel devuelve la lista arriba y el admin pierde el sitio. Está documentado en `SheetDesglosePago.tsx` y es la mitad del criterio 1.
+
+#### `scroll={false}` va también al ABRIR, en los cuatro enlaces
+
+**Un `<Link>` de Next salta al tope por defecto, y eso no depende de `push` ni de `replace`: depende de la prop `scroll`.** D8-8 fija el `scroll: false` del cierre y es fácil leerlo como si el problema fuera solo ese. No lo es: **abrir un panel sin `scroll={false}` manda la lista de atrás al tope**, y el admin que estaba en la fila 28 de 39 vuelve a la 1 sin haber navegado a ninguna parte. Eso rompe D8-2 (*"consultar algo no te saca de la pantalla donde estás"*) y el criterio 1 del ROADMAP (*"cerrar devuelve exactamente donde estabas, con el mismo scroll"*) de frente, porque el scroll ya se perdió al abrir y cerrar no lo puede recuperar.
+
+**Regla, sin excepciones: todo `<Link>` que abre un panel lleva `scroll={false}`.** Son cuatro, y el cuarto es el precedente:
+
+| # | Archivo | Enlace | Hoy |
+|---|---|---|---|
+| 1 | `TablaApartamentos.tsx` | celda `NOMBRE` → `?apartamento={id}` | **enlace nuevo.** Nace con `scroll={false}` |
+| 2 | `FilaAseo.tsx` | el ancla estirada del `::after` → `?aseo={id}` | **cambia de destino.** Gana `scroll={false}` |
+| 3 | `FilaAseadora.tsx` | fila del bloque 3 → `?aseadora={id}` | **cambia de destino.** Gana `scroll={false}` |
+| 4 | `TablaPagosDelPeriodo.tsx:132-136` | → `?pago={id}` | **ya lo lleva.** Es el precedente. De este enlace solo se quita la prop `replace` |
+
+**Y las dos navegaciones internas del panel también:** el botón `Calendario` de §7.4 y el enlace `‹ Volver a la ficha` de §8.2 cambian `searchParams` sobre la misma página, así que sin `scroll={false}` mueven la lista de detrás exactamente igual. Son seis en total.
+
+**Cómo se verifica sin abrir el navegador:** un grep sobre los seis archivos tiene que encontrar `scroll={false}` en la misma etiqueta que cada `href` que lleve `?apartamento=`, `?aseo=`, `?aseadora=`, `?pago=` o `vista=calendario`. Es el mismo defecto silencioso que `max-w-<talla>`: el código se lee perfectamente bien, `tsc` pasa verde, y lo único que cambia es a dónde queda la barra de scroll.
+
+**`scroll: false` no es un detalle, ni al abrir ni al cerrar.** Está documentado en `SheetDesglosePago.tsx` y es la mitad del criterio 1.
 
 **El precio, contado y aceptado:** abrir y cerrar ocho paneles seguidos deja ocho entradas de historial idénticas a la ruta base. El botón atrás hay que pulsarlo ocho veces para salir de la sección. Es degradación, no rotura, y es estrictamente mejor que el comportamiento de hoy, donde la primera pulsación te saca. Queda en §17.
 
@@ -443,16 +461,26 @@ Nueve datos de cuerpo más dos botones. Nombre y estado suben a la cabecera, el 
 | `DINERO` | 25 + 21 + 8 + 21 + 8 + 21 | **104px** |
 | | | **Total 529px con cuatro reportes** |
 
-**Cabe, con 61px de holgura sobre los 590 disponibles.** Cada reporte adicional cuesta **29px**, así que **a partir del sexto reporte el cuerpo desborda y entra el `overflow-y-auto`**.
+**Cabe, con 61px de holgura sobre los 590 disponibles.** El resto del panel son **396px fijos**, así que el grupo `REPORTES` vale `17 + 29n` y cada reporte adicional cuesta **29px**:
 
-Seis gastos y daños en un solo aseo es patológico. Que el `overflow-y-auto` esté ahí para ese caso **no es incumplir D8-7**: D8-7 dice literalmente que "sin scroll" es el objetivo que ordena el recorte del contenido, no una restricción técnica dura. El contenido está dimensionado para que el caso normal nunca lo dispare, la cabecera se queda fija cuando se dispara, y el número está escrito acá para que nadie lo descubra en producción.
+| Reportes | `REPORTES` | Total | Holgura sobre 590 |
+|---|---|---|---|
+| 3 | 104px | 500px | 90px |
+| 4 | 133px | 529px | 61px |
+| 5 | 162px | 558px | 32px |
+| 6 | 191px | **587px** | **3px, todavía cabe** |
+| **7** | 220px | 616px | **desborda por 26px** |
+
+**El cuerpo desborda a partir del SÉPTIMO reporte, no del sexto.** Con seis cabe por tres píxeles, que es holgura cero en la práctica pero es cabida de verdad: el `overflow-y-auto` no aparece.
+
+Siete gastos y daños en un solo aseo es patológico. Que el `overflow-y-auto` esté ahí para ese caso **no es incumplir D8-7**: D8-7 dice literalmente que "sin scroll" es el objetivo que ordena el recorte del contenido, no una restricción técnica dura. El contenido está dimensionado para que el caso normal nunca lo dispare, la cabecera se queda fija cuando se dispara, y el número está escrito acá para que nadie lo descubra en producción.
 
 #### Los otros dos
 
 | Panel | Contenido fijo | Lo que crece | Umbral |
 |---|---|---|---|
 | **Calendario** | próximo checkout 71 + 33 + encabezado de la lista 25 + 33 + estado del feed 75 = **237px** | Las filas de checkout, 21px + 8 de separación = 29px cada una | (506 − 237) / 29 = **9 filas**. Un mes de un apartamento muy ocupado llega a 15. §8.3 dice qué se hace |
-| **Aseadora** | ahora mismo 63 + 33 + 33 + suplente 46 + 33 + periodo 71 = **279px** | Los nombres de los apartamentos, como texto corrido que envuelve | §9.2. Con doce nombres son 88px, y sobran 223px |
+| **Aseadora** | ahora mismo 46 + 33 + encabezado de responsable 25 + 33 + suplente 46 + 33 + periodo 71 = **287px** | Los nombres de los apartamentos, como texto corrido que envuelve | §9.3. Con doce nombres son **tres líneas, 63px**: total **350px** y sobran **240px** |
 
 ---
 
@@ -650,9 +678,9 @@ El cuerpo scrollea. Es el único panel de la fase donde eso es esperable y corre
 
 ### 9.3 Los apartamentos van como texto corrido, y está medido
 
-**Una fila por apartamento no cabe.** Una persona puede ser responsable de doce unidades. Doce filas de 21px con `gap-sm` cuestan 340px, más 25 de encabezado son 365, y el panel solo tiene 590 para todo. Con los otros tres grupos, el total sería 702px contra 590 disponibles: **no cabe por 112px.**
+**Una fila por apartamento no cabe, y está contado.** Una persona puede ser responsable de doce unidades. Doce filas de 21px con `gap-sm` cuestan 12 × 21 + 11 × 8 = **340px**, más 25 de encabezado son **365px** para ese solo grupo. Sumado al resto del panel (46 de `AHORA MISMO`, 46 de `SUPLENTE EN`, 71 del periodo y 99 de los tres separadores, o sea 262px), el total serían **627px contra los 590 disponibles: no cabe por 37px.**
 
-**Contrato:** los nombres van como **un párrafo de nombres separados por coma**, body 14/400, que envuelve. Doce nombres de ~10 caracteres son ~140 caracteres, que a 14px sobre 448px útiles son **tres líneas: 63px**. Es cuatro veces más denso que las filas y los doce nombres siguen visibles sin ningún gesto, que es todo el punto del panel.
+**Contrato:** los nombres van como **un párrafo de nombres separados por coma**, body 14/400, que envuelve. Doce nombres de ~10 caracteres son ~140 caracteres, que a 14px sobre 448px útiles son **tres líneas: 63px**, y con su encabezado, 88px. **El grupo pasa de 365px a 88px: cuatro veces más denso**, y los doce nombres siguen visibles sin ningún gesto, que es todo el punto del panel.
 
 - El encabezado del grupo lleva el conteo: `RESPONSABLE DE (12)`. El conteo es el dato que el admin busca primero.
 - **Los nombres son texto plano, no enlaces.** Un enlace ahí llevaría a `/apartamentos?apartamento={id}`, o sea **fuera de Finanzas**, que es exactamente lo que D8-2 dice que no puede costar una consulta. Es la misma disciplina que `SheetDesglosePago.tsx` aplica a sus líneas, por otra razón.
@@ -955,15 +983,16 @@ Sigue prohibido crear un átomo que solo re-exporte un componente de shadcn.
 | Archivo | Cambio |
 |---|---|
 | `app/(admin)/apartamentos/page.tsx` | Lee `apartamento` y `vista` de `searchParams` y renderiza el panel bajo `<Suspense>` |
-| `app/(admin)/apartamentos/_components/TablaApartamentos.tsx` | El `href` de la celda `NOMBRE` pasa a `?apartamento={id}`. **El `::after`, el `z-10` del menú y el `has-[a:focus-visible]` no se tocan** |
+| `PanelApartamento` y `PanelCalendario` | Los dos enlaces internos que cambian `searchParams` (el botón `Calendario` de §7.4 y el `‹ Volver a la ficha` de §8.2) llevan **`scroll={false}`**. Son la quinta y la sexta ocurrencia de la regla de §5.2 |
+| `app/(admin)/apartamentos/_components/TablaApartamentos.tsx` | El `href` de la celda `NOMBRE` pasa a `?apartamento={id}`, **con `scroll={false}`** (§5.2). **El `::after`, el `z-10` del menú y el `has-[a:focus-visible]` no se tocan** |
 | `app/(admin)/apartamentos/_actions.ts` | Una action nueva, `revelarCodigoDeAcceso`, con el orden obligatorio `exigirAdmin()` → Zod → cliente administrativo. Y el destino del `redirect` de guardado pasa a `/apartamentos?apartamento={id}` (§5.4) |
 | `app/(admin)/operacion/page.tsx` | Lee `aseo` de `searchParams`. **Conserva `alertas`** |
-| `app/(admin)/operacion/_components/FilaAseo.tsx` | El ancla estirada cambia de destino a `?aseo={id}`; el nombre pasa a texto plano. **Solo eso.** §5.3 |
+| `app/(admin)/operacion/_components/FilaAseo.tsx` | El ancla estirada cambia de destino a `?aseo={id}` **y gana `scroll={false}`** (§5.2); el nombre pasa a texto plano. **Solo eso.** §5.3 |
 | `app/(admin)/operacion/_components/MenuAseo.tsx` | Un `href`: el de `Ver apartamento`, a `?apartamento={id}` |
 | `app/(admin)/finanzas/page.tsx` | Lee `aseadora` de `searchParams`. **Conserva `rango` y `ancla`** |
-| `app/(admin)/finanzas/_components/FilaAseadora.tsx` | El `href` pasa a `?aseadora={id}`, conservando `rango` y `ancla` |
+| `app/(admin)/finanzas/_components/FilaAseadora.tsx` | El `href` pasa a `?aseadora={id}` **con `scroll={false}`** (§5.2), conservando `rango` y `ancla` |
 | `app/(admin)/finanzas/_components/TablaAseosFinanciera.tsx` | El `href` de `APARTAMENTO` pasa a `/apartamentos?apartamento={id}` |
-| `app/(admin)/finanzas/_components/TablaPagosDelPeriodo.tsx` | **Quitar la prop `replace` del `<Link>` de la línea 135.** §5.2 |
+| `app/(admin)/finanzas/_components/TablaPagosDelPeriodo.tsx` | **Quitar la prop `replace` del `<Link>` de la línea 135, y NADA MÁS.** Su `scroll={false}` ya está y es el precedente de la regla: no se toca. §5.2 |
 | `app/(admin)/finanzas/aseadoras/[id]/` | **Se borra el directorio entero**, con su `page.tsx` y su `loading.tsx` |
 | `app/globals.css` | El token de §2.1 |
 | `lib/utils.ts` (`cn()`) | **Nada que registrar**, porque `--container-boton-mostrar` se usa como `min-w`. Si aparece un `max-w-*` nuevo durante la ejecución, el registro **no es opcional** |
