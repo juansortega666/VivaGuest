@@ -464,3 +464,165 @@ abierto** y hable de la **pagina de detras** tiene que leer del DOM
 hable del **panel** acota por `getByRole('dialog')`, que si es alcanzable.
 
 ---
+
+## 6. VEREDICTO
+
+**Esta seccion es una instruccion, no una observacion.** Los planes 08-06, 08-07,
+08-08 y 08-11 la leen y toman la rama que les diga, sin volver a interpretar nada
+de las secciones anteriores.
+
+### 6.1 Las cinco respuestas
+
+```
+VEREDICTO 1 (filtro de /apartamentos):      SOBREVIVE
+VEREDICTO 2 (scroll de /apartamentos):      SE PIERDE
+VEREDICTO 3 (esqueleto del segmento):       NO APARECE
+VEREDICTO 4 (lo mismo en /operacion):       el estado de cliente SOBREVIVE
+                                            el scroll SE PIERDE
+                                            el esqueleto NO APARECE
+VEREDICTO 5 (Realtime con panel abierto):   NO LO TOCA
+```
+
+Y una sexta, que no estaba en la pregunta y que los planes necesitan igual:
+
+```
+VEREDICTO 6 (la causa del veredicto 2):     ES `loading.tsx` DEL SEGMENTO.
+                                            Apartarlo lo arregla, 3 de 3, en las dos rutas.
+```
+
+### 6.2 Las instrucciones que salen de ahi
+
+**INSTRUCCIÓN 1 — El filtro se queda como esta. No se toca.**
+
+`TablaApartamentos` conserva sus tres `useState` (`busqueda`, `cluster`,
+`soloPendientes`) tal como estan hoy. **No se mueven a la direccion.** Los tres
+paneles se construyen tal como el UI-SPEC los describe.
+
+Queda **descartada** la salida 1 que el plan tenia escrita (mover el filtro a
+`searchParams`). El plan **08-06** toma su rama "el filtro sobrevive" y borra la
+otra. Esto no reabre ninguna decision: D8-8 pone el estado de la pantalla en la
+direccion y un filtro enlazable iria en esa linea, pero **no hace falta para el
+criterio 1** y esta fase no lo va a hacer por gusto.
+
+**INSTRUCCIÓN 2 — Antes de construir ningun panel, quitar los dos `loading.tsx`
+que la fase toca.**
+
+`app/(admin)/apartamentos/loading.tsx` y `app/(admin)/operacion/loading.tsx` **se
+borran**, con la misma cabecera explicativa que `app/(admin)/finanzas/page.tsx`
+lleva desde la Fase 7 y por la misma razon medida. Es la condicion necesaria y
+suficiente para la mitad "scroll" del criterio 1: con ellos, el scroll se pierde
+3 de 3; sin ellos, se conserva 3 de 3.
+
+- **Lo que se pierde, y hay que escribirlo en la cabecera:** el esqueleto de la
+  PRIMERA carga de esas dos rutas. Es un coste real y acotado, y es mucho menor
+  que un criterio del ROADMAP incumplido. Identico al trato que se acepto en
+  `/finanzas`.
+- **Lo que NO se toca:** `app/(admin)/finanzas/pagos/loading.tsx` y los demas
+  `loading.tsx` del arbol. Esta fase borra exactamente dos.
+- **Y queda PROHIBIDO** reintroducir cualquiera de los dos "para recuperar el
+  esqueleto", ni ahora ni despues, sin volver a correr esta medicion.
+
+**INSTRUCCIÓN 3 — Ninguna clave derivada de los parametros, en ningun sitio.**
+
+Sigue en pie sin cambios, y ahora con mas razon: si una clave derivada de
+`searchParams` fuerza el remonte, se perderia **tambien el filtro**, que hoy
+sobrevive. La `key` del panel va **sobre el panel** (§12.2), nunca sobre el
+`<Suspense>` ni sobre nada que envuelva a la tabla.
+
+**INSTRUCCIÓN 4 — El esqueleto del panel va DENTRO del panel.**
+
+El Pattern 5 del research se confirma por la via de los hechos: el fallback del
+segmento no se pinta nunca (0 apariciones en 12 corridas) porque la respuesta RSC
+vuelve en ~70 ms, asi que **no habria servido de esqueleto aunque se quedara**.
+El unico esqueleto util es el del `<Suspense>` propio del panel, con la geometria
+real, tal como pide §11.1.
+
+**INSTRUCCIÓN 5 — Los seis enlaces de APERTURA conservan los parametros del
+anfitrion.**
+
+Medido en el escenario B: un `href="/operacion?aseo={id}"` con la consulta
+literal **borro el `?alertas=atendidas` al ABRIR**, antes de que el cierre tuviera
+nada que conservar. El research describia este defecto solo sobre el cierre.
+
+- El `href` se compone desde los parametros vivos de la pantalla, añadiendo el
+  suyo. Nunca una consulta literal.
+- El cierre hace lo inverso: borra solo el suyo y deja el resto.
+- **La asercion que lo atrapa ya existe y NO se toca:** el `toHaveURL(ancla=…)` de
+  `e2e/finanzas.spec.ts:592`.
+
+**INSTRUCCIÓN 6 — Realtime no obliga a nada.**
+
+El panel no se cierra, no parpadea, no pierde la URL y no dispara el esqueleto
+cuando llega un evento de `cleanings`. El plan del panel de aseo **no lleva
+ninguna tarea de mitigacion** por esto. Lo que queda sin medir, y queda escrito
+como riesgo y no como tarea, es el coste de reemitir las seis firmas de URL en una
+rafaga de quince eventos: eso se mide cuando el panel exista.
+
+**INSTRUCCIÓN 7 — El instrumento de espera, fijado.**
+
+- Para esperar una navegacion de cliente: **`esperarUrlDeCliente()`**. Nunca
+  `page.waitForURL` ni `expect(page).toHaveURL` como espera.
+- Antes de pulsar un control que navega: **`esperarControlHidratado()`**. Sin ella
+  el `<a>` navega duro y recarga el documento.
+- Para leer la pagina de detras **con el panel abierto**: del DOM, nunca por rol.
+- Para leer el panel: `getByRole('dialog')`.
+
+**INSTRUCCIÓN 8 — El barrido se ejecuta con contra-prueba en rojo.**
+
+El plan **08-11** toma el inventario de la seccion 5.2 y 5.3 tal cual. Una
+asercion de la casilla EN RIESGO sin su señuelo corrido y anotado **no cuenta**, y
+el plan **08-14** la cruza fila por fila. Las seis de la casilla MUERE se borran
+**declarando la cobertura que se pierde**, y la de la seccion 5.4 queda como deuda
+sin sustituto.
+
+### 6.3 Lo que este documento NO autoriza
+
+- No autoriza mover el filtro a la direccion. **El veredicto 1 lo descarta.**
+- No autoriza tocar `components/ui/sheet.tsx`. El panel no tiene nada que ver con
+  la perdida de scroll: el escenario de control lo pierde sin panel ninguno.
+- No autoriza borrar ningun `loading.tsx` que no sea uno de los dos nombrados.
+- No autoriza debilitar ninguna asercion de seguridad. Cambiar de ambito no es
+  debilitar **si y solo si** el ambito nuevo se probo en rojo.
+
+---
+
+## 7. La reversion del andamio
+
+El arbol tiene que quedar **exactamente** como estaba antes de este plan. Lo unico
+que sobrevive es este documento, que vive en `.planning/`.
+
+| Comprobacion | Resultado |
+|---|---|
+| `git status --porcelain -- app components lib e2e` | vacio |
+| `git diff --name-only` de este plan | un solo archivo, bajo `.planning/` |
+| `npx tsc --noEmit` | limpio |
+| `npm run ci:arch` | limpio |
+| `npm run test:unit` | **1201 en verde**, 63 archivos |
+| Las cinco suites del aseador | **23 pasando, 1 saltado, 0 rojos** |
+| `npm run test:e2e` completo | **133 pasando, 1 saltado, 1 rojo** en `push-instalacion:215`. Ver abajo |
+| Diff sobre `app/(cleaner)` | vacio |
+
+**El rojo de `push-instalacion:215` no es de este plan, y esta medido.** Aparece
+en las dos corridas completas de la suite y **no aparece** corriendo ese archivo
+solo (5 pasando) ni las cinco suites del aseador juntas (23 pasando). Cuando
+aparecio, el arbol era bit a bit el de antes del plan: el unico archivo distinto
+era este documento, que vive en `.planning/`. Queda anotado con su medicion en
+`deferred-items.md` de esta fase, incluida la correccion de la linea base que los
+planes 08-11 y 08-14 necesitan saber.
+
+### 7.1 Los dos requisitos de Wave 0 que este plan tacha
+
+De `08-VALIDATION.md`, seccion **Requisitos de la Wave 0**:
+
+- [x] **Spike de medicion del criterio 1** sobre `/apartamentos`. Secciones 2 y 3
+      de este documento, mas el veredicto de la seccion 6.
+- [x] **Barrido de aserciones acotadas por contenedor**, seccion 5. *(La
+      contra-prueba en rojo la ejecuta el plan 08-11: aqui solo se inventaria y se
+      clasifica, que es lo que el plan 08-02 tiene permitido hacer.)*
+- [x] **Primer uso de `esperarUrlDeCliente()`**, que hoy tenia cero consumidores.
+      El spike fue su primer uso y confirmo que funciona; el primer uso **que se
+      queda en el arbol** lo escribe el plan 08-11.
+
+Los otros tres requisitos de la Wave 0 son de otros planes: el bloque P lo cerro
+el **08-01**, y `checkouts.test.ts`, `feeds.test.ts` y
+`panel-aseo.integration.test.ts` los escriben sus propios planes.
