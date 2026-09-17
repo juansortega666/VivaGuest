@@ -76,7 +76,7 @@ Base UI marca el resto del documento como oculto para la accesibilidad, asi que
 `getByRole('combobox', …)` se queda esperando un elemento que **si esta en el
 DOM**. La primera corrida se colgo 120 s por esto. **Corregido** leyendo del DOM.
 **Esto ya es un hallazgo de la fase, no solo del spike**, y esta anotado en el
-barrido de la seccion 4: es la otra cara del Hallazgo 4.
+barrido de la seccion 5.6: es la otra cara del Hallazgo 4.
 
 **Ruido residual, declarado:** un clic disparado desde el DOM se pierde de vez en
 cuando porque el localizador se resuelve dos veces (una para comprobar la
@@ -306,4 +306,161 @@ parametro propio hoy (`?alertas=atendidas`); `/finanzas` lo tiene doble
 
 ## 5. El barrido del portal
 
-*(Lo escribe la Task 2. Ver seccion 6.)*
+`SheetContent` envuelve su contenido en `SheetPortal`, que es `Dialog.Portal` de
+Base UI: **el panel no vive dentro del contenedor principal de la pagina, sale a
+`document.body`**. Toda asercion acotada por ese contenedor, por la tabla de la
+pagina o por cualquier contenedor de layout deja de mirar el panel.
+
+### 5.1 El grep, corrido de verdad
+
+Tres patrones sobre los ocho specs que la fase toca. **Salida cruda, tal cual:**
+
+```
+$ grep -rn "locator('main')\|locator(\"main\")\|locator('table')\|getByRole('table')" \
+    e2e/apartamento-crud.spec.ts e2e/apartamento-cuartos.spec.ts \
+    e2e/apartamentos-lista.spec.ts e2e/finanzas.spec.ts e2e/operacion.spec.ts \
+    e2e/operacion-alertas.spec.ts e2e/calendario.spec.ts e2e/aseadores-lista.spec.ts
+
+e2e/finanzas.spec.ts:215:    // `getByRole('table')` devuelve CERO. El síntoma es una lista de encabezados
+e2e/finanzas.spec.ts:224:    const tablaDelDia = paginaAdmin.getByRole('table').first();
+e2e/finanzas.spec.ts:464:    const tabla = paginaAdmin.getByRole('table');
+e2e/finanzas.spec.ts:549:    const tabla = paginaAdmin.getByRole('table');
+e2e/finanzas.spec.ts:631:    const pagina = (await paginaAdmin.locator('main').textContent()) ?? '';
+e2e/finanzas.spec.ts:635:    await expect(paginaAdmin.locator('main').getByRole('img', { name: /mapa/i })).toHaveCount(0);
+e2e/finanzas.spec.ts:660:    const tabla = paginaAdmin.getByRole('table').first();
+e2e/finanzas.spec.ts:725:      .getByRole('table')
+e2e/finanzas.spec.ts:794:    const tabla = paginaAdmin.getByRole('table').first();
+
+--- total: 9
+```
+
+**Confirmado el conteo del research: nueve puntos y un solo archivo.** Uno de los
+nueve (215) es un comentario, no codigo.
+
+**Y un segundo grep, ampliado a otros contenedores de layout**, porque el research
+dice "cualquier contenedor de layout" y tres patrones no son todos:
+
+```
+$ grep -rn "getByRole('main')\|locator('aside')\|getByRole('complementary')\|\
+getByRole('navigation')\|locator('form')\|getByRole('form')\|locator('tbody')\|\
+getByRole('region')\|locator('header')\|locator('nav')" <los ocho specs>
+
+e2e/finanzas.spec.ts:202:    const barra = paginaAdmin.getByRole('navigation').first();
+e2e/operacion.spec.ts:528:  await sheet.locator('form').getByRole('button', { name: 'Cerrar', exact: true }).click();
+```
+
+Dos mas, y ninguno cambia el cuadro: el 202 mira la barra de navegacion, que no
+se toca; el 528 **ya acota por el panel** (`sheet.locator('form')`), que es la
+forma correcta y de hecho es el precedente que este barrido generaliza.
+
+### 5.2 El inventario clasificado
+
+| # | Archivo:linea | Que afirma | Casilla | Por que |
+|---|---|---|---|---|
+| 1 | `finanzas.spec.ts:202` | La barra superior tiene cuatro secciones, y Finanzas va ultima | **SIGUE VÁLIDA** | La barra vive en el layout de `(admin)` y ningun panel la reemplaza |
+| 2 | `finanzas.spec.ts:215` | *(comentario, no codigo)* | **SIGUE VÁLIDA** | Explica por que hay que abrir el bloque antes de mirar la tabla. El motivo (contenido `hidden` fuera del arbol de accesibilidad) sigue siendo cierto |
+| 3 | `finanzas.spec.ts:224` | La tabla del dia de `/operacion` no tiene ni una columna de dinero (D7-1) | **SIGUE VÁLIDA** | La tabla del dia sigue siendo de la pagina. El panel de aseo se abre **encima**, no la reemplaza. La asercion mira lo que tenia que no cambiar, y sigue ahi |
+| 4 | `finanzas.spec.ts:464` | Las siete columnas del detalle de `/finanzas/aseos` | **SIGUE VÁLIDA** | `/finanzas/aseos` no se convierte en panel. D8-10 la deja como pagina |
+| 5 | `finanzas.spec.ts:549` | La unidad informativa no es fila del detalle (FIN-05) | **SIGUE VÁLIDA** | Misma tabla, misma pagina |
+| 6 | `finanzas.spec.ts:631` | **Ni una palabra de rastreo en la ficha de aseadora** (§8.4 de la Fase 7) | **EN RIESGO** | La ficha pasa a panel (§0.1 conflicto B). Con el contenido en un portal, `locator('main')` devuelve una caja sin el panel y la asercion **pasa sin mirar nada** |
+| 7 | `finanzas.spec.ts:635` | Ninguna imagen de mapa en la ficha de aseadora | **EN RIESGO** | Lo mismo. Y ademas `toHaveCount(0)` sobre un ambito vacio es el falso verde perfecto |
+| 8 | `finanzas.spec.ts:660` | Las seis columnas de la tabla de `/finanzas/pagos` | **SIGUE VÁLIDA** | La tabla de pagos sigue siendo de la pagina |
+| 9 | `finanzas.spec.ts:725` | El desglose de un pago, abierto desde la tabla | **SIGUE VÁLIDA** | El `getByRole('table')` es solo para llegar al enlace; **las aserciones del contenido ya acotan por `getByRole('dialog')`**. Es el precedente correcto |
+| 10 | `finanzas.spec.ts:794` | Marcar pagado confirma con nombre y monto literales | **SIGUE VÁLIDA** | Tabla de pagina |
+| 11 | `operacion.spec.ts:528` | El boton `Cerrar` del panel de confirmacion | **SIGUE VÁLIDA** | Ya acota por el panel |
+
+**Ninguno de los nueve puntos del grep original esta en la casilla MUERE.** Las
+que mueren no salen de este grep: salen del test de la ficha de aseadora, y se
+inventarian aparte.
+
+### 5.3 Las aserciones del test de la ficha de aseadora, una por una
+
+Es el unico test de los ocho archivos cuyo sujeto **entero** se convierte en
+panel. Sus diez aserciones no caben en una fila del inventario de arriba.
+
+| # | Linea | Que afirma hoy | Casilla | Consecuencia |
+|---|---|---|---|---|
+| a | 589 | `waitForURL(/\/finanzas\/aseadoras\//)` | **EN RIESGO** | Pasa a `esperarUrlDeCliente(p, /aseadora=/)`. **Y la espera actual no vale:** esta medido que `waitForURL` no ve una navegacion de cliente |
+| b | 592 | `toHaveURL(ancla=…)` | **SIGUE VÁLIDA** | **Se conserva tal cual, y es la mas importante del archivo.** Es la que atrapa que abrir un panel le cambie el periodo al admin, o sea el Pitfall 2. La medicion del escenario B de este documento demuestra que ese defecto **ocurre de verdad** y que llega por el enlace de APERTURA, no solo por el cierre |
+| c | 596 | El bloque `Ahora mismo` existe | **EN RIESGO** | El grupo sobrevive (§9.2) pero cambia de ambito al dialogo |
+| d | 597 | El bloque `Sus aseos del periodo` existe | **MUERE** | §0.1 conflicto B: D8-4 lo saca por nombre (*"Fuera: el histórico de aseos, que ya está en Finanzas"*). **Cobertura que se pierde:** que el historico de aseos de una aseadora sea alcanzable desde su ficha. **Sustituto real:** sigue alcanzable en `/finanzas/aseos?aseador={id}`, y eso lo cubre el caso de los filtros del detalle |
+| e | 598 | El bloque `Sus pagos mes a mes` existe | **MUERE** | Mismo argumento. **Sustituto real:** `/finanzas/pagos`, que ya tiene sus propios casos (660, 725, 794) |
+| f | 599 | El bloque `Sus gastos reportados` existe | **MUERE** | Mismo argumento. **Sustituto real:** `/finanzas/aseos?aseador={id}&filtro=con-gastos` |
+| g | 606 | `lo que cuesta en el periodo` en la cabecera | **MUERE** | La cabecera del panel es nombre + estado (§9.2); no hay cifra grande junto a la persona, asi que la etiqueta que la desambiguaba ya no tiene que desambiguar nada. **Cobertura que se pierde:** que una cifra junto a una persona no se lea como "lo que se le debe". **Sustituto parcial:** el grupo `EN EL PERIODO ABIERTO` lleva su propio rotulo `Lleva ganado`, que dice lo mismo en otro sitio. **Queda como asercion nueva a escribir en 08-11**, no como perdida silenciosa |
+| h | 611 + 616-617 | `Todos sus periodos cerrados` y los ≥2 rotulos `Del …` | **MUERE** | Se van con el bloque 3. **Cobertura que se pierde, y esta si es de fondo:** que el bloque de pagos **ignore el filtro de periodo de arriba**, y que lo diga en pantalla. Es la unica asercion del repo que comprueba esa asimetria. **Sustituto:** ninguno en el panel, porque el bloque no existe. Lo que si sigue vivo es que `/finanzas/pagos` no tiene filtro de periodo (caso 660) |
+| i | 620-625 | El bloque dice **exactamente uno** de los tres estados | **EN RIESGO** | El copy se conserva palabra por palabra (§9.2). Cambia el ambito al dialogo. **Y el `toBe(1)` hay que revisarlo:** con el panel encima de la lista, un estado que tambien se pinte en la pagina de detras contaria dos veces. Acotar por el dialogo lo arregla y ademas lo hace mas estricto |
+| j | 627 | `Al momento de abrir esta página.` | **MUERE** | §17.8 punto 8 la prohibe por nombre en un panel, con argumento: *"en un panel que se abre y se cierra en diez segundos, fecharlo ocupa una línea para decir algo que el gesto ya dice"*. **ESTA ES LA PÉRDIDA REAL Y NO SE SUSTITUYE POR NADA.** Ver 5.4 |
+| k | 631 | Ni una palabra de rastreo | **EN RIESGO** | Hallazgo 4. Pasa a `getByRole('dialog').textContent()` |
+| l | 635 | Ninguna imagen de mapa | **EN RIESGO** | Hallazgo 4. Pasa a `getByRole('dialog').getByRole('img', …)` |
+
+**Recuento:** 5 EN RIESGO, 6 MUEREN, 1 SIGUE VÁLIDA.
+
+### 5.4 La deuda que se declara, sin sustituto
+
+**`Al momento de abrir esta página.` (`finanzas.spec.ts:627`) muere y no se
+reemplaza por nada.**
+
+Esa linea fijaba **D-14**: un dato operativo que parece vivo y no lo esta es peor
+que uno fechado. `AHORA MISMO` es exactamente ese dato: dice donde esta la
+aseadora **en el instante en que se abrio el panel**, y §17.8 punto 8 decide, con
+argumento, que en un panel no se escribe.
+
+La decision es correcta **y** la cobertura se pierde: a partir de esta fase
+ninguna prueba afirma que el admin sepa de cuando es ese dato. Queda escrito aqui
+como deuda, y la condicion de reapertura la pone el propio §17.8: *"Si el admin
+empieza a dejar el panel abierto, se reabre."*
+
+**Lo que NO se puede hacer**, y es la trampa que este documento existe para
+evitar: borrar la asercion en silencio y contar la fase como que "no perdio
+cobertura".
+
+### 5.5 La regla que este barrido fija para el resto de la fase
+
+> **Una asercion retargeteada que no se probo en rojo NO CUENTA.**
+
+Cambiar `locator('main')` por `getByRole('dialog')` es un cambio de una linea que
+**puede quedarse en verde sin mirar nada**: si el ambito nuevo tampoco contiene lo
+que se busca, un `not.toMatch` y un `toHaveCount(0)` pasan igual de contentos. La
+unica forma de saber que la asercion sigue viva es **hacerla fallar a proposito**.
+
+Procedimiento obligatorio en el plan 08-11, una vez por cada asercion de la
+casilla EN RIESGO:
+
+1. Meter en el panel, a mano, exactamente lo que la asercion prohibe (la palabra
+   `ubicación`, una `<img alt="mapa">`, el estado duplicado).
+2. Correr el caso y **comprobar que se pone rojo**.
+3. Deshacer el señuelo y comprobar que vuelve al verde.
+4. **Anotar el resultado real**, no el predicho. El plan 08-01 midio que dos de
+   sus cuatro señuelos tenian un radio distinto al que el plan habia escrito, y
+   esas dos correcciones son lo mas util que dejo ese bloque.
+
+Es la misma disciplina que `supabase/tests/11_financiero.test.sql` ya documenta en
+su bitacora de señuelos, aplicada a los specs. El plan **08-14** la cruza fila por
+fila como compuerta binaria: una fila EN RIESGO sin su señuelo anotado es una fila
+que no paso.
+
+### 5.6 Un patron de falso verde mas, que el grep NO encuentra
+
+Este no sale de ningun grep y lo destapo el propio spike, midiendolo en carne
+propia (seccion 1.1, sesgo 2):
+
+> **Con un panel abierto, Base UI marca el resto del documento como oculto para la
+> accesibilidad.** Cualquier localizador por rol (`getByRole`, `getByLabel` con
+> rol, `getByText` con `exact`) **deja de ver la pagina de detras**.
+
+La buena noticia es que este defecto **no produce falsos verdes en aserciones
+positivas**: produce fallos. Una asercion que espere ver algo de la pagina con el
+panel abierto se cuelga hasta el plazo, que es lo que le paso a la primera corrida
+de este spike (120 s).
+
+La mala es que **si produce falsos verdes en aserciones negativas**: un
+`toHaveCount(0)` o un `not.toMatch` sobre la pagina de detras, con el panel
+abierto, pasa porque no ve nada. **Y las dos aserciones de no rastreo son
+exactamente de ese tipo.**
+
+**Regla derivada, para el plan 08-11:** toda asercion que se ejerza **con el panel
+abierto** y hable de la **pagina de detras** tiene que leer del DOM
+(`locator(...)`, `evaluate`), no del arbol de accesibilidad. Y toda asercion que
+hable del **panel** acota por `getByRole('dialog')`, que si es alcanzable.
+
+---
