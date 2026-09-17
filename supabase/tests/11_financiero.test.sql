@@ -33,6 +33,7 @@
 --   M  los pagos del admin y la marca ........ 07-09  (añadido por ese plan)
 --   N  FIN-05 sin la red del CHECK ............. 07-14  (hallazgo del señuelo 1)
 --   O  la idempotencia que nadie medía ......... 07-14  (hallazgo del señuelo 2)
+--   P  el detalle de aseo del panel lateral .... 08-01  (migración 28)
 --
 --   A PARTIR DE QUE UN BLOQUE SE PONE EN VERDE, UN `not ok` SUYO ES UNA
 --   REGRESIÓN, no un pendiente. La línea base con la que se mide: los once
@@ -159,6 +160,7 @@
 -- REGLA PARA QUIEN AMPLÍE ESTE ARCHIVO: todo bloque nuevo va AL FINAL y sube el
 -- argumento de `plan()`. Insertarlo en su sitio alfabético corre los números de
 -- todo lo que venga después, y esos números están citados en los planes.
+-- P LA SIGUE: entró al final, después de O, y subió `plan(101)` a `plan(105)`.
 --
 -- ---------------------------------------------------------------------------
 -- BITÁCORA DE SEÑUELOS — 2026-09-13, plan 07-14
@@ -199,6 +201,52 @@
 --      do nothing` cambiado por un insert a        en `lib/domain/cierre-
 --      secas                                       concurrente.integration.
 --                                                  test.ts`: 3 de sus 6.
+--
+-- ── AMPLIACIÓN 2026-09-17, plan 08-01 (bloque P, aserciones 102 a 105) ────
+--
+--   #  QUÉ SE ROMPIÓ                              QUÉ SE PUSO ROJO
+--   ─  ─────────────────────────────────────────  ──────────────────────────
+--   7  migración 28: la guarda de rol FUERA del    SOLO la 102. Es lo más
+--      cuerpo de `public.detalle_de_aseo`          estrecho que se puede
+--                                                  escribir para T-08-01.
+--
+--   8  migración 28: la guarda cambiada por una    103, 104 y 105. LA 102 SE
+--      que DENIEGA A TODO EL MUNDO (`if true`)     QUEDÓ VERDE, y ése es el
+--                                                  punto entero del par: con
+--                                                  la 102 sola, una guarda
+--                                                  invertida aprobaba la fase
+--                                                  con el producto roto.
+--
+--   8b VARIANTE MEDIDA, Y CORRIGE LO QUE EL PLAN   LAS CUATRO, 102 incluida.
+--      08-01 predijo: quitarle el `not` a la       Quitar el `not` NO deniega
+--      guarda en vez de negarla entera             a todo el mundo, DEJA PASAR
+--                                                  a cualquiera, así que la
+--                                                  102 también cae. Las dos
+--                                                  formas de «guarda al revés»
+--                                                  no son la misma, y solo la
+--                                                  de denegar aísla a la 103.
+--
+--   9  migración 28: `and c.state = 'completada'`  103, 104 y 105. Se esperaba
+--      añadido al `where`, que es el filtro que    solo la 104; el radio real
+--      descalifica a `rentabilidad_aseos`          es mayor porque los DOS
+--                                                  aseos que el bloque usa
+--                                                  están vivos (pendiente y
+--                                                  en_curso), y ninguno pasa
+--                                                  ese filtro. Verlo es el
+--                                                  punto: así se ve de un
+--                                                  vistazo lo que ese filtro
+--                                                  le costaría al panel.
+--
+--  10  migración 28: las tres cifras leídas del    SOLO la 105, con el `have`
+--      apartamento por su alias en vez del aseo    imprimiendo la cifra viva.
+--                                                  FIN-01 medido desde esta
+--                                                  función y no desde las de
+--                                                  la migración 26.
+--
+--   LOS CUATRO PUSIERON ALGO EN ROJO A LA PRIMERA. Ningún hallazgo del tipo de
+--   los señuelos 1 y 2 de la Fase 7: aquí no había una segunda capa sosteniendo
+--   ninguna de las cuatro garantías, porque la función es nueva y no hay ningún
+--   CHECK ni ningún índice que la respalde por detrás.
 --
 -- ── SEÑUELOS 1 Y 2: LOS DOS HALLAZGOS, Y POR QUÉ NO SON UN TRÁMITE ─────────
 --
@@ -251,7 +299,7 @@
 -- ============================================================================
 
 begin;
-select plan(101);
+select plan(105);
 
 -- ---------------------------------------------------------------------------
 -- Limpieza del seed, en orden inverso de FK. El rollback la deshace.
@@ -2372,6 +2420,129 @@ select is(
     $q$select public.cerrar_periodo(date '2026-07-01', date '2026-07-31')::text$q$),
   '0',
   'D7-3 una corrida mas sobre el periodo ya cerrado devuelve CERO pagos y no revienta');
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- P. EL DETALLE DE ASEO DEL PANEL LATERAL — 4 aserciones
+--
+--    Lo pone en verde: 08-01, migración 28.
+--
+--    VA AL FINAL, DESPUÉS DE O, POR LA MISMA RAZÓN QUE K, L, M, N y O: pgTAP
+--    numera por orden de ejecución, y meter este bloque en su sitio alfabético
+--    correría los números de todo lo que venga después, que están citados por
+--    número en este archivo y en los planes de la Fase 7.
+--
+--    Y HEREDA EL FIXTURE MUTILADO POR EL BLOQUE G, igual que L: G borró a
+--    propósito el aseo J2 y el gasto del Detergente. Los dos aseos que este
+--    bloque usa SOBREVIVEN a ese borrado, y eso se comprueba ejecutando:
+--
+--      302  Apto 7A · fecha de HOY · estado `pendiente` · 90000 / 40000
+--           El aseo VIVO de la aseadora 7A, sembrado en el bloque A.
+--      401  Apto 7B · fecha de MAÑANA · estado `en_curso` · 150000 / 55000
+--           El aseo EN CURSO, sembrado en su propia sentencia dentro del
+--           bloque I.
+--
+--    OJO A LAS CIFRAS DE 302: son 90000 / 40000, LAS CONGELADAS EN EL ASEO. El
+--    bloque F dejó el Apto 7A a 200000 / 99000 en vivo. Que la 105 siga
+--    esperando 90000 después de MOVER OTRA VEZ esa tarifa es FIN-01 medido
+--    desde esta función, no desde las de la migración 26.
+--
+--    ── QUÉ MIDE CADA UNA, Y POR QUÉ NINGUNA SOBRA ─────────────────────────
+--
+--    102 y 103 SON UN PAR Y NO SE PUEDEN SEPARAR: una guarda escrita al revés
+--    (que denegara a todo el mundo) pasaría la 102 con matrícula de honor y la
+--    fase entera aprobaría con el producto roto. 104 es la que distingue esta
+--    función de `rentabilidad_aseos`, y 105 la que impide que las cifras se
+--    escapen al valor vivo del apartamento.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- 102 LA FRONTERA SIGUE CERRADA, Y ES LA MITAD DE BASE DE DATOS DEL CRITERIO 5.
+--     `intento_como` y no `valor_como`: aquí lo que se mide es EL SQLSTATE, no
+--     un valor. Una definer propiedad de `postgres` corre con `rolbypassrls` y
+--     salta la RLS entera, así que sin la guarda esta llamada devolvería el
+--     margen del aseo tan tranquila. T-08-01.
+select is(
+  pg_temp.intento_como('a7000000-0000-0000-0000-00000000000a',
+    $q$select * from public.detalle_de_aseo('f7000000-0000-0000-0000-000000000302')$q$),
+  '42501',
+  'D7-7 una aseadora que llama al detalle de aseo recibe permiso denegado y no el margen');
+
+-- 103 Y EL ADMIN SÍ OBTIENE FILA. Sin esta, la 102 sola no distingue una guarda
+--     correcta de una guarda invertida que deniegue a todo el mundo: las dos
+--     dejarían la 102 en verde. Exactamente una fila, con el apartamento y el
+--     estado a la vista para que el `have` diga algo cuando falle. T-08-02.
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', $q$
+    select count(*)::text
+        || '|' || coalesce(max(d.property_nombre), '<sin fila>')
+        || '|' || coalesce(max(d.estado)::text, '<sin estado>')
+        || '|' || coalesce(max(d.aseador_nombre), '<sin persona>')
+      from public.detalle_de_aseo('f7000000-0000-0000-0000-000000000302') d
+  $q$),
+  '1|Apto 7A (fixture)|pendiente|Aseadora 7A',
+  'el admin obtiene exactamente una fila del detalle del aseo vivo, con su apartamento y su estado');
+
+-- 104 LA QUE DISTINGUE ESTA FUNCIÓN DE `rentabilidad_aseos`: EL ASEO EN CURSO
+--     DEVUELVE FILA. Es literalmente la razón de existir del panel, porque la
+--     pregunta que el admin hace es «¿cómo va el 302?» y no «¿cuánto dejó
+--     cuando terminó». `rentabilidad_aseos` filtra por aseo completado y este
+--     identificador le devolvería cero filas. Si alguien copia ese filtro por
+--     inercia, esta aserción es la única que se entera. T-08-05.
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', $q$
+    select count(*)::text
+        || '|' || coalesce(max(d.estado)::text, '<sin estado>')
+        || '|' || coalesce(max(d.cobrado)::text, '<sin cifra>')
+        || '|' || coalesce(to_char(max(d.iniciado_at) at time zone 'America/Bogota', 'HH24:MI'), '-')
+        || '|' || coalesce(to_char(max(d.terminado_at) at time zone 'America/Bogota', 'HH24:MI'), '-')
+      from public.detalle_de_aseo('f7000000-0000-0000-0000-000000000401') d
+  $q$),
+  '1|en_curso|150000|09:15|-',
+  'el detalle responde sobre un aseo EN CURSO, que es justo lo que rentabilidad_aseos excluye');
+
+-- La tarifa VIVA del Apto 7A se mueve otra vez, y a un número que no se parece
+-- a ninguno del fixture para que un acierto por casualidad sea imposible. Va en
+-- su propia sentencia (trampa 1 de la cabecera): una escritura dentro de la
+-- subconsulta de una aserción NO LA VE esa aserción. Antes se captura el valor
+-- de partida, para poder devolverlo exactamente y no a un literal adivinado.
+select pg_temp.escalar($q$
+  select p.tarifa_huesped::text || '|' || p.pago_aseador::text
+    from public.properties p
+   where p.id = 'b7000000-0000-0000-0000-000000000001'
+$q$) as tarifa_7a_antes_de_p \gset
+
+select pg_temp.correr($q$
+  update public.properties
+     set tarifa_huesped = 777000::bigint, pago_aseador = 333000::bigint
+   where id = 'b7000000-0000-0000-0000-000000000001'
+$q$) as tarifa_7a_movida_en_p \gset
+
+-- 105 FIN-01 DESDE ESTA FUNCIÓN: LAS TRES CIFRAS SALEN DEL ASEO. Con la tarifa
+--     viva del apartamento en 777000 / 333000, el detalle del aseo 302 tiene
+--     que seguir diciendo 90000 / 40000 / 50000, que es lo que el trigger de la
+--     migración 05 le congeló al crearlo. Si la función leyera la tarifa del
+--     apartamento por su alias, el panel enseñaría un número distinto al de
+--     /finanzas/aseos para el MISMO aseo, y el admin dejaría de creerle a las
+--     dos pantallas. Es el mismo señuelo que el bloque F usa para el cierre,
+--     aplicado aquí.
+select is(
+  pg_temp.valor_como('ad700000-0000-0000-0000-000000000001', $q$
+    select d.cobrado::text || '|' || d.pagado::text || '|' || d.margen::text
+      from public.detalle_de_aseo('f7000000-0000-0000-0000-000000000302') d
+  $q$),
+  '90000|40000|50000',
+  'FIN-01 mover la tarifa viva del apartamento no mueve ninguna de las tres cifras del aseo');
+
+-- Y se devuelve la tarifa a donde estaba, para no contaminar nada que corra
+-- después de este bloque. El valor de partida se restaura desde el que se
+-- capturó arriba y no desde un literal: si el bloque F cambia sus cifras algún
+-- día, esta restauración sigue siendo correcta sin que nadie la toque.
+select pg_temp.correr(pg_catalog.format($f$
+  update public.properties
+     set tarifa_huesped = %s::bigint, pago_aseador = %s::bigint
+   where id = 'b7000000-0000-0000-0000-000000000001'
+$f$, split_part(:'tarifa_7a_antes_de_p', '|', 1),
+     split_part(:'tarifa_7a_antes_de_p', '|', 2))) as tarifa_7a_restaurada_en_p \gset
 
 
 select * from finish();
