@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 08
 current_phase_name: paneles-laterales-en-el-admin
-status: planning
-stopped_at: Fase 08 con CONTEXT y UI-SPEC aprobado 6/6. Siguiente: plan-phase 8. La Fase 07 sigue abierta en su unico checkpoint humano (07-13, el recorrido en iPhone)
+status: executing
+stopped_at: Fase 08 planeada. 14 planes en 7 waves, plan-checker en VERIFICATION PASSED. Siguiente: execute-phase 8, empezando por la Wave 0
 last_updated: "2026-09-15T15:50:00.000Z"
 last_activity: 2026-09-15
 last_activity_desc: "Fase 08 abierta: el piloto sale del milestone, entran los paneles laterales. 08-CONTEXT con las 11 decisiones del dueno y 08-UI-SPEC aprobado por el checker en las 6 dimensiones tras una vuelta de revision"
