@@ -122,10 +122,18 @@ describe('distanciaHastaCheckout', () => {
     });
   });
 
-  test('cruzar un febrero bisiesto tampoco', () => {
-    expect(distanciaHastaCheckout('2028-03-01', '2028-02-28')).toEqual({
+  test('el 29 de febrero cuenta: en bisiesto, del 28 al 1 de marzo hay dos días', () => {
+    // Los dos años juntos, porque es la pareja la que mide algo. En 2027 el 1
+    // de marzo es MAÑANA del 28 de febrero; en 2028 no, porque existe el 29.
+    // Una implementación que trate febrero como de 28 días fijos pasa el
+    // primero y falla el segundo.
+    expect(distanciaHastaCheckout('2027-03-01', '2027-02-28')).toEqual({
       clave: 'manana',
       dias: 1,
+    });
+    expect(distanciaHastaCheckout('2028-03-01', '2028-02-28')).toEqual({
+      clave: 'en-dias',
+      dias: 2,
     });
   });
 
