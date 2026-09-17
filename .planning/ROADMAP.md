@@ -322,10 +322,29 @@ Plans:
 
 **El patrón ya existe en el repo:** `SheetDesglosePago.tsx` y `SheetConfirmar.tsx` ya abren así. No hay que inventar el componente ni decidir anchos.
 
-**Plans**: TBD
+**Plans**: 14 plans, en 7 waves
+
+Plans:
+- [ ] 08-01-PLAN.md — Wave 0: la migración 28 (el detalle de aseo con guarda de admin) y el bloque P de pgTAP, con sus cuatro señuelos
+- [ ] 08-02-PLAN.md — Wave 0: el spike que mide si el filtro y el scroll sobreviven a abrir un panel, y el barrido de aserciones que el portal deja vacías
+- [ ] 08-03-PLAN.md — Wave 0: los dos módulos de dominio que el UI-SPEC daba por existentes y no existen (checkouts y salud del feed)
+- [ ] 08-04-PLAN.md — Wave 1: el armazón de panel y el único token nuevo, con los tres overrides obligatorios de la primitiva
+- [ ] 08-05-PLAN.md — Wave 1: la lectura del panel de aseo, cinco viajes y una latencia, con su test de integración
+- [ ] 08-06-PLAN.md — Wave 2: la ficha de apartamento, que D8-3 mandó crear porque no existía
+- [ ] 08-07-PLAN.md — Wave 2: el panel de aseo, la tira de evidencia y el diálogo de foto
+- [ ] 08-08-PLAN.md — Wave 2: el panel de aseadora, y el borrado de la única página que la fase se lleva
+- [ ] 08-09-PLAN.md — Wave 3: el código de acceso con un gesto, y la credencial del calendario que no puede viajar con él
+- [ ] 08-10-PLAN.md — Wave 3: la vista de calendario del panel, sin tocar la pantalla de conexión
+- [ ] 08-11-PLAN.md — Wave 4: las seis aserciones de D8-11, el retargeteo al diálogo con contra-prueba en rojo, y el quinto panel alineado
+- [ ] 08-12-PLAN.md — Wave 4: los criterios 1, 2 y 3 en `/apartamentos`, y el secreto fuera del documento
+- [ ] 08-13-PLAN.md — Wave 5: el criterio 4 entero, y los criterios 2 y 3 en Operación y Finanzas
+- [ ] 08-14-PLAN.md — Wave 6: la compuerta de la fase, la auditoría de señuelos y la deuda declarada
+
 **UI hint**: yes
 
 **Riesgo abierto:** hay specs E2E que afirman que tocar algo **navega a una ruta**. Al pasar a panel esas aserciones cambian de forma. Lo que se sigue probando es que el dato correcto aparece y que nadie ve lo que no debe.
+
+**Y un riesgo que el research destapó midiendo, que el conteo de D8-11 no cubría:** el contenido del panel se portalea fuera del contenedor principal de la página, así que una aserción de seguridad acotada por ese contenedor **pasa en verde sin mirar nada**. Se debilita sola, sin que nadie lo decida. El plan 08-02 la inventaría y el 08-11 la retargetea con contra-prueba en rojo.
 
 ### Phase 9: Retención y borrado automático
 
@@ -391,7 +410,7 @@ Fases con patrón ya documentado en el research (se puede saltar):
 | 5. Notificaciones push e instalación de la PWA | 15/17 | Executed — 05-12 (wizard `/instalar`) y 05-17 (validación en dispositivo) diferidos por el desarrollador | 2026-09-11 |
 | 6. PWA del aseador, offline-first | 10/10 | Executed — checkpoint humano en teléfono real abierto (06-10 tarea 3) | 2026-09-12 |
 | 7. Financiero | 12/14 | In Progress|  |
-| 8. Paneles laterales en el admin | 0/TBD | Not started | - |
+| 8. Paneles laterales en el admin | 0/14 | Planned — 14 planes en 7 waves | - |
 | 9. Retención y borrado automático | 0/TBD | Not started | - |
 
 ## Cobertura de requisitos
