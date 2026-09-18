@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { expect, test } from './fixtures';
+import { esperarUrlDeCliente, expect, pulsarHastaNavegar, test } from './fixtures';
 import { cargarEnvLocal, clienteDeServicio } from './global-setup';
 
 /**
@@ -86,19 +86,50 @@ test.afterAll(async () => {
   }
 });
 
-/** El id del apartamento cuyo nombre se le pasa, para poder limpiarlo después. */
+/**
+ * El id del apartamento cuyo nombre se le pasa, para poder limpiarlo después.
+ *
+ * ── SE RESUELVE CONTRA LA BASE, NUNCA CONTRA LA DIRECCION ───────────────────
+ * Desde la Fase 8 el guardado aterriza en `/apartamentos?apartamento={uuid}`, o
+ * sea que el id está a la vista en la URL. Leerlo de ahí haría que la prueba
+ * confiara en lo mismo que está probando: una action que redirigiera al id
+ * equivocado pasaría sin que nada se quejara. La consulta se queda donde está.
+ *
+ * ── Y SE LLAMA ANTES DE LA ESPERA DE URL, A PROPOSITO ───────────────────────
+ * Medido por el plan 08-09: con esta llamada DESPUES de la espera, un rojo en la
+ * espera deja el id fuera de `creados`, el `afterAll` no lo borra, y la base se
+ * queda con 40 unidades. Desde ahí el control de entorno de este archivo, el de
+ * `apartamento-cuartos` y el de `calendario` revientan sin tener nada roto: un
+ * solo rojo contamina la suite entera.
+ *
+ * Por eso SONDEA en vez de leer una sola vez: el click devuelve antes de que la
+ * fila exista, así que lo que se espera acá es la FILA, no la URL. Son dos
+ * hechos distintos y cada uno tiene su espera.
+ */
 async function idPorNombre(nombre: string): Promise<string> {
-  const { data, error } = await servicio
-    .from('properties')
-    .select('id')
-    .eq('nombre', nombre)
-    .maybeSingle();
+  let encontrado: string | undefined;
 
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error(`No se creó el apartamento "${nombre}"`);
+  await expect
+    .poll(
+      async () => {
+        const { data, error } = await servicio
+          .from('properties')
+          .select('id')
+          .eq('nombre', nombre)
+          .maybeSingle();
 
-  creados.add(data.id);
-  return data.id;
+        if (error) throw new Error(error.message);
+        encontrado = data?.id;
+        return encontrado !== undefined;
+      },
+      { timeout: 15_000, message: `No se creó el apartamento "${nombre}"` },
+    )
+    .toBe(true);
+
+  if (encontrado === undefined) throw new Error(`No se creó el apartamento "${nombre}"`);
+
+  creados.add(encontrado);
+  return encontrado;
 }
 
 /** Los dos botones de la barra, con `exact` porque uno contiene al otro. */
@@ -144,10 +175,31 @@ test.describe('Criterio 2: los 12 campos persisten', () => {
 
     await botonGuardar(paginaAdmin).click();
 
-    // Al crear, la pantalla navega al detalle del id nuevo. Sin eso, un segundo
-    // `Guardar` insertaría otra vez y chocaría con `properties_nombre_uniq`.
-    await paginaAdmin.waitForURL(/\/apartamentos\/[0-9a-f-]{36}$/);
+    // El id se registra ANTES de esperar la URL, y la razón está en la cabecera
+    // de `idPorNombre`: si la espera de abajo se cae, la limpieza igual lo borra.
     const id = await idPorNombre(nombre);
+
+    // Al crear, la pantalla aterriza en LA LISTA CON EL PANEL ABIERTO (§5.4). La
+    // razón de que exista este redirect no cambia: sin salir del formulario, un
+    // segundo `Guardar` insertaría otra vez y chocaría con
+    // `properties_nombre_uniq`. Aterrizar en la lista lo cierra igual.
+    //
+    // La espera va con `esperarUrlDeCliente()`, que sondea la URL DESDE Node: la
+    // espera de URL de Playwright inyecta su sondeo dentro del documento y se
+    // traba con el commit de la transición de React (INSTRUCCION 7 del plan 08-02).
+    await esperarUrlDeCliente(paginaAdmin, /\/apartamentos\?apartamento=[0-9a-f-]{36}$/);
+
+    // La espera NO es la aserción. La aserción sobre la URL se escribe después, y
+    // se sigue escribiendo: y se escribe contra el id que salió de la BASE, así
+    // que un redirect al apartamento equivocado se pone rojo acá.
+    expect(paginaAdmin.url()).toMatch(new RegExp(`\\?apartamento=${id}$`));
+
+    // Lo que este test afirma de aquí abajo vive en el FORMULARIO, no en el
+    // panel: el encabezado de nivel 1 de la lista es el título de la sección, no
+    // el nombre del apartamento. Sin esta navegación explícita, la aserción de
+    // persistencia se caería por una razón que no es la suya y el rojo acusaría
+    // a la pantalla equivocada.
+    await paginaAdmin.goto(`/apartamentos/${id}`);
 
     // La aserción de persistencia se hace RECARGANDO, no leyendo el estado del
     // cliente: sin recargar, los valores que se ven son los que el navegador
@@ -188,8 +240,15 @@ test.describe('Criterio 2: los 12 campos persisten', () => {
     await paginaAdmin.getByLabel('Notas de acceso').fill(NOTAS);
 
     await botonGuardar(paginaAdmin).click();
-    await paginaAdmin.waitForURL(/\/apartamentos\/[0-9a-f-]{36}$/);
     const id = await idPorNombre(nombre);
+
+    await esperarUrlDeCliente(paginaAdmin, /\/apartamentos\?apartamento=[0-9a-f-]{36}$/);
+    expect(paginaAdmin.url()).toMatch(new RegExp(`\\?apartamento=${id}$`));
+
+    // NINGUNO de los doce campos de abajo existe en el panel: el panel tiene
+    // nueve datos de LECTURA y ni uno es un campo de formulario (§7.2). Por eso
+    // acá hay una navegación explícita al formulario y no un retargeteo.
+    await paginaAdmin.goto(`/apartamentos/${id}`);
 
     await paginaAdmin.reload();
 
@@ -282,8 +341,27 @@ test.describe('Criterio 2: los 12 campos persisten', () => {
     await paginaAdmin.getByRole('option', { name: ASEADOR, exact: true }).click();
 
     await botonActivar(paginaAdmin).click();
-    await paginaAdmin.waitForURL(/\/apartamentos\/[0-9a-f-]{36}$/);
     const id = await idPorNombre(nombre);
+
+    await esperarUrlDeCliente(paginaAdmin, /\/apartamentos\?apartamento=[0-9a-f-]{36}$/);
+    expect(paginaAdmin.url()).toMatch(new RegExp(`\\?apartamento=${id}$`));
+
+    // ── AL FORMULARIO POR EL BOTON `Editar` DEL PANEL, NO POR LA DIRECCION ───
+    // Es la única acción primaria de toda la Fase 8 (§7.4: el único relleno
+    // primario). Si no se ejerce acá, no la ejerce nadie. Y de paso comprueba
+    // que el pie del panel lleva al formulario del apartamento correcto.
+    //
+    // El localizador acota por el DIALOGO: el panel se portalea a `document.body`
+    // y con él abierto el resto del documento queda oculto al árbol de
+    // accesibilidad (§5.6 de la medición). `pulsarHastaNavegar` espera primero a
+    // que React haya hidratado el control —sin eso el `<a>` navega duro— y
+    // después sondea la URL desde Node.
+    await pulsarHastaNavegar(
+      paginaAdmin,
+      paginaAdmin.getByRole('dialog').getByRole('link', { name: 'Editar', exact: true }),
+      new RegExp(`/apartamentos/${id}$`),
+    );
+    expect(paginaAdmin.url()).toMatch(new RegExp(`/apartamentos/${id}$`));
 
     await paginaAdmin.reload();
     await expect(paginaAdmin.getByText('Activa', { exact: true })).toBeVisible();
