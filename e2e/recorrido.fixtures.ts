@@ -291,6 +291,20 @@ export type OpcionesDeUnidad = {
    */
   responsable?: string;
   /**
+   * El id de un usuario YA EXISTENTE que hace de suplente, en vez de crear una.
+   *
+   * ── LO PIDIÓ UNA ASERCIÓN, NO LA SIMETRÍA CON `responsable` ──────────────
+   * El recorrido del Core Value afirma que confirmar asigna a la RESPONSABLE
+   * FIJA, y esa aserción solo dice algo si las otras dos candidatas plausibles
+   * —la suplente y quien confirmó— son personas CONOCIDAS contra las que se
+   * puede comparar por id. Con una suplente anónima recién creada, la aserción
+   * «no es la suplente» sigue siendo cierta, pero quien lea el rojo no sabe
+   * contra quién se comparó. Con `aseador2` prestado, el mensaje puede nombrarla.
+   *
+   * Igual que la responsable prestada: NO se borra en la limpieza.
+   */
+  suplente?: string;
+  /**
    * Reserva un puerto y lo cierra: la dirección es válida y nadie escucha. Es el
    * feed CAÍDO, y es lo que necesita el recorrido torcido del calendario que se
    * cae sin cancelar ni un aseo.
@@ -370,7 +384,10 @@ export async function sembrarUnidadDeRecorrido(
       opciones.responsable === undefined
         ? await crearAseadora(servicio, `Responsable ${sufijo}`, `r.${sufijo}`)
         : { id: opciones.responsable, nombre: '(prestada)' };
-    suplente = await crearAseadora(servicio, `Suplente ${sufijo}`, `s.${sufijo}`);
+    suplente =
+      opciones.suplente === undefined
+        ? await crearAseadora(servicio, `Suplente ${sufijo}`, `s.${sufijo}`)
+        : { id: opciones.suplente, nombre: '(prestada)' };
   }
 
   // ── El apartamento ──────────────────────────────────────────────────────

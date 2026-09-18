@@ -6,11 +6,13 @@ import {
   diaDeNegocio,
   esperarControlHidratado,
   expect,
+  idPorEmail,
+  leerCredenciales,
   sumarDias,
   test,
   type Servicio,
 } from './fixtures';
-import { cargarEnvLocal, clienteDeServicio } from './global-setup';
+import { cargarEnvLocal, clienteDeServicio, USUARIOS_E2E } from './global-setup';
 import {
   aseosDe,
   aseosVivosDe,
@@ -23,7 +25,7 @@ import {
 } from './recorrido.fixtures';
 
 /**
- * LA PRIMERA JUNTA DEL CORE VALUE: DEL `.ics` AL ASEO QUE EL ADMIN VE.
+ * EL RECORRIDO DEL CORE VALUE, Y LAS TRES PRUEBAS DE LA JUNTA QUE LO ABRE.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ESTE ARCHIVO ES EL ÚNICO DEL REPO CUYO ASEO NO LO ESCRIBIÓ NADIE.
@@ -354,4 +356,340 @@ test('el mismo contenido con DTSTAMP distinto sí llega al diff, y el diff no du
     despues[0].id,
     'con EL MISMO id: la identidad del aseo es (apartamento, fecha) y no la reserva, y eso es lo que hace que el trabajo humano sobreviva al ruido de la fuente',
   ).toBe(aseoPrimero.id);
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// 3. EL RECORRIDO DEL CORE VALUE, ENTERO Y EN UN SOLO CASO
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Espera un aviso flotante POR PREFIJO, porque el de la confirmación lleva
+ * coletilla y en esta suite la lleva SIEMPRE.
+ *
+ * `mensajeDeTandaCompleta()` añade ` 1 quedó con un aseador sin avisos.` cuando
+ * la persona a la que se le asignó no tiene suscripción de push viva, y los
+ * usuarios de `global-setup.ts` nunca la tienen: nadie les concede permiso de
+ * notificaciones en un navegador de pruebas. Comparar la cadena exacta de la
+ * Fase 4 sería la misma trampa que `e2e/operacion.spec.ts` pagó en el 06-10.
+ *
+ * El puntero se aparta antes de mirar por la misma razón que allá: la pila de
+ * avisos vive abajo a la derecha y un puntero encima pausa su temporizador.
+ */
+async function esperarAvisoQueEmpiezaCon(p: Page, prefijo: string) {
+  await p.mouse.move(4, 4);
+
+  const aviso = p
+    .locator('[data-sonner-toast]')
+    .getByText(new RegExp(`^${prefijo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+
+  await expect(aviso, `tiene que salir el aviso que empieza por «${prefijo}»`).toBeVisible({
+    timeout: 15_000,
+  });
+}
+
+/** Lo que el admin le escribe a la aseadora al confirmar. Se afirma literal. */
+const INSTRUCCIONES_DEL_ADMIN =
+  'Llegan cuatro personas: deja dos juegos de toallas extra en el clóset.';
+
+/**
+ * Los nombres de las dos aseadoras de la semilla, SACADOS DE `global-setup.ts`.
+ *
+ * No se escriben a mano: son los mismos que el `globalSetup` mete en
+ * `user_metadata.full_name`, que es de donde `tg_handle_new_user` materializa la
+ * fila de `public.profiles` y, por ahí, lo que la hoja de confirmación y el panel
+ * del admin pintan. Copiarlos aquí sería un segundo sitio del que divergir.
+ */
+const NOMBRE_RESPONSABLE = USUARIOS_E2E.find((u) => u.clave === 'aseador1')!.nombre;
+const NOMBRE_SUPLENTE = USUARIOS_E2E.find((u) => u.clave === 'aseador2')!.nombre;
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * EL CASO MÁS IMPORTANTE DEL REPO. SI ESTE CASO PASA, EL PRODUCTO EXISTE.
+ *
+ * El Core Value de VivaGuest, literal del `PROJECT.md`, es: «que ningún aseo se
+ * pierda: todo checkout detectado en calendario termina en un aseo confirmado,
+ * asignado y ejecutado con evidencia». Esa cadena estaba probada EN PEDAZOS —una
+ * suite por pantalla— y la junta entre pedazos es donde se rompen los productos.
+ * Este caso la recorre entera, de una punta a la otra, con UN SOLO aseo:
+ *
+ *     feed iCal con un checkout
+ *       → corre la sincronización
+ *       → aparece UN aseo pendiente, en la fecha del DTEND
+ *       → el admin lo confirma con huéspedes e instrucciones
+ *       → queda asignado a su responsable fija
+ *       → le llega el push
+ *       → la aseadora marca el checklist y sube su foto
+ *       → pulsa Terminé
+ *       → el admin lo ve completado con su evidencia
+ *       → aparece en /finanzas/aseos con su margen
+ *       → entra en el pago del periodo
+ *
+ * LAS CINCO JUNTAS QUE PRUEBA, Y QUE HOY NO PRUEBA NADIE MÁS:
+ *
+ *   1. `sync → aseo`            un checkout publicado se vuelve un aseo, el día
+ *                               del `DTEND` y no el de la última noche.
+ *   2. `confirmación → asignación`  confirmar asigna a la RESPONSABLE FIJA del
+ *                               apartamento y materializa el checklist.
+ *   3. `asignación → push`      la confirmación escribe el aviso, y el teléfono
+ *                               lo pinta con el destino de ESTE aseo.
+ *   4. `ejecución → evidencia`  la foto sube bytes de verdad al bucket y el
+ *                               admin ve su miniatura firmada.
+ *   5. `aseo → dinero`          el margen sale del ASEO y no del apartamento, y
+ *                               el aseo entra en el pago del periodo cerrado.
+ *
+ * ── POR QUÉ ES UN CASO Y NO CINCO ─────────────────────────────────────────
+ *
+ * Cinco casos que comparten siembra vuelven a probar cinco pedazos, que es justo
+ * lo que este archivo existe para dejar de hacer. El sujeto es EL MISMO ASEO de
+ * principio a fin: el que nació del feed es el que se confirma, el que se
+ * ejecuta, el que se fotografía y el que se paga. Si en algún punto la cadena
+ * cambia de sujeto, este caso se cae; cinco casos independientes, no.
+ *
+ * ── Y POR QUÉ CADA JUNTA SE AFIRMA JUSTO DESPUÉS DE CRUZARLA ──────────────
+ *
+ * Un recorrido que da los diez pasos y afirma solo el último falla en el paso
+ * diez cuando el defecto está en el tres, y el rojo acusa a la pantalla
+ * equivocada. Cada paso lleva su aserción CONTRA LA BASE, y los que el usuario
+ * ve llevan además la suya CONTRA LA PANTALLA, porque son dos cosas distintas:
+ * una RPC que confirma perfectamente y una pantalla que nunca llega a llamarla
+ * dan una suite verde y un producto roto.
+ *
+ * TODA aserción lleva mensaje propio. Un caso de treinta aserciones aborta en la
+ * primera que falle, y sin mensaje el señuelo pone rojo «el caso» sin que nadie
+ * sepa qué aserción lo atrapó.
+ *
+ * ── LA RESPONSABLE FIJA ES EL `aseador1` DE `global-setup.ts`, A PROPÓSITO ──
+ *
+ * Confirmar asigna al responsable del apartamento, así que para que el tramo de
+ * campo tenga sesión con la que entrar, la responsable TIENE que ser un usuario
+ * de la semilla: es el único que tiene `storageState` (`paginaAseador`) y perfil
+ * persistente (`contextoPersistente(browser, 'aseador1', …)`). La suplente es el
+ * `aseador2`, y no es simetría: es la otra candidata plausible contra la que la
+ * aserción de la asignación se puede comparar por id y nombrar en su mensaje.
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+test('EL RECORRIDO DEL CORE VALUE: un checkout del .ics acaba en el pago de la aseadora, sin que nadie escriba una fila de aseo', async ({
+  paginaAdmin,
+  request,
+}) => {
+  // El recorrido cruza cinco juntas, tres sesiones y dos navegadores. No cabe en
+  // el timeout por defecto y eso no es síntoma de nada: es lo que dura el Core
+  // Value completo contra un servidor de producción real.
+  test.setTimeout(300_000);
+
+  const credenciales = leerCredenciales();
+  const idResponsable = await idPorEmail(servicio, credenciales.aseador1.email);
+  const idSuplente = await idPorEmail(servicio, credenciales.aseador2.email);
+  const idQuienConfirma = await idPorEmail(servicio, credenciales.admin.email);
+
+  const unidad = await sembrarUnidadDeRecorrido(servicio, {
+    etiqueta: 'Core',
+    responsable: idResponsable,
+    suplente: idSuplente,
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // JUNTA 1 · DEL `.ics` AL ASEO
+  // ═════════════════════════════════════════════════════════════════════════
+
+  /**
+   * EL CHECKOUT ES HOY, Y NO MAÑANA, Y LO DECIDE EL TRAMO DE CAMPO.
+   *
+   * `leerAseosDeHoy()` (`lib/data/aseos-del-aseador.ts`) solo pone en la lista de
+   * la aseadora los aseos cuyo `scheduled_date` es el día de negocio: los de
+   * mañana los CUENTA, pero no los abre. Con el checkout mañana, el recorrido se
+   * quedaría sin poder entrar al aseo por donde entra la aseadora de verdad, que
+   * es su propia lista, y habría que llegar por dirección directa, que es
+   * exactamente el atajo que esta fase existe para no tomar.
+   *
+   * La estadía es de TRES noches y no de una: con una sola, cualquier defecto que
+   * mueva un extremo del rango lo colapsa, `res_dates_ok` tumba la reserva y el
+   * fallo se manifiesta como «cero reservas» varias aserciones antes de la que
+   * debía atraparlo. Es la lección del señuelo 1 del plan 09-01.
+   */
+  const checkout = hoy;
+  const ultimaNoche = sumarDias(hoy, -1);
+
+  const cuerpo = icsDe(hoy, [
+    { desde: -3, hasta: 0, uid: `rec-core-${unidad.sufijo}@airbnb.com`, codigo: 'HMYXB825YD' },
+  ]);
+
+  // El estado de partida real: el admin YA conectó el calendario con este mismo
+  // cuerpo y todavía no ha corrido ninguna sincronización. Ver la cabecera de
+  // `conectarFeed()`: sin esto el recorrido arranca de un estado que en
+  // producción no existe.
+  await conectarFeed(unidad.feedId, cuerpo);
+
+  const corrida = await correrSync(request, unidad.feedId, cuerpo);
+
+  expect(
+    corrida.cuerpo.outcome,
+    'JUNTA 1 · el worker tiene que terminar en `ok`: cualquier otro outcome significa que una guarda cortó antes del RPC y el aseo no llegó a nacer',
+  ).toBe('ok');
+
+  expect(
+    corrida.cuerpo.reservation_count,
+    'JUNTA 1 · el cuerpo trae UNA reserva clasificada: si sale 0 el clasificador dejó de reconocer el `Reserved`',
+  ).toBe(1);
+
+  const aseosTrasSync = await aseosDe(servicio, unidad.propiedadId);
+
+  expect(
+    aseosTrasSync,
+    'JUNTA 1 · el checkout produce UN aseo: cero significa que la cadena se rompe en el primer eslabón y todo lo que sigue sobra',
+  ).toHaveLength(1);
+
+  const aseoId = aseosTrasSync[0].id;
+
+  expect(
+    aseosTrasSync[0].origin,
+    'JUNTA 1 · el aseo nació del calendario (`origin = ical`) y no de una mano: si dijera `manual`, este recorrido estaría probando otra cosa',
+  ).toBe('ical');
+
+  expect(
+    aseosTrasSync[0].scheduled_date,
+    `JUNTA 1 · el aseo va el día del DTEND (${checkout}), SIN sumarle ni restarle un día: restarlo lo mandaría a la última noche (${ultimaNoche}), con el huésped todavía dentro`,
+  ).toBe(checkout);
+
+  expect(
+    aseosTrasSync[0].confirmado_at,
+    'JUNTA 1 · y nace SIN confirmar: el número de huéspedes y las instrucciones los pone el admin, no el sync',
+  ).toBeNull();
+
+  expect(
+    aseosTrasSync[0].aseador_id,
+    'JUNTA 1 · y nace SIN dueño: el sync detecta, no asigna. Asignar es lo que hace la junta 2, y si el sync ya lo hiciera, la junta 2 no probaría nada',
+  ).toBeNull();
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // JUNTA 2 · DE LA CONFIRMACIÓN A LA ASIGNACIÓN
+  // ═════════════════════════════════════════════════════════════════════════
+
+  await paginaAdmin.goto('/operacion');
+  await abrirBloque(paginaAdmin, 'Hoy');
+
+  const filaDelAseo = paginaAdmin.getByRole('row').filter({ hasText: unidad.nombre });
+
+  await expect(
+    filaDelAseo.locator('[data-estado="sin_confirmar"]'),
+    'JUNTA 2 · el aseo que salió del feed llega a /operacion SIN CONFIRMAR, que es lo que lo mete en la bandeja del admin',
+  ).toHaveCount(1);
+
+  // Se confirma desde el menú de LA FILA y no desde la bandeja de la cabecera.
+  // La bandeja cuenta TODOS los aseos sin confirmar de la ventana, así que su
+  // rótulo (`Confirmar N aseos`) depende de lo que hayan dejado los demás casos
+  // del archivo, y una tanda de más de uno cambia el botón primario y el copy del
+  // aviso. El menú de la fila abre la misma hoja con una tanda de uno, y es lo
+  // que deja este recorrido sin depender del resto del archivo.
+  const menuDelAseo = paginaAdmin.getByRole('button', {
+    name: `Acciones del aseo de ${unidad.nombre} del ${formatFechaBog(checkout)}`,
+  });
+  await esperarControlHidratado(menuDelAseo);
+  await menuDelAseo.click();
+  await paginaAdmin.getByRole('menuitem', { name: 'Confirmar', exact: true }).click();
+
+  // TRAMPA 1 DE `TESTING.md`: la hoja se portalea a `document.body`, así que todo
+  // lo que se afirme de ella va acotado al diálogo y nunca al contenedor de
+  // página, que el portal deja vacío.
+  const hoja = paginaAdmin.getByRole('dialog');
+  await expect(hoja, 'JUNTA 2 · el menú de la fila abre la hoja de confirmación').toBeVisible();
+
+  await expect(
+    hoja.getByText(`Queda asignado a ${NOMBRE_RESPONSABLE}`),
+    'JUNTA 2 · la hoja dice A QUIÉN va a quedar asignado ANTES de confirmar: confirmar asigna al responsable fijo, no elige',
+  ).toBeVisible();
+
+  await hoja.getByLabel('Número de huéspedes').fill('4');
+  await hoja.getByLabel('Instrucciones').fill(INSTRUCCIONES_DEL_ADMIN);
+  await hoja.getByRole('button', { name: 'Confirmar y cerrar' }).click();
+
+  // ── (a) LO QUE DICE LA PANTALLA ──────────────────────────────────────────
+  await esperarAvisoQueEmpiezaCon(paginaAdmin, 'Listo: 1 aseo confirmado.');
+
+  await expect(
+    paginaAdmin.getByRole('dialog'),
+    'JUNTA 2 · la hoja se cierra sola al confirmar la tanda entera',
+  ).toHaveCount(0);
+
+  await expect(
+    filaDelAseo.locator('[data-estado="pendiente"]'),
+    'JUNTA 2 · y la fila se repinta como CONFIRMADA: el aseo sigue pendiente de hacerse, pero ya no está sin confirmar',
+  ).toHaveCount(1);
+
+  // La negativa va DESPUÉS de su positiva y con el diálogo ya cerrado: una
+  // negativa evaluada con un panel abierto, o contra un contenedor que el portal
+  // vació, pasa sin mirar nada (trampa 2 de `TESTING.md`).
+  await expect(
+    filaDelAseo.locator('[data-estado="sin_confirmar"]'),
+    'JUNTA 2 · y deja de estar sin confirmar: si siguiera, la bandeja lo volvería a ofrecer y el admin lo confirmaría dos veces',
+  ).toHaveCount(0);
+
+  // ── (b) LO QUE QUEDÓ ESCRITO ─────────────────────────────────────────────
+  // El aviso dice lo que la pantalla cree; esto dice lo que la base tiene. Una
+  // hoja que muestre el mensaje correcto y no llame a la RPC pasa el aviso y se
+  // cae aquí.
+  const [aseoConfirmado] = await aseosDe(servicio, unidad.propiedadId);
+
+  expect(
+    aseoConfirmado.id,
+    'JUNTA 2 · la confirmación cae sobre EL MISMO aseo que nació del feed: el sujeto del recorrido no cambia a mitad de camino',
+  ).toBe(aseoId);
+
+  expect(
+    aseoConfirmado.confirmado_at,
+    'JUNTA 2 · `confirmado_at` queda escrito: es lo que separa la bandeja del resto de la pantalla',
+  ).not.toBeNull();
+
+  expect(
+    aseoConfirmado.num_huespedes,
+    'JUNTA 2 · el número de huéspedes que el admin escribió queda guardado: es lo que la aseadora necesita para saber cuántas camas tender',
+  ).toBe(4);
+
+  expect(
+    aseoConfirmado.instrucciones,
+    'JUNTA 2 · y las instrucciones también, literales: un recorte o un recorrido que las pierda deja a la aseadora sin la mitad del encargo',
+  ).toBe(INSTRUCCIONES_DEL_ADMIN);
+
+  // ── (c) LA ASERCIÓN QUE DA SENTIDO A LA JUNTA ────────────────────────────
+  expect(
+    aseoConfirmado.aseador_id,
+    `JUNTA 2 · el aseo queda asignado a la RESPONSABLE FIJA del apartamento (${NOMBRE_RESPONSABLE}). Es lo que significa «asignado en firme»: no se elige al confirmar, sale del catálogo`,
+  ).toBe(idResponsable);
+
+  expect(
+    aseoConfirmado.aseador_id,
+    `JUNTA 2 · y NO a la suplente (${NOMBRE_SUPLENTE}): la suplente es para cuando la responsable no puede, no para el camino normal`,
+  ).not.toBe(idSuplente);
+
+  expect(
+    aseoConfirmado.aseador_id,
+    'JUNTA 2 · y NO a quien confirmó (el admin): «asignar a quien confirma» es el defecto que esta aserción existe para atrapar',
+  ).not.toBe(idQuienConfirma);
+
+  // ── (d) EL CHECKLIST MATERIALIZADO ───────────────────────────────────────
+  // Sin esto, el tramo de la evidencia no tendría nada que fotografiar y el
+  // defecto aparecería allá, tres juntas más adelante, acusando a la pantalla
+  // equivocada.
+  const { data: tareas, error: errorTareas } = await servicio
+    .from('cleaning_checklist_items')
+    .select('id, room_label, task_label, requiere_foto')
+    .eq('cleaning_id', aseoId);
+  if (errorTareas) throw new Error(`No se pudo leer el checklist: ${errorTareas.message}`);
+
+  expect(
+    tareas ?? [],
+    'JUNTA 2 · confirmar materializa el checklist: 6 tareas, que son los DOS cuartos de la unidad por las TRES tareas activas de su tipo en el catálogo. Cero significa que el aseo llega a la aseadora sin nada que marcar',
+  ).toHaveLength(6);
+
+  const conFoto = (tareas ?? []).filter((t) => t.requiere_foto);
+
+  expect(
+    conFoto,
+    'JUNTA 2 · y TRES de ellas exigen foto, las de la habitación: son las que hacen que el asistente de evidencia tenga un paso y que la junta 4 pueda subir bytes',
+  ).toHaveLength(3);
+
+  expect(
+    conFoto.map((t) => t.room_label),
+    'JUNTA 2 · y las que exigen foto son las del cuarto que la exige, no las del general: el snapshot copió `requiere_foto` de la tarea y no lo inventó',
+  ).toEqual(['Habitación 1', 'Habitación 1', 'Habitación 1']);
 });
