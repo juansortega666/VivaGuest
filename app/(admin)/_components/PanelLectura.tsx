@@ -81,8 +81,22 @@ export function PanelLectura({
   pie,
   children,
 }: {
-  /** El nombre de lo seleccionado. Es el nombre accesible del diálogo (§13.1). */
-  titulo: string;
+  /**
+   * El nombre de lo seleccionado. Es el nombre accesible del diálogo (§13.1).
+   *
+   * ── POR QUÉ NO ES UNA CADENA, Y QUÉ SIGUE SIENDO OBLIGATORIO ───────────
+   *
+   * El panel de aseo pide, en §10.2, que su título SEA UN ENLACE al apartamento,
+   * y es el único enlace que sale de la sección a propósito: el admin lo eligió,
+   * no le pasó por tocar una fila. Un título de tipo cadena lo hace imposible.
+   *
+   * **Lo que no cambia:** el nombre accesible del diálogo se computa del
+   * CONTENIDO de este título, así que lo que se pase tiene que llevar el nombre
+   * de lo seleccionado como texto de verdad. Un icono suelto, una imagen sin
+   * texto alternativo o un nodo vacío dejarían el diálogo sin nombre, que es un
+   * control sin nombre y está prohibido por §13.
+   */
+  titulo: ReactNode;
   /**
    * La ÚNICA línea de apoyo, nunca dos (§6.1). Sin ella la cabecera mide 61px
    * en vez de 78 y el cuerpo gana ese espacio.
