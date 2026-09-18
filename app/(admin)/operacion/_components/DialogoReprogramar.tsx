@@ -114,8 +114,36 @@ export function DialogoReprogramar({
   // el admin tendría que volver a teclear el día para corregirlo (§15.3).
   const [fecha, setFecha] = useState('');
 
+  /**
+   * EL AVISO SE PUBLICA DENTRO DE LA ACTION, NO EN UN `useEffect`. ESTÁ MEDIDO.
+   *
+   * La explicación completa, con el registro del rojo y el del verde, vive en la
+   * cabecera del mismo bloque de `DialogoCancelarAseo.tsx`. En una línea: un
+   * `router.refresh()` que aterriza mientras la action sigue en vuelo trae el
+   * árbol con el aseo ya movido de día, la fila desaparece de ESTE bloque, y al
+   * irse la fila se van `MenuAseo` y este diálogo con su `useActionState`. El
+   * efecto no llegaba a correr y el aviso se perdía.
+   *
+   * Reprogramar y cancelar son exactamente los dos que fallaban, y no es
+   * casualidad: son los dos únicos cuya acción SACA la fila de donde está. Cerrar
+   * y reasignar tienen este mismo código y nunca fallaron porque su fila se
+   * queda.
+   *
+   * **NO devolver esto a un `useEffect`.**
+   */
   const [estado, accion] = useActionState<ResultadoAccion | null, FormData>(
-    reprogramarAseo,
+    async (previo, datos) => {
+      const resultado = await reprogramarAseo(previo, datos);
+
+      // `El aseo quedó para el {fecha}.`, ya formateado por la action.
+      if (resultado.ok) toast.success(resultado.mensaje);
+      // Con `campo` el error ya se pinta inline bajo ese input; duplicarlo en un
+      // toast sería decir dos veces lo mismo. Sin `campo` es un error de la
+      // operación completa y ahí sí va a toast destructivo (§15.3).
+      else if (!resultado.campo) toast.error(resultado.error);
+
+      return resultado;
+    },
     null,
   );
 
@@ -128,17 +156,8 @@ export function DialogoReprogramar({
     if (!estado || estado === procesado.current) return;
     procesado.current = estado;
 
-    if (estado.ok) {
-      // `El aseo quedó para el {fecha}.`, ya formateado por la action.
-      toast.success(estado.mensaje);
-      onAbiertoChange(false);
-      return;
-    }
-
-    // Con `campo` el error ya se pinta inline bajo ese input; duplicarlo en un
-    // toast sería decir dos veces lo mismo. Sin `campo` es un error de la
-    // operación completa y ahí sí va a toast destructivo (§15.3).
-    if (!estado.campo) toast.error(estado.error);
+    // Solo el efecto de interfaz. El aviso ya se publicó arriba.
+    if (estado.ok) onAbiertoChange(false);
   }, [estado, onAbiertoChange]);
 
   function alCambiarApertura(siguiente: boolean) {

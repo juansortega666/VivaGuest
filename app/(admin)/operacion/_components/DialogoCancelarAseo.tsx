@@ -123,7 +123,78 @@ export function DialogoCancelarAseo({
 }) {
   const router = useRouter();
 
-  const [estado, accion] = useActionState<ResultadoAccion | null, FormData>(cancelarAseo, null);
+  /**
+   * EL AVISO SE PUBLICA DENTRO DE LA ACTION, NO EN UN `useEffect`. ESTÁ MEDIDO.
+   *
+   * ── LO QUE PASABA CUANDO ESTABA EN EL EFECTO (D-09-02-A) ───────────────────
+   *
+   * Un `router.refresh()` de `SincronizacionEnVivo` aterrizaba mientras la
+   * Server Action seguía en vuelo. El árbol que traía ese refresco YA reflejaba
+   * la cancelación, y un aseo cancelado sale de `visibles` y se queda plegado
+   * detrás de `Ver cancelados` (`BloqueDia.tsx`). O sea que la fila desaparecía
+   * del DOM, y con ella se iban `FilaAseo`, `MenuAseo` y este mismo diálogo, que
+   * `MenuAseo` monta condicionalmente. Al morir el componente moría su
+   * `useActionState`, así que el resultado de la action llegaba a un sitio que ya
+   * no existía y **el efecto no corría nunca**. El admin cancelaba, la base
+   * escribía, y no se enteraba.
+   *
+   * Registro del rojo, con el reloj en cero al montar el diálogo:
+   *
+   *   +549 ms  SUBMIT            (la action arranca)
+   *   +587 ms  REFRESH realtime
+   *   +760 ms  RENDER tabla []   (el árbol nuevo ya no trae la fila)
+   *   +762 ms  DESMONTA          (el diálogo muere)
+   *   …y ni `EFECTO ok` ni `TOAST` aparecen jamás.
+   *
+   * El mismo registro en verde: `EFECTO ok` a +276 ms, `TOAST` a +276 ms,
+   * `DESMONTA` a +278 ms. Ganaba la carrera por **dos milisegundos**. Eso es lo
+   * que producía el ~32 % de pérdidas, y no la pila de sonner: sonner 2.0.8
+   * reproduce su backlog a cada suscriptor nuevo (`Observer.subscribe` llama a
+   * `getActiveToasts()`), así que un contenedor que se remonta NO pierde nada.
+   *
+   * ── POR QUÉ ESTE SITIO SÍ LLEGA, Y EL EFECTO NO ───────────────────────────
+   *
+   * No es que acá el aviso "sobreviva al desmontaje": es que **se publica antes
+   * de que la ventana exista**. Dos medidas lo fijan.
+   *
+   * 1. `RESULTADO` y `TOAST` comparten marca de tiempo en las ocho corridas
+   *    instrumentadas (+606/+606, +597/+597, +504/+505…). La publicación ocurre
+   *    en el mismo microtask en que aterriza la respuesta de la action, antes de
+   *    que React commitee ningún render. Un `useEffect` llega un commit más
+   *    tarde, y ese commit es justo el que puede traer el desmontaje.
+   *
+   * 2. Mientras la action está en vuelo, React RETIENE el commit del refresco.
+   *    Medido metiendo un retraso de 2,5 s dentro de esta función: entran dos
+   *    `REFRESH realtime` a +548 ms y +1045 ms, y sin embargo el render que
+   *    vacía la tabla no llega hasta +3007 ms, o sea hasta después de que la
+   *    action resuelve. La ventana peligrosa es EXACTAMENTE el instante en que
+   *    la action resuelve, y es el instante en el que esta línea ya publicó.
+   *
+   * Y como red de seguridad: `toast` es un singleton de módulo, no un hook, así
+   * que publicar tampoco necesita que quede ningún componente vivo. El efecto de
+   * abajo se queda SOLO con lo que sí debe morir con el diálogo: cerrarlo.
+   *
+   * No es un patrón nuevo en el repo: es el que `MenuAseo.marcarRevisado()` y
+   * `FilaAlerta` ya usaban, y por eso esos dos nunca perdieron un aviso.
+   *
+   * **NO devolver esto a un `useEffect`.** Si algún día hace falta tocarlo, la
+   * reproducción está en `.planning/phases/09-el-producto-probado-de-punta-a-punta/09-DEBUG-toast.md`.
+   */
+  const [estado, accion] = useActionState<ResultadoAccion | null, FormData>(
+    async (previo, datos) => {
+      const resultado = await cancelarAseo(previo, datos);
+
+      // `El aseo quedó cancelado.` y nada más: SIN acción de `Deshacer`. Ver la
+      // cabecera.
+      if (resultado.ok) toast.success(resultado.mensaje);
+      // Error de la operación completa: toast destructivo y el diálogo conserva
+      // su estado (§15.3).
+      else toast.error(resultado.error);
+
+      return resultado;
+    },
+    null,
+  );
 
   const procesado = useRef<ResultadoAccion | null>(null);
 
@@ -131,17 +202,8 @@ export function DialogoCancelarAseo({
     if (!estado || estado === procesado.current) return;
     procesado.current = estado;
 
-    if (estado.ok) {
-      // `El aseo quedó cancelado.` y nada más: SIN acción de `Deshacer`. Ver la
-      // cabecera.
-      toast.success(estado.mensaje);
-      onAbiertoChange(false);
-      return;
-    }
-
-    // Error de la operación completa: toast destructivo y el diálogo conserva su
-    // estado (§15.3).
-    toast.error(estado.error);
+    // Solo el efecto de interfaz. El aviso ya se publicó arriba.
+    if (estado.ok) onAbiertoChange(false);
   }, [estado, onAbiertoChange]);
 
   function alCambiarApertura(siguiente: boolean) {
