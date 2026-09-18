@@ -1588,6 +1588,15 @@ export type Database = {
         Args: { p_token: string }
         Returns: undefined
       }
+      consumo_de_storage: {
+        Args: never
+        Returns: {
+          cruce_at: string
+          cupo_bytes: number
+          umbral_pct: number
+          usado_bytes: number
+        }[]
+      }
       costo_por_aseadora: {
         Args: { p_desde: string; p_hasta: string }
         Returns: {
@@ -1610,6 +1619,24 @@ export type Database = {
       decline_cleaning: {
         Args: { p_cleaning: string; p_motivo: string }
         Returns: undefined
+      }
+      detalle_de_aseo: {
+        Args: { p_cleaning: string }
+        Returns: {
+          aseador_id: string
+          aseador_nombre: string
+          cleaning_id: string
+          cobrado: number
+          estado: Database["public"]["Enums"]["cleaning_state"]
+          fecha_programada: string
+          iniciado_at: string
+          is_managed: boolean
+          margen: number
+          pagado: number
+          property_id: string
+          property_nombre: string
+          terminado_at: string
+        }[]
       }
       detalle_de_mi_pago: {
         Args: { p_payout: string }

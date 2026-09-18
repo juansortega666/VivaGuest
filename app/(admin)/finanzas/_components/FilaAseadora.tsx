@@ -67,6 +67,23 @@ export function FilaAseadora({
       ? `${fila.aseos} aseos · ${formatCOP(fila.gastos)} en gastos`
       : `${fila.aseos} aseos`;
 
+  /**
+   * EL ÚNICO ENLACE ENTRANTE DEL PRODUCTO A LA FICHA DE UNA PERSONA, Y DESDE LA
+   * FASE 8 APUNTA AL PANEL.
+   *
+   * La página `/finanzas/aseadoras/[id]` ya no existe: se borró y su contenido
+   * vive ahora en `/finanzas?aseadora={id}` (08-UI-SPEC §9).
+   *
+   * **La dirección se COMPONE, nunca se escribe como consulta literal**
+   * (INSTRUCCIÓN 5 de `08-02-MEDICION.md`). Está medido en el otro anfitrión: un
+   * `href` con la consulta escrita a mano borró un parámetro del anfitrión **al
+   * abrir**, antes de que el cierre tuviera nada que conservar. Aquí lo que se
+   * conserva es el rango y el ancla, que son los dos parámetros que el Resumen
+   * gobierna y que llegan ya normalizados desde el servidor: si se perdieran, el
+   * periodo del admin volvería a mes actual por tocar un nombre.
+   */
+  const destino = new URLSearchParams({ rango, ancla, aseadora: fila.aseadoraId });
+
   return (
     <div className="transicion relative flex h-fila-aseador flex-col justify-center gap-xs px-lg hover:bg-canvas has-[a:focus-visible]:bg-canvas">
       <div className="flex items-center gap-sm">
@@ -74,7 +91,12 @@ export function FilaAseadora({
 
         <div className="flex min-w-0 flex-col">
           <Link
-            href={`/finanzas/aseadoras/${fila.aseadoraId}?rango=${rango}&ancla=${ancla}`}
+            href={`/finanzas?${destino.toString()}`}
+            // Sin salto de scroll, sin excepción (§5.2, D8-8): el enlace abre un
+            // panel encima de esta misma pantalla, y la lista de detrás no se ha
+            // movido. Devolverla al tope perdería el sitio del admin, que es la
+            // mitad del criterio 1 del ROADMAP.
+            scroll={false}
             // `title` con el nombre completo, porque la celda trunca: sin él, un
             // nombre largo se pierde y no hay forma de recuperarlo sin entrar.
             title={fila.nombre}

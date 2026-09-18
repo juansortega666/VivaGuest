@@ -2,12 +2,14 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
 import { NoAutorizado, exigirAdmin } from '@/lib/auth/guards';
+import { leerConsumoDeStorage } from '@/lib/data/almacenamiento';
 import { listarApartamentos } from '@/lib/data/apartamentos';
 import {
   SIN_AVISOS_REGISTRADOS,
   leerEndpointDePushPropio,
   leerEstadoDeAvisosPorAseador,
 } from '@/lib/data/avisos';
+import { identificadorValido } from '@/lib/data/finanzas-detalle';
 import {
   agruparPorDia,
   bandejaSinConfirmar,
@@ -20,6 +22,7 @@ import {
   type AlertaDelAdmin,
   type FilaDeOperacion,
 } from '@/lib/data/operacion';
+import { leerPanelDeAseo } from '@/lib/data/panel-aseo';
 import {
   alertasComputadas,
   conteosPorTipo,
@@ -36,14 +39,64 @@ import { BloqueDia } from './_components/BloqueDia';
 import { DialogoCrearAseo } from './_components/DialogoCrearAseo';
 import { LeyendaDeAseos } from './_components/EstadoAseo';
 import { FranjaCarga } from './_components/FranjaCarga';
+import { MedidorDeAlmacenamiento } from './_components/MedidorDeAlmacenamiento';
 import type { ContextoDeAcciones } from './_components/MenuAseo';
 import { PanelAlertas } from './_components/PanelAlertas';
+import { PanelAseo } from './_components/PanelAseo';
 import { SincronizacionEnVivo } from './_components/SincronizacionEnVivo';
 import { TiraAvisosAdmin } from './_components/TiraAvisosAdmin';
 
 export const metadata: Metadata = {
   title: 'Operación · VivaGuest',
 };
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ESTA RUTA NO TIENE ARCHIVO DE CARGA DE SEGMENTO, Y ES DELIBERADO. MEDIDO EL
+ * 2026-09-17 EN EL PLAN 08-02.
+ *
+ * Lo tuvo, con un esqueleto de geometria real que reproducia los dos carriles,
+ * la franja de chips, las cabeceras de dia y las dos cards del lateral. Se borro
+ * porque era la causa medida de que ABRIR UN PANEL LATERAL mandara la tabla del
+ * dia al tope.
+ *
+ * `loading.tsx` es el fallback de Suspense DEL SEGMENTO, y tambien se aplica
+ * cuando solo cambian los parametros de la consulta. Abrir `?aseo={id}` es
+ * exactamente eso. La cabecera de `app/(admin)/finanzas/page.tsx` ya lo dejo
+ * escrito con ocho corridas; esta medicion lo confirma sobre esta ruta y añade
+ * el mecanismo.
+ *
+ * El A/B, tres corridas por rama, apartando el archivo del arbol, con un evento
+ * de Realtime de por medio:
+ *
+ *     CON el archivo:  scrollY  277 / 0   / 0   / 0      3 de 3
+ *     SIN el archivo:  scrollY  277 / 277 / 277 / 277    3 de 3
+ *
+ * (antes de abrir / con el panel abierto / tras el evento de Realtime / al
+ * cerrar.)
+ *
+ * El mecanismo: el fallback SE ACTIVA aunque NO LLEGUE A PINTARSE (cero
+ * apariciones en doce corridas, porque la respuesta del servidor vuelve en
+ * ~70 ms). Al activarse, el contenido del segmento se desmonta un instante, el
+ * documento pierde altura, el navegador recorta la posicion a cero, y cuando el
+ * contenido vuelve la posicion ya se perdio. El estado de React del cliente SI
+ * sobrevive, porque un fallback de Suspense no desmonta el arbol, lo oculta.
+ *
+ * El escenario de control cierra el caso: un enlace de cliente que NO abre
+ * ningun panel pierde el scroll igual. **No es el panel**, y por eso
+ * `components/ui/sheet.tsx` no se toca.
+ *
+ * **Lo que se pierde:** el esqueleto de la PRIMERA carga de esta ruta. Es un
+ * coste real y acotado, identico al que se acepto en `/finanzas`, y es mucho
+ * menor que un criterio del ROADMAP incumplido.
+ *
+ * **Lo que NO se toca:** los demas archivos de carga del arbol. Esta fase borra
+ * exactamente dos, este y el de `/apartamentos`.
+ *
+ * **Y queda PROHIBIDO reintroducirlo** "para recuperar el esqueleto", ni ahora
+ * ni despues, sin volver a correr la medicion de `08-02-MEDICION.md` §3.
+ * ════════════════════════════════════════════════════════════════════════════
+ */
 
 /**
  * Las filas de `cleanings` recortadas a lo que `alertasComputadas()` necesita.
@@ -183,12 +236,43 @@ function resumenDeAtrasados(total: number, masViejo: string | null): string {
  *      ventana, que no es lo mismo.
  *
  * Son 39 filas y ~8 perfiles, en la misma sesion y en paralelo con las otras dos.
+ *
+ * ── Y ES TAMBIEN EL ANFITRION DEL PANEL DE ASEO (D8-8, 08-UI-SPEC §10) ─────
+ *
+ * `?aseo={uuid}` abre el detalle de un aseo encima del dia, sin salir de el, que
+ * es el criterio 4 del ROADMAP.
+ *
+ * **Y LA VALIDACION DE ESE IDENTIFICADOR NO PUEDE COPIAR LA DE
+ * `/finanzas/pagos` NI LA DE `/apartamentos`.** Los dos resuelven el parametro
+ * contra lo que la pagina YA LEYO, y ahi funciona porque leen su conjunto
+ * entero: `/apartamentos` trae las 39 filas. **Esta pantalla no.**
+ * `leerOperacion()` lee una ventana de **hoy menos 7 a hoy mas 6 dias**, asi que
+ * un aseo de hace tres semanas es valido, existe, se puede ver, y NO ESTA EN
+ * `operacion.filas`. Validarlo contra esa lista haria que un enlace
+ * perfectamente valido pegado en un chat abriera la pantalla sin panel y sin
+ * decir por que, que choca de frente con el criterio 2.
+ *
+ * Por eso la existencia se valida **contra la funcion definer**, llamando a la
+ * lectura del panel: cero filas significa que no existe o que no se puede ver, y
+ * las dos cosas se tratan igual. Lo unico que cambia respecto al patron heredado
+ * es CONTRA QUE se comprueba; el argumento del comentario de `pagos/page.tsx`
+ * sigue valiendo literal: *"No es una frontera de seguridad, sino de
+ * comportamiento"*. Los cuatro puntos de §11.4 se cumplen igual, incluido que el
+ * parametro huerfano NO SE LIMPIA.
  */
 export default async function OperacionPage({
   searchParams,
 }: {
-  /** `?alertas=atendidas` es el toggle `Ver atendidas` del panel (§11.4). */
-  searchParams: Promise<{ alertas?: string }>;
+  /**
+   * `?alertas=atendidas` es el toggle `Ver atendidas` del panel (§11.4), y
+   * `?aseo={uuid}` abre el panel de aseo.
+   *
+   * El tipo es generico y no los dos nombres sueltos porque la pagina tiene que
+   * poder SERIALIZAR sus parametros vivos para componer las dos direcciones: la
+   * de abrir y la de cerrar. Con un tipo cerrado, el dia que esta pantalla
+   * gobierne un tercer parametro, el enlace de apertura lo borraria en silencio.
+   */
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   // Se usa `exigirAdmin()` y no `createClient()` a secas porque esta pagina
   // necesita el `id` del usuario: `notifications.recipient_id` es NOT NULL y no
@@ -219,8 +303,39 @@ export default async function OperacionPage({
    */
   const ahoraMs = Date.now();
 
-  const { alertas: modoAlertas } = await searchParams;
+  const parametros = await searchParams;
+  const modoAlertas = parametros.alertas;
   const verAtendidas = modoAlertas === 'atendidas';
+
+  /**
+   * PRIMERO LA FORMA, ANTES DE TOCAR LA BASE.
+   *
+   * El identificador llega de la direccion, o sea de fuera. Sin esta guarda una
+   * cadena arbitraria llegaria a Postgres como argumento de tipo identificador y
+   * volveria como `22P02`, un error de sintaxis que la pantalla no sabria
+   * explicar. La funcion ya existe y se reutiliza: un regex nuevo seria una
+   * cuarta definicion de la misma forma.
+   *
+   * `leerPanelDeAseo` la vuelve a aplicar por dentro, y esa repeticion no sobra:
+   * corta el viaje antes de construir la promesa.
+   */
+  const crudoDelAseo = parametros.aseo;
+  const aseoPedido = identificadorValido(
+    typeof crudoDelAseo === 'string' ? crudoDelAseo : undefined,
+  );
+
+  /**
+   * LA LECTURA DEL PANEL, Y SOLO CUANDO EL PARAMETRO ESTA PRESENTE.
+   *
+   * Se construye la promesa **sin esperarla** y entra al mismo `Promise.all` de
+   * abajo, asi que cuesta CERO latencia extra: las ocho consultas que la pantalla
+   * ya hacia la dominan. Sin parametro, ni siquiera se dispara.
+   *
+   * La MISMA promesa se usa para las dos cosas que hay que hacer con ella
+   * —decidir si el panel se renderiza, y alimentar su cuerpo— porque volver a
+   * llamarla dispararia las seis lecturas y las seis firmas dos veces.
+   */
+  const lecturaDelPanel = aseoPedido === null ? null : leerPanelDeAseo(supabase, aseoPedido);
 
   // En paralelo: son consultas independientes contra la misma sesion, y
   // encadenarlas con `await` seguidos sumaria todas las latencias por nada.
@@ -232,6 +347,8 @@ export default async function OperacionPage({
     ultimoExito,
     avisos,
     endpointDelAdmin,
+    aseoAbierto,
+    consumo,
   ] = await Promise.all([
       leerOperacion(supabase, ahoraMs),
       leerAseadoresActivos(supabase),
@@ -249,6 +366,22 @@ export default async function OperacionPage({
       // admin, contra el que el hook de la franja compara su suscripcion viva.
       // Sin el, el hook repararia en silencio en cada carga de la pantalla.
       leerEndpointDePushPropio(supabase, user.id),
+      // La novena, y solo existe cuando la direccion trae el parametro. Ver la
+      // cabecera de la pagina para por que la existencia se decide acá y no
+      // contra `operacion.filas`.
+      lecturaDelPanel,
+      // RET-07. La decima, y la UNICA con `.catch` propio.
+      //
+      // EL `.catch` VA PEGADO A ESTA PROMESA, NO ENVOLVIENDO EL `Promise.all`.
+      // Si envolviera al conjunto, un fallo de esta lectura de nueve tumbaria
+      // las otras nueve y la pantalla entera se caeria por el medidor de la
+      // cabecera, que es exactamente lo que no puede pasar.
+      //
+      // Y el `null` NO ES CERO y no se pinta como cero: el medidor dice "no se
+      // pudo medir" y `alertasComputadas()` no emite alerta. Afirmar que hay
+      // espacio de sobra sin haberlo medido es la mentira que este requisito
+      // existe para evitar.
+      leerConsumoDeStorage(supabase).catch(() => null),
     ]);
 
   const bloques = agruparPorDia(operacion.filas, operacion.hoy);
@@ -327,6 +460,33 @@ export default async function OperacionPage({
   // Los tres datos ya estaban leidos: `aseadores` alimenta los chips de carga,
   // `responsables` alimenta la bandeja, y `hoy` es el dia de negocio que la
   // consulta uso para su ventana. No hay ningun viaje nuevo a la base.
+  /**
+   * ── LAS DOS DIRECCIONES SE COMPONEN AQUI, EN EL SERVIDOR ─────────────────
+   *
+   * Donde los parametros ya estan normalizados, y bajan como props. Cerrar con
+   * una ruta constante **borraria el `?alertas=atendidas`**, y la regla 3 de §5.1
+   * lo prohibe: abrir un panel no puede perder los parametros del anfitrion y
+   * cerrarlo tiene que devolver la direccion con ellos intactos. Un admin que
+   * estaba mirando las alertas atendidas y cierra un panel no entenderia por que
+   * el filtro se le reseteo.
+   *
+   * La mitad de ABRIR no es teoria y esta medida: en `08-02-MEDICION.md` §4.3 un
+   * `href="/operacion?aseo={id}"` con consulta literal borro el
+   * `?alertas=atendidas` AL ABRIR, antes de que el cierre tuviera nada que
+   * conservar. Por eso `parametrosVivos` baja hasta la fila (INSTRUCCION 5).
+   */
+  const vivos = new URLSearchParams();
+  for (const [clave, valor] of Object.entries(parametros)) {
+    // El unico que gobierna el panel se quita, y lo vuelve a poner quien lo
+    // necesite. Todo lo demas viaja intacto.
+    if (clave === 'aseo') continue;
+    if (typeof valor === 'string') vivos.set(clave, valor);
+    else if (Array.isArray(valor)) for (const uno of valor) vivos.append(clave, uno);
+  }
+
+  const cola = vivos.toString();
+  const rutaAlCerrar = cola === '' ? '/operacion' : `/operacion?${cola}`;
+
   const acciones: ContextoDeAcciones = {
     aseadores,
     responsables,
@@ -338,6 +498,11 @@ export default async function OperacionPage({
     // hora limite vencida: asi la senal de la fila y la alerta del panel salen
     // del mismo reloj y no pueden contradecirse dentro del mismo render.
     ahoraMs,
+    // Los dos datos del panel de aseo, que `FilaAseo` consume y `MenuAseo` no.
+    // Viajan en este objeto porque es exactamente para lo que se creo: para que
+    // añadir un dato no vuelva a tocar los tres archivos por los que baja.
+    parametrosVivos: cola,
+    aseoAbiertoId: aseoAbierto?.cabecera.aseoId ?? null,
   };
 
   /**
@@ -348,11 +513,19 @@ export default async function OperacionPage({
    * y dos verdades sobre el mismo dato se desincronizan en el primer cambio. El
    * componente solo filtra por tipo, que es una operacion que conserva el orden.
    *
-   * En el modo `Ver atendidas` NO se computan las tres derivadas, y no es un
-   * olvido: urgente, hora limite vencida y calendario caido no tienen `read_at`,
-   * asi que no se pueden atender y no pueden estar en la lista de atendidas. Se
-   * pasa `[]` de forma explicita para que la ausencia sea una decision escrita y
-   * no un efecto lateral.
+   * En el modo `Ver atendidas` NO se computan las cuatro derivadas, y no es un
+   * olvido: urgente, hora limite vencida, calendario caido y almacenamiento no
+   * tienen `read_at`, asi que no se pueden atender y no pueden estar en la lista
+   * de atendidas. Se pasa `[]` de forma explicita para que la ausencia sea una
+   * decision escrita y no un efecto lateral.
+   *
+   * ── Y ESTO NO APAGA EL MEDIDOR DE LA CABECERA (RET-07) ───────────────────
+   *
+   * El `[]` de aqui vacia la LISTA del panel, no el NUMERO de la cabecera. El
+   * consumo de Storage se sigue leyendo y se sigue pintando en `Ver atendidas`,
+   * porque cuanto espacio queda no depende de que filtro tenga puesto el panel.
+   * Queda escrito aca, que es donde se decide, o el dia que alguien lea este
+   * `verAtendidas` va a creer que el medidor es un olvido.
    */
   const computadas = verAtendidas
     ? []
@@ -361,6 +534,7 @@ export default async function OperacionPage({
         maxUltimoExito: ultimoExito,
         ahoraMs,
         hoy: operacion.hoy,
+        consumo,
       });
 
   const nombresDeApartamento = Object.fromEntries(apartamentos.map((a) => [a.id, a.nombre]));
@@ -389,6 +563,14 @@ export default async function OperacionPage({
         <h1 className="text-display text-foreground">Operación</h1>
 
         <div className="flex items-center gap-md">
+          {/*
+            RET-07. El numero se ve SIEMPRE, tambien en `Ver atendidas`: cuanto
+            espacio queda no depende del filtro del panel. Va antes de la marca de
+            sincronizacion porque las dos son estado del sistema y esta es la mas
+            lenta de cambiar: la de al lado se mueve cada minuto.
+          */}
+          <MedidorDeAlmacenamiento consumo={consumo} />
+
           {/*
             La marca de ultima actualizacion (§13.1) y el canal de tiempo real que
             la alimenta. Recibe `leidoEnMs`, que es EL instante de la lectura de
@@ -609,6 +791,52 @@ export default async function OperacionPage({
           />
         </aside>
       </div>
+
+      {/*
+        ── EL PANEL DE ASEO (§10, criterio 4) ───────────────────────────────
+
+        Solo se renderiza cuando la lectura devolvio fila. Cero filas significa
+        que el aseo no existe o que no se puede ver, y las dos cosas se tratan
+        igual: **sin 404, sin toast, sin panel vacio, sin redireccion**, y el
+        parametro huerfano SE QUEDA en la direccion, porque limpiarlo reescribiria
+        un enlace que alguien pego en un chat (§11.4).
+
+        LA CLAVE VA AQUI Y EN NINGUN OTRO SITIO. Sobre el panel, para que abrir un
+        segundo aseo no reutilice el arbol del primero: sin ella no vuelve a hacer
+        su entrada, no recoloca el foco y se veria el nombre nuevo dentro del
+        panel viejo.
+
+        **NO sobre la barrera de suspension y NO sobre nada que envuelva a la
+        tabla del dia** (INSTRUCCION 3 del VEREDICTO de 08-02). Ahi forzaria el
+        remonte del subarbol y se llevaria por delante el estado de cliente de los
+        bloques de dia, que hoy sobrevive y sobrevive medido.
+
+        Va FUERA de la rejilla de los dos carriles: es un dialogo que la primitiva
+        lleva a un portal, asi que su sitio en el arbol no es su sitio en la
+        pantalla, y colgarlo de una pista de rejilla solo confundiria al que lea.
+      */}
+      {aseoAbierto !== null && lecturaDelPanel !== null && (
+        <PanelAseo
+          key={aseoAbierto.cabecera.aseoId}
+          cabecera={aseoAbierto.cabecera}
+          // LA MISMA promesa que ya se resolvio arriba para decidir si este panel
+          // existe. No es una segunda lectura: una llamada nueva repetiria las
+          // seis consultas y las seis firmas.
+          //
+          // Consecuencia honesta, y va escrita: como la promesa ya esta resuelta
+          // cuando el panel se renderiza, **el esqueleto de su barrera de
+          // suspension no llega a pintarse**. La barrera se queda igual, porque
+          // es lo que mantiene la forma comun de los cuatro paneles, y porque la
+          // alternativa —llamar a la definer una vez para validar y otra vez
+          // dentro del panel— compraria un esqueleto que 08-02 §6.1 ya midio que
+          // NO APARECE NUNCA (cero de doce corridas, porque la respuesta del
+          // servidor vuelve en ~70 ms) a cambio de duplicar una consulta de
+          // verdad. No vale la pena.
+          panel={lecturaDelPanel}
+          rutaAlCerrar={rutaAlCerrar}
+          rutaDelApartamento={`/apartamentos?apartamento=${aseoAbierto.cabecera.apartamentoId}`}
+        />
+      )}
     </div>
   );
 }

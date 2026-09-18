@@ -129,10 +129,33 @@ export function TablaPagosDelPeriodo({
                   al lado, y anunciarlo haria que un lector de pantalla dijera
                   «eme ge, María González» en cada fila.
                 */}
+                {/*
+                  ABRE CON EMPUJE, CIERRA CON REEMPLAZO, Y NO SON LA MISMA COSA
+                  (08-UI-SPEC §5.2).
+
+                  Este enlace abria con `replace`, asi que el panel NO anadia
+                  entrada de historial y el boton atras con el panel abierto
+                  sacaba de la seccion entera en vez de cerrarlo. Era el unico de
+                  los cinco paneles del producto donde el criterio 3 del ROADMAP
+                  era mentira.
+
+                  D8-8 fija el CIERRE —`router.replace(rutaBase, { scroll: false })`—
+                  y eso no cambia. Lo que cambia es la apertura.
+
+                  El precio esta contado y aceptado (§17.1): abrir y cerrar ocho
+                  paneles seguidos deja ocho entradas identicas a la ruta base,
+                  asi que salir de la seccion con el boton atras cuesta ocho
+                  pulsaciones. Es degradacion, no rotura, y es estrictamente
+                  mejor que lo de antes, donde la primera pulsacion sacaba.
+
+                  La desactivacion del salto de scroll SI se queda: un `<Link>`
+                  de Next salta al tope por defecto, y eso no depende de si abre
+                  con empuje o con reemplazo. Este enlace es el precedente de esa
+                  regla, no su excepcion.
+                */}
                 <Link
                   href={`/finanzas/pagos?pago=${pago.pagoId}`}
                   scroll={false}
-                  replace
                   className="transicion flex items-center gap-sm rounded-sm text-body font-semibold text-foreground hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   <CirculoIniciales nombre={pago.aseadora} />

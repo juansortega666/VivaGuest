@@ -122,7 +122,7 @@
 - [ ] **RET-04**: El borrado elimina los archivos en Storage además de las filas, sin dejar huérfanos facturando
 - [ ] **RET-05**: Los agregados de desempeño (timestamps de inicio y fin, eventos "no puedo") sobreviven al borrado del detalle
 - [ ] **RET-06**: El sistema borra las fotos de evidencia a los 30 días, conservando el registro del aseo y su checklist
-- [ ] **RET-07**: El admin ve el consumo de Storage y recibe alerta al superar el 70% del cupo
+- [x] **RET-07**: El admin ve el consumo de Storage y recibe alerta al superar el 70% del cupo
 
 ## v2 Requirements
 
@@ -255,7 +255,7 @@
 | RET-04 | Fase 9 | Pending |
 | RET-05 | Fase 9 | Pending |
 | RET-06 | Fase 9 | Pending |
-| RET-07 | Fase 9 (movido de la 7 el 2026-09-13, issue #6) | Pending |
+| RET-07 | Fase 9 (movido de la 7 el 2026-09-13, issue #6) | Complete |
 
 **Coverage:**
 

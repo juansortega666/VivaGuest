@@ -624,6 +624,45 @@
   --container-boton-marcar:  148px;  /* `Marcar pagado` -> `Marcando…` sin cambiar de ancho */
 }
 
+/* ── Fase 8: los paneles laterales del admin — 08-UI-SPEC.md §2.1 ────────────
+   UN SOLO TOKEN NUEVO EN TODA LA FASE, y el resto se reutiliza tal cual.
+
+   Se reutilizan SIN REDECLARAR: --container-sheet (480px), --container-sheet-base
+   (384px), --container-dialogo (480px), --container-codigo (240px),
+   --spacing-miniatura (64px), --spacing-recibo-alto (480px), --spacing-fila
+   (40px), --spacing-avatar (28px), --tracking-columna (0.04em),
+   --tracking-codigo (0.12em) y --container-vacio (44ch).
+
+   --spacing-miniatura lleva declarado desde la Fase 6 y hasta hoy no lo usaba
+   ningun .tsx. Esta fase es su primer consumidor, y por eso las fotos del panel
+   de aseo NO declaran un token propio.                                        */
+@theme {
+  /* ── ancho: NOMBRE PROPIO, NUNCA NOMBRE DE TALLA ────────────────────────
+     El nombre no es cosmetico y esta comprobado contra la lista completa de
+     tokens del repo antes de escribir este bloque. Tailwind v4.3 resuelve el
+     nombre de una clase de ancho contra el namespace de ESPACIADO antes que
+     contra el de contenedores, y 02-UI-SPEC.md §2 llama a la escala de
+     espaciado por tallas (`xs` 4 · `sm` 8 · `md` 12 · `lg` 16): un token de
+     contenedor bautizado con una talla emite los 8 pixeles del espaciado, no
+     los que dice el numero de aqui abajo. La causa completa esta medida en la
+     cabecera de scripts/ci/check-max-w-tallas.sh, que es lo que falla si la
+     clase entra al repo.
+
+     Se usa como ancho MINIMO (`min-w-boton-mostrar`), no como ancho maximo, asi
+     que no compite con ninguna clase base de primitiva y NO necesita registro
+     en el grupo de anchos maximos de `cn()` en lib/utils.ts. Misma situacion
+     que --container-boton-marcar, --container-boton-alta,
+     --container-boton-guardar y los cuatro de /operacion. Si durante la fase
+     apareciera un ancho MAXIMO nuevo, ese registro NO es opcional.
+
+     De donde sale el numero: --container-boton-guardar son 116px para
+     `Guardando…`, que son 10 caracteres. `Abriendo…` tiene uno menos, y a
+     ~8.7px por caracter eso son ~107px, redondeados al multiplo de 4 de
+     arriba. El boton que revela el codigo de acceso pasa de `Mostrar` a
+     `Abriendo…` y no puede saltar de ancho en vuelo (04-UI-SPEC §15.2).      */
+  --container-boton-mostrar: 108px;  /* `Mostrar` -> `Abriendo…` sin cambiar de ancho */
+}
+
 /* ── Fase 5: la escala tipografica del arbol del aseador — 05-UI-SPEC.md §3.1 ─
    SUPERSEDE de 02-UI-SPEC §3 DENTRO DE `app/(cleaner)/` Y SOLO AHI. Los roles
    siguen siendo cuatro y los pesos siguen siendo dos (400 y 600): lo que cambia

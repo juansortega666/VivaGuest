@@ -1132,8 +1132,16 @@ export const CIFRAS_FINANCIERAS = {
  * cabecera correcta: si el navegador no lo puede pintar, el manejador de error
  * de la etiqueta `<img>` sustituye la foto por el estado de ausencia y la
  * aserción de que el recibo se ve vuelve a ser inalcanzable.
+ *
+ * ── SE EXPORTA DESDE EL PLAN 08-13, Y LA ALTERNATIVA ERA PEOR ──────────────
+ *
+ * `e2e/operacion.spec.ts` siembra la tira de evidencia del panel de aseo y
+ * necesita al menos UNA foto con bytes de verdad: sin objeto en el bucket la
+ * firma falla, la tira pinta solo casillas de ausencia, y la aserción sobre la
+ * miniatura de verdad no la podría apagar ninguna pantalla. Copiar este base64
+ * allá sería el mismo JPEG viviendo en dos sitios; exportarlo es una palabra.
  */
-const BYTES_DEL_RECIBO = Buffer.from(
+export const BYTES_DEL_RECIBO = Buffer.from(
   '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a' +
     'HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIy' +
     'MjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIA' +

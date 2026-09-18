@@ -38,5 +38,18 @@ insert into public.app_settings (key, value) values
   ('access_code_window_days',     '1'::jsonb),
   -- RET-07 / Fase 9: porcentaje de consumo de Storage que dispara la alerta
   -- de capacidad al admin.
-  ('storage_alert_threshold_pct', '70'::jsonb)
+  ('storage_alert_threshold_pct', '70'::jsonb),
+  -- RET-07: el CUPO de Storage contra el que se mide ese porcentaje, en
+  -- MEGABYTES. 1024 es el free tier de Supabase, que con 34 apartamentos se
+  -- llena en unos tres meses (6 fotos por aseo x ~200 KB).
+  --
+  -- VA AQUI, PEGADO AL UMBRAL, Y NO EN UNA CONSTANTE DEL CODIGO, POR UNA
+  -- RAZON OPERATIVA: el dia que el dueno pase a Supabase Pro, subir el cupo
+  -- tiene que ser un `update` de esta fila, no una migracion, un commit, un
+  -- despliegue y un reinicio. El dia que el Storage este al 95% es el peor dia
+  -- posible para necesitar un despliegue.
+  --
+  -- Y va junto al umbral porque los dos forman UNA regla: partir el par deja
+  -- media verdad en cada lado y garantiza que alguien mueva una sola.
+  ('storage_quota_mb',            '1024'::jsonb)
 on conflict (key) do nothing;

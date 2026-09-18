@@ -496,3 +496,81 @@ export function ultimoDiaDelMes(iso: string): string {
   const mesSiguiente = mes === 12 ? 1 : mes + 1;
   return sumarDias(`${anoSiguiente}-${String(mesSiguiente).padStart(2, '0')}-01`, -1);
 }
+
+/**
+ * Abreviaturas de dia de la semana, en tabla EXPLICITA y por la misma razon que
+ * `MESES_CORTOS`: la abreviatura que emite `Intl` la fija la version de ICU del
+ * runtime, y Vercel, el CI y el portatil no tienen por que traer la misma.
+ *
+ * MEDIDO el 2026-09-17 con el Node de este repo: `weekday: 'short'` en es-CO
+ * devuelve exactamente estos siete valores, asi que la tabla no cambia nada hoy.
+ * Lo que compra es que no cambie mañana sin que nadie se entere.
+ *
+ * El indice es el de `diaDeLaSemana()`: 0 es DOMINGO y 6 es SABADO.
+ */
+const DIAS_CORTOS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'] as const;
+
+/**
+ * Dia de la semana abreviado mas numero de dia: `'2026-09-18'` produce
+ * `"jue 18"`, y `'2026-09-04'` produce `"jue 4"`.
+ *
+ * Es la forma de las filas del grupo `CHECKOUTS DE {MES}` del panel de
+ * calendario (08-UI-SPEC §8.1 y §8.2), donde el mes ya esta dicho en la linea
+ * de apoyo de la cabecera y repetirlo en cada fila seria ruido.
+ *
+ * SIN CERO A LA IZQUIERDA en el dia, que es lo que pide la anatomia de §8.1
+ * (`jue 4`, no `jue 04`). Sale de `Number`, no de un recorte de cadena.
+ *
+ * Existe como formateador aparte y no como bandera de `formatFechaBog()`, misma
+ * regla que ya escribieron `FECHA_LARGA` y `formatFechaCortaBog`: cuando hace
+ * falta otra forma se añade un formateador, no un parametro.
+ */
+export function formatDiaCortoBog(iso: string): string {
+  const [, , dia] = iso.split('-').map(Number);
+  return `${DIAS_CORTOS[diaDeLaSemana(iso)]} ${dia}`;
+}
+
+/**
+ * La ultima sincronizacion de un feed, tal como la pinta el grupo `CALENDARIO`
+ * del panel de calendario (08-UI-SPEC §8.2):
+ *
+ *     mismo dia de Bogota   ->  `hoy, 09:42`
+ *     dia anterior          ->  `ayer, 21:15`
+ *     mas atras             ->  `4 de septiembre`
+ *
+ * ── POR QUE EL TERCER ESCALON PIERDE LA HORA, Y ES DELIBERADO ───────────
+ *
+ * A los tres dias, la hora exacta de una sincronizacion no le dice nada a nadie:
+ * lo que importa es cuanto lleva el calendario sin traer nada. Es la diferencia
+ * con `tiempoRelativo()`, que sirve a una cabecera que se refresca sola y donde
+ * el minuto SI importa. Dos formas distintas para dos preguntas distintas.
+ *
+ * ── AQUI SI SE CONVIERTE UN INSTANTE, Y ES CORRECTO ─────────────────────
+ *
+ * `calendar_feeds.last_success_at` es `timestamptz`: un INSTANTE, no un dia de
+ * negocio. La conversion instante -> dia calendario pasa por `diaBog()`, o sea
+ * por la unica constante de zona del repo, y no por una resta de cinco horas
+ * escrita a mano. Lo prohibido sigue siendo lo de siempre: convertir la cadena
+ * de un `date` entera.
+ *
+ * `hoy` llega POR ARGUMENTO, desde `hoyBog()`, y no se lee el reloj aqui: el
+ * proceso corre en UTC y pasadas las 19:00 de Bogota un reloj leido aqui ya dice
+ * mañana, que convertiria el `hoy, 21:15` de esta noche en un `ayer, 21:15`.
+ *
+ * Devuelve `null` si la marca es nula o ilegible, misma regla que
+ * `tiempoRelativo()`: un feed recien conectado no ha sincronizado nunca, y el
+ * consumidor decide si eso es una ausencia o una linea que se omite.
+ */
+export function formatSincronizacionBog(
+  instante: number | string | null | undefined,
+  hoy: string,
+): string | null {
+  const dia = diaBog(instante);
+  const hora = formatHoraBog(instante);
+  if (dia === null || hora === null) return null;
+
+  if (dia === hoy) return `hoy, ${hora}`;
+  if (dia === sumarDias(hoy, -1)) return `ayer, ${hora}`;
+
+  return formatFechaLargaBog(dia);
+}

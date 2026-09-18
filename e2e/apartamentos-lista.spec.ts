@@ -1,4 +1,6 @@
-import { expect, test } from './fixtures';
+import type { Page } from '@playwright/test';
+
+import { esperarControlHidratado, esperarUrlDeCliente, expect, test } from './fixtures';
 import { cargarEnvLocal, clienteDeServicio } from './global-setup';
 
 /**
@@ -58,6 +60,51 @@ let idActiva = '';
 let nombreActiva = '';
 let idInactiva = '';
 let nombreInactiva = '';
+
+/**
+ * La primera unidad gestionada por orden de nombre. Es la que abren por
+ * DIRECCION DIRECTA los casos del criterio 2, y la unica a la que este spec le
+ * siembra un feed de calendario.
+ */
+let idPrimera = '';
+let nombrePrimera = '';
+
+/** El feed sembrado, para borrarlo despues sin barrer los de nadie mas. */
+let idFeedSembrado = '';
+
+/**
+ * Un identificador CON FORMA VALIDA que no existe en la base.
+ *
+ * Es la otra mitad de §11.4, la que nadie escribe porque parece que no pasa
+ * nada: la pantalla tiene que verse normal. El valor es fijo y su forma es de
+ * identificador de version 4, asi que la comprobacion de forma lo deja pasar y
+ * la resolucion contra el catalogo es la que no lo encuentra.
+ */
+const ID_QUE_NO_EXISTE = '00000000-0000-4000-8000-000000000000';
+
+/**
+ * EL CODIGO DE LA CERRADURA QUE ESTE SPEC SIEMBRA, y el valor exacto que NO
+ * puede estar en el documento antes de que alguien pulse.
+ *
+ * Lleva marca de tiempo por la misma razon que el secreto de `calendario.spec`:
+ * un valor corto y comun (`4821`) puede aparecer en el documento por accidente
+ * —dentro de un identificador, de una clase generada, de un numero de version—
+ * y entonces la asercion seria roja sin que nada estuviera mal. Esta cadena no
+ * puede salir de ningun otro sitio que no sea la fila que este archivo sembro.
+ */
+const CODIGO_SEMBRADO = `CODIGOE2E${Date.now()}`;
+
+/**
+ * La credencial del calendario del MISMO apartamento.
+ *
+ * Es el Hallazgo 7 convertido en asercion: la lectura en la que la accion
+ * delega devuelve CUATRO credenciales en un solo objeto, y solo dos pueden
+ * salir. Esta es una de las dos que no pueden, y su cabecera en la base lo dice
+ * con todas las letras: quien la tenga ve la ocupacion completa del apartamento
+ * SIN AUTENTICARSE.
+ */
+const SECRETO_ICAL = `SECRETOICALE2E${Date.now()}`;
+const URL_ICAL = `https://www.airbnb.com/calendar/ical/e2e-0812.ics?s=${SECRETO_ICAL}`;
 
 const TARIFA = 120000;
 const PAGO = 45000;
@@ -143,6 +190,48 @@ test.beforeAll(async () => {
     })
     .eq('id', idInactiva);
   if (inactiva.error) throw new Error(`No se pudo preparar la fila: ${inactiva.error.message}`);
+
+  // ── LA UNIDAD DE LOS CASOS DE DIRECCION DIRECTA, Y SU FEED ────────────────
+  //
+  // La vista de calendario se dispara con la FILA del feed, no con sus reservas:
+  // sin fila, el panel entero cae al estado vacio de §11.2 y sus tres grupos no
+  // existen. Asi que el feed hace falta, y basta con el: los tres grupos se
+  // pintan con sus vacios, que es justo lo que este spec tiene que ver.
+  //
+  // Se siembra UNA fila y se borra por su identificador en la limpieza. El
+  // aviso lo dejo el plan 08-10 y vale igual: un feed olvidado contamina las
+  // suites de integracion que cuentan feeds activos.
+  const [primera] = filas.filter((f) => f.gestion_vivaguest);
+  idPrimera = primera.id;
+  nombrePrimera = primera.nombre;
+
+  const feed = await servicio
+    .from('calendar_feeds')
+    .insert({
+      property_id: idPrimera,
+      provider: 'airbnb',
+      is_active: true,
+      consecutive_failures: 0,
+      last_success_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single();
+  if (feed.error) throw new Error(`No se pudo sembrar el feed: ${feed.error.message}`);
+  idFeedSembrado = feed.data.id;
+
+  // Las DOS credenciales del mismo apartamento, en la misma fila. Van juntas a
+  // proposito: el caso del secreto afirma que una sale con un gesto y la otra no
+  // sale nunca, y esas dos cosas solo se pueden medir sobre la misma unidad.
+  //
+  // Se escriben con el cliente de servicio porque esta tabla NO TIENE GRANT para
+  // `authenticated`: no hay forma de sembrarla desde la interfaz.
+  const secretos = await servicio.from('property_secrets').upsert({
+    property_id: idPrimera,
+    codigo_acceso: CODIGO_SEMBRADO,
+    tipo_cerradura: 'inteligente',
+    ical_url: URL_ICAL,
+  });
+  if (secretos.error) throw new Error(`No se pudieron sembrar los secretos: ${secretos.error.message}`);
 });
 
 test.afterAll(async () => {
@@ -165,6 +254,20 @@ test.afterAll(async () => {
         responsable_id: null,
       })
       .eq('id', id);
+  }
+
+  // El feed de los casos de direccion directa. Se borra SIEMPRE, y por su
+  // identificador: un feed activo olvidado en la base cambia los conteos de las
+  // suites de integracion sin que nada apunte a este archivo.
+  if (idFeedSembrado) {
+    await servicio.from('calendar_feeds').delete().eq('id', idFeedSembrado);
+  }
+
+  // Y las dos credenciales. Dejarlas puestas no rompe nada visible, y por eso
+  // mismo hay que borrarlas: un codigo de prueba que sobrevive en la base es un
+  // secreto que nadie sabe que esta ahi.
+  if (idPrimera) {
+    await servicio.from('property_secrets').delete().eq('property_id', idPrimera);
   }
 });
 
@@ -378,9 +481,17 @@ test('el nombre es un link real, no una fila con role de boton', async ({ pagina
 
   // El teclado tiene que llegar a un `<a>` con href, que es lo que §7.2 exige y
   // lo que una fila clicable con `onClick` no da.
+  //
+  // El DESTINO cambió en la Fase 8 y el fondo de esta aserción no: la celda ya no
+  // lleva al formulario de edición, lleva a la misma lista con el panel de
+  // lectura abierto (`?apartamento={uuid}`). Lo que se sigue afirmando es lo
+  // mismo: que hay un ancla de verdad con una dirección de verdad, no una fila
+  // con un manejador de clic. El grupo opcional del principio deja pasar la forma
+  // que compone el enlace cuando la pantalla tiene parámetros vivos, que es la
+  // regla de la INSTRUCCION 5 (abrir NO se lleva por delante los del anfitrión).
   await expect(
     paginaAdmin.getByRole('link', { name: '[PLACEHOLDER] Bogotá 1 — Apto 01' }),
-  ).toHaveAttribute('href', /^\/apartamentos\/[0-9a-f-]{36}$/);
+  ).toHaveAttribute('href', /^\/apartamentos\?(.+&)?apartamento=[0-9a-f-]{36}$/);
 
   await expect(paginaAdmin.getByRole('row').getByRole('button', { name: 'Nombre' })).toHaveCount(0);
 });
@@ -437,6 +548,550 @@ test('el encabezado sigue en pantalla despues de bajar por las 39 filas', async 
   expect(despues.y).toBeGreaterThanOrEqual(0);
   expect(despues.y).toBeLessThan(antes.y);
   await expect(paginaAdmin.getByRole('columnheader', { name: 'Tarifa' })).toBeInViewport();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOS CRITERIOS 1, 2 Y 3 DEL ROADMAP, SOBRE EL ANFITRION QUE MAS LOS EXIGE
+//
+// `08-VALIDATION.md` lista cinco comportamientos de estos tres criterios y los
+// marca TODOS como referencia faltante: hasta este plan no existia ni un solo
+// caso que los afirmara. El plan 08-06 los midio a mano con un andamio
+// desechable; lo que sigue es esa medicion convertida en aserciones que corren
+// en cada CI, para siempre.
+//
+// `/apartamentos` es el anfitrion donde el criterio 1 tiene su prueba mas dura:
+// tres piezas de estado de filtro que viven en el cliente y 39 filas, que es
+// scroll de verdad.
+//
+// ── EL INSTRUMENTO ESTA FIJADO Y NO ES NEGOCIABLE (08-02 §6.2, INSTRUCCION 7) ─
+//
+//   1. Para esperar una navegacion de cliente: `esperarUrlDeCliente()`. NUNCA
+//      `page.waitForURL` ni `expect(page).toHaveURL` COMO ESPERA. Los dos
+//      inyectan su sondeo DENTRO del documento y ese bucle se traba con el
+//      commit de la transicion de React. Medido en este repo el 2026-09-13: con
+//      20 segundos de plazo seguian viendo la URL vieja, mientras la URL leida
+//      desde Node aparece a los ~200 ms. La espera no es la asercion: la
+//      asercion sobre la URL se escribe despues, y se sigue escribiendo.
+//   2. Antes de pulsar un control que navega: `esperarControlHidratado()`. Sin
+//      ella el `<a>` navega DURO y recarga el documento, y entonces el criterio
+//      1 se estaria afirmando sobre una pagina recien cargada, que es justo lo
+//      contrario de lo que promete.
+//   3. Para leer el PANEL: `getByRole('dialog')`. `SheetContent` se portalea a
+//      `document.body`, asi que acotar por un contenedor de pagina deja la
+//      asercion mirando una caja vacia y pasa sin haber comprobado nada. Esta
+//      medido, con su verde falso impreso, en el SUMMARY del plan 08-11.
+//   4. Para leer la PAGINA DE DETRAS con el panel abierto: DEL DOM, nunca por
+//      rol. Base UI marca el resto del documento como oculto al arbol de
+//      accesibilidad, asi que un localizador por rol se cuelga hasta el plazo y
+//      una asercion negativa pasa sin mirar nada. Por eso `medirElSitio()` de
+//      abajo es un `evaluate` y no cuatro localizadores.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** El apartamento desde el que se abre el panel: una fila BAJA de las 23. */
+const FILA_BAJA = '[PLACEHOLDER] Bogotá 1 — Apto 22';
+/** El cluster con el que se filtra. Deja 23 de las 39, que es scroll de verdad. */
+const CLUSTER = 'Bogotá 1';
+
+/** El estado del anfitrion que el criterio 1 promete conservar, leido del DOM. */
+interface ElSitio {
+  scrollY: number;
+  busqueda: string | null;
+  cluster: string | null;
+  pendientes: string | null;
+  filas: number;
+}
+
+/**
+ * Las cuatro medidas del criterio 1, LEIDAS DEL DOM y no miradas.
+ *
+ * Todo pasa por un solo `evaluate` a proposito, y no por cuatro localizadores:
+ * esta funcion se llama tambien CON EL PANEL ABIERTO, y ahi el resto del
+ * documento esta marcado como oculto al arbol de accesibilidad. Un
+ * `getByLabel('Buscar apartamento')` en ese momento no se resuelve nunca.
+ *
+ * El scroll se lee como POSICION (`window.scrollY`) y no por visibilidad de una
+ * fila. La diferencia es toda la prueba: "la fila 22 sigue visible" es cierto
+ * para cualquier posicion que la contenga, incluida una que se movio 300px.
+ */
+async function medirElSitio(pagina: Page): Promise<ElSitio> {
+  return pagina.evaluate(() => {
+    const buscador = document.querySelector<HTMLInputElement>('input[type="search"]');
+    // El VALOR del select, no el disparador entero: el disparador arrastra
+    // ademas el glifo del chevron y devolveria `Bogotá 1▼`.
+    const cluster = document.querySelector<HTMLElement>(
+      '[aria-label="Filtrar por cluster"] [data-slot="select-value"]',
+    );
+    const pendientes = document.querySelector<HTMLElement>('[role="switch"]');
+
+    return {
+      scrollY: window.scrollY,
+      busqueda: buscador === null ? null : buscador.value,
+      cluster: cluster === null ? null : (cluster.textContent ?? '').trim(),
+      pendientes: pendientes === null ? null : pendientes.getAttribute('aria-checked'),
+      filas: document.querySelectorAll('tbody tr').length,
+    };
+  });
+}
+
+/**
+ * Deja el anfitrion con las tres piezas de filtro puestas y la pagina al fondo.
+ *
+ * El termino de busqueda es una sola letra que TODOS los nombres llevan, asi que
+ * quien discrimina es el cluster; lo que interesa del buscador acá no es cuanto
+ * filtra, sino que su texto sobreviva.
+ */
+async function prepararElSitio(pagina: Page): Promise<ElSitio> {
+  await pagina.goto('/apartamentos');
+
+  await pagina.getByLabel('Buscar apartamento').fill('a');
+
+  await pagina.getByRole('combobox', { name: 'Filtrar por cluster' }).click();
+  await pagina.getByRole('option', { name: CLUSTER, exact: true }).click();
+
+  await pagina.getByRole('switch', { name: 'Ver solo pendientes' }).click();
+
+  // Al fondo del todo, que es donde el criterio 1 se juega algo. Con la lista
+  // arriba, "conserva el scroll" se cumple con no hacer nada.
+  await pagina.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+
+  const antes = await medirElSitio(pagina);
+
+  // ── LOS CINCO CONTROLES DEL ESCENARIO, Y NINGUNO SOBRA ────────────────────
+  //
+  // Las aserciones del criterio 1 comparan un ANTES con un DESPUES, y esa forma
+  // tiene un modo de fallo silencioso: si una medida vale `null` en los dos
+  // momentos —porque el selector no encontro el control, porque el atributo se
+  // llama de otra forma— la comparacion pasa en verde sin haber mirado nada. Lo
+  // que sigue fija los cinco valores de partida, asi que ninguna comparacion de
+  // abajo puede ser verdadera por vacuidad.
+  //
+  // Y el primero es ademas el que hace real la mitad de scroll: sin el, "abrir
+  // conserva el scroll" se cumple con no hacer nada sobre una pagina en el tope.
+  expect(antes.scrollY, 'CONTROL: la pagina tiene recorrido vertical de verdad').toBeGreaterThan(
+    400,
+  );
+  expect(antes.busqueda, 'CONTROL: el buscador quedo con su texto').toBe('a');
+  expect(antes.cluster, 'CONTROL: el cluster quedo elegido').toBe(CLUSTER);
+  expect(antes.pendientes, 'CONTROL: el interruptor de pendientes quedo encendido').toBe('true');
+  expect(antes.filas, 'CONTROL: el filtro dejo las 23 filas del cluster').toBe(23);
+
+  return antes;
+}
+
+/**
+ * Pulsa el enlace de una fila DISPARANDO EL CLIC DESDE EL DOCUMENTO.
+ *
+ * ── POR QUE NO ES `locator.click()`, Y NO ES UN CAPRICHO ───────────────────
+ *
+ * El runner hace `scrollIntoViewIfNeeded` ANTES de pulsar. Sobre una pagina al
+ * fondo eso mueve el scroll por su cuenta, y la medida de "antes" que la
+ * asercion compara ya no seria la que el producto recibio: el criterio 1 se
+ * estaria midiendo contra un scroll que movio el instrumento. Es el sesgo 1 de
+ * `08-02-MEDICION.md` §1.1, y el plan 08-06 lo esquivo igual.
+ *
+ * La hidratacion SI se espera con el localizador, porque `Locator.evaluate` no
+ * desplaza nada: solo ejecuta el predicado sobre el nodo.
+ */
+async function abrirDesdeElDocumento(pagina: Page, nombre: string): Promise<void> {
+  await esperarControlHidratado(pagina.getByRole('link', { name: nombre, exact: true }));
+
+  await pagina.evaluate((texto) => {
+    const enlace = [...document.querySelectorAll('a')].find(
+      (a) => (a.textContent ?? '').trim() === texto,
+    );
+    if (enlace === undefined) throw new Error(`No hay ningun enlace con el texto ${texto}.`);
+    enlace.click();
+  }, nombre);
+
+  await esperarUrlDeCliente(pagina, /[?&]apartamento=[0-9a-f-]{36}/);
+}
+
+/**
+ * Deja un centinela mirando el documento: si el subarbol de la tabla llega a
+ * DESMONTARSE durante la apertura, lo apunta.
+ *
+ * Es la firma observable del esqueleto del segmento. `loading.tsx` es el
+ * fallback de Suspense DEL SEGMENTO y tambien se activa cuando solo cambian los
+ * parametros de la consulta, que es exactamente lo que hace abrir el panel. Al
+ * activarse, el contenido del segmento se quita del documento un instante —y el
+ * fallback puede no llegar a pintarse nunca, porque la respuesta vuelve en
+ * ~70 ms— la pagina pierde altura, el navegador recorta el scroll a cero, y
+ * cuando el contenido vuelve la posicion ya se perdio.
+ *
+ * Se miran los NODOS RETIRADOS de cada mutacion y no el conteo de filas del
+ * momento: las mutaciones se entregan en lote al final del microtask, asi que
+ * un quitar-y-poner sincronico se veria como si nada hubiera pasado.
+ */
+async function vigilarElRemonte(pagina: Page): Promise<void> {
+  await pagina.evaluate(() => {
+    const ventana = window as unknown as { __vgTablaRetirada?: boolean };
+    ventana.__vgTablaRetirada = false;
+
+    new MutationObserver((registros) => {
+      for (const registro of registros) {
+        for (const nodo of registro.removedNodes) {
+          if (!(nodo instanceof HTMLElement)) continue;
+          if (nodo.tagName === 'TABLE' || nodo.querySelector('table') !== null) {
+            ventana.__vgTablaRetirada = true;
+          }
+        }
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+}
+
+async function seRetiroLaTabla(pagina: Page): Promise<boolean> {
+  return pagina.evaluate(
+    () => (window as unknown as { __vgTablaRetirada?: boolean }).__vgTablaRetirada === true,
+  );
+}
+
+test('CRITERIO 1 · abrir el panel no mueve el scroll ni toca las tres piezas del filtro', async ({
+  paginaAdmin,
+}) => {
+  const antes = await prepararElSitio(paginaAdmin);
+
+  await vigilarElRemonte(paginaAdmin);
+  await abrirDesdeElDocumento(paginaAdmin, FILA_BAJA);
+
+  const panel = paginaAdmin.getByRole('dialog');
+  await expect(panel).toBeVisible();
+
+  const despues = await medirElSitio(paginaAdmin);
+
+  // ── LAS CUATRO MEDIDAS, CADA UNA CON SU MENSAJE ───────────────────────────
+  // Y son cuatro aserciones y no una sobre el objeto entero: si se juntan, el
+  // rojo dice "los objetos no son iguales" y no dice CUAL de las cuatro se
+  // perdio, que es lo unico que uno quiere saber leyendo ese rojo.
+  expect(despues.scrollY, 'CRITERIO 1: abrir el panel movio el scroll de la lista').toBe(
+    antes.scrollY,
+  );
+  expect(despues.busqueda, 'CRITERIO 1: abrir el panel borro el texto del buscador').toBe(
+    antes.busqueda,
+  );
+  expect(despues.cluster, 'CRITERIO 1: abrir el panel perdio el cluster elegido').toBe(
+    antes.cluster,
+  );
+  expect(despues.pendientes, 'CRITERIO 1: abrir el panel apago Ver solo pendientes').toBe(
+    antes.pendientes,
+  );
+
+  // Y la quinta, que es la consecuencia visible de las tres anteriores: la lista
+  // de detras no se recompuso.
+  expect(despues.filas, 'CRITERIO 1: la lista filtrada se recompuso al abrir').toBe(antes.filas);
+
+  // ── EL ESQUELETO DEL SEGMENTO NO APARECE, Y AQUI QUEDA FIJADO ─────────────
+  // El plan 08-02 midio que no aparece (VEREDICTO 3) y el 08-04 quito el archivo
+  // que lo causaba. Sin esta linea, el dia que alguien lo reintroduzca "para
+  // recuperar el esqueleto" las cuatro de arriba se caerian sin decir por que.
+  expect(
+    await seRetiroLaTabla(paginaAdmin),
+    'CRITERIO 1: la tabla se retiro del documento al abrir, o sea que el esqueleto del segmento se activo',
+  ).toBe(false);
+});
+
+test('CRITERIO 1 · cerrar el panel devuelve al mismo sitio, con el filtro intacto', async ({
+  paginaAdmin,
+}) => {
+  const antes = await prepararElSitio(paginaAdmin);
+  await abrirDesdeElDocumento(paginaAdmin, FILA_BAJA);
+
+  const panel = paginaAdmin.getByRole('dialog');
+  await expect(panel).toBeVisible();
+
+  // El control de cierre vive DENTRO del panel, asi que se acota al dialogo. Y
+  // se espera su hidratacion por lo mismo que el enlace de apertura.
+  const cerrar = panel.getByRole('button', { name: 'Cerrar' });
+  await esperarControlHidratado(cerrar);
+  await cerrar.click();
+
+  await esperarUrlDeCliente(paginaAdmin, /\/apartamentos$/);
+
+  // La espera no es la asercion.
+  expect(paginaAdmin.url()).toMatch(/\/apartamentos$/);
+
+  const despues = await medirElSitio(paginaAdmin);
+
+  expect(despues.scrollY, 'CRITERIO 1: cerrar el panel movio el scroll de la lista').toBe(
+    antes.scrollY,
+  );
+  expect(despues.busqueda, 'CRITERIO 1: cerrar el panel borro el texto del buscador').toBe(
+    antes.busqueda,
+  );
+  expect(despues.cluster, 'CRITERIO 1: cerrar el panel perdio el cluster elegido').toBe(
+    antes.cluster,
+  );
+  expect(despues.pendientes, 'CRITERIO 1: cerrar el panel apago Ver solo pendientes').toBe(
+    antes.pendientes,
+  );
+  expect(despues.filas, 'CRITERIO 1: la lista filtrada se recompuso al cerrar').toBe(antes.filas);
+
+  // Y la quinta del caso de cerrar: el panel se fue de verdad.
+  await expect(panel).toHaveCount(0);
+});
+
+// ── CRITERIO 2: UN ENLACE PEGADO EN UN CHAT ABRE EL PANEL ──────────────────
+//
+// Los tres casos que siguen entran por DIRECCION DIRECTA, sin pulsar nada. Es
+// la mitad del criterio 2 que no se puede afirmar navegando por dentro: lo que
+// se prueba es que la pantalla se reconstruye entera desde la direccion, que es
+// lo unico que viaja cuando alguien pega un enlace.
+
+test('CRITERIO 2 · una direccion con el parametro del panel lo abre, y abre el que dice', async ({
+  paginaAdmin,
+}) => {
+  await paginaAdmin.goto(`/apartamentos?apartamento=${idPrimera}`);
+
+  const panel = paginaAdmin.getByRole('dialog');
+  await expect(panel, 'CRITERIO 2: la direccion directa no abrio el panel').toBeVisible();
+
+  // EL AMBITO ES EL DIALOGO, y no es un detalle de estilo: el contenido del
+  // panel se portalea fuera del contenedor de pagina, asi que acotar por ese
+  // contenedor deja la asercion mirando una caja vacia. Y ampliarla a toda la
+  // pantalla tampoco vale: el nombre del apartamento tambien esta en su fila de
+  // la tabla de detras, asi que pasaria con el panel cerrado.
+  await expect(
+    panel.getByText(nombrePrimera, { exact: true }),
+    'CRITERIO 2: el panel abrio, pero no el del apartamento que dice la direccion',
+  ).toBeVisible();
+});
+
+test('CRITERIO 2 · con los dos parametros, el panel abre en la vista de calendario', async ({
+  paginaAdmin,
+}) => {
+  await paginaAdmin.goto(`/apartamentos?apartamento=${idPrimera}&vista=calendario`);
+
+  const panel = paginaAdmin.getByRole('dialog');
+  await expect(panel).toBeVisible();
+
+  // Los tres encabezados de grupo de §8.1, en el dialogo. El del mes se afirma
+  // por forma y no por nombre: el mes es SIEMPRE el corriente, asi que fijar
+  // `SEPTIEMBRE` convertiria este caso en una bomba de relojeria que estalla el
+  // dia uno del mes que viene por una razon que no tiene que ver con el panel.
+  await expect(panel.getByText(/^PRÓXIMO CHECKOUT$/)).toBeVisible();
+  await expect(panel.getByText(/^CHECKOUTS DE [A-ZÁÉÍÓÚÑ]+$/)).toBeVisible();
+  await expect(panel.getByText(/^CALENDARIO$/)).toBeVisible();
+
+  // CONTROL de que la vista es la de calendario y no la ficha: la linea de
+  // apoyo de §8.2 solo la escribe este cuerpo. Sin ella, los tres encabezados de
+  // arriba podrian estar afirmando un panel que no es el que se pidio.
+  await expect(panel.getByText(/^ Calendario · /)).toBeVisible();
+});
+
+test('CRITERIO 2 · un identificador que no existe deja la pantalla normal, y no limpia la direccion', async ({
+  paginaAdmin,
+}) => {
+  // ── LA OTRA MITAD DE §11.4, Y SUS CUATRO PUNTOS ──────────────────────────
+  //
+  // Un enlace pegado en un chat sobrevive al apartamento que nombra: alguien lo
+  // borra y el enlace sigue circulando. Lo que §11.4 pide entonces es que NO
+  // pase nada raro, y "no pasa nada" es justo lo que nadie escribe como caso,
+  // porque no se ve. Las cuatro afirmaciones van por separado.
+  const respuesta = await paginaAdmin.goto(`/apartamentos?apartamento=${ID_QUE_NO_EXISTE}`);
+
+  // 1. Sin 404. La pantalla responde como cualquier otra.
+  expect(respuesta?.status(), '§11.4: un identificador huerfano devolvio un error HTTP').toBe(200);
+
+  // 2. La pantalla se ve normal, con sus 39 filas.
+  await expect(
+    paginaAdmin.getByRole('row'),
+    '§11.4: la lista no se pinto con un identificador huerfano en la direccion',
+  ).toHaveCount(totalUnidades + 1);
+
+  // 3. Sin panel. Ni vacio, ni con un esqueleto que no se resuelve nunca.
+  await expect(
+    paginaAdmin.getByRole('dialog'),
+    '§11.4: se abrio un panel para un apartamento que no existe',
+  ).toHaveCount(0);
+
+  // 4. Y sin aviso de error. Reportar esto seria contarle al que abrio el enlace
+  //    que ese identificador NO existe, que es informacion que no le toca.
+  //
+  //    SE CUENTA EL COMPONENTE, NO EL ROL, y se descubrio escribiendo este caso:
+  //    `getByRole('alert')` devuelve SIEMPRE uno, porque el enrutador de Next
+  //    monta un `<div id="__next-route-announcer__" role="alert">` vacio en cada
+  //    pagina para anunciar los cambios de ruta. Contra el rol, esta asercion
+  //    seria roja en cualquier pantalla del producto; contra el componente, mide
+  //    lo que dice medir.
+  await expect(
+    paginaAdmin.locator('[data-slot="alert"]'),
+    '§11.4: la pantalla anuncio un error por un identificador huerfano',
+  ).toHaveCount(0);
+
+  // 5. Y LA QUE DE VERDAD IMPORTA: el parametro sigue en la direccion. Limpiarlo
+  //    reescribiria el enlace que alguien pego en un chat, y entonces reenviarlo
+  //    ya no llevaria a ningun sitio ni siquiera cuando la fila vuelva a existir.
+  expect(paginaAdmin.url(), '§11.4: la pantalla limpio el parametro huerfano').toContain(
+    `apartamento=${ID_QUE_NO_EXISTE}`,
+  );
+});
+
+// ── CRITERIO 3: EL BOTON ATRAS CIERRA EL PANEL, NO LA SECCION ──────────────
+
+test('CRITERIO 3 · el boton atras cierra el panel y deja la direccion dentro de la seccion', async ({
+  paginaAdmin,
+}) => {
+  await prepararElSitio(paginaAdmin);
+  await abrirDesdeElDocumento(paginaAdmin, FILA_BAJA);
+
+  const panel = paginaAdmin.getByRole('dialog');
+  await expect(panel, 'CONTROL: el panel llego a abrirse').toBeVisible();
+
+  await paginaAdmin.goBack();
+  await esperarUrlDeCliente(paginaAdmin, /\/apartamentos$/);
+
+  // ── LAS DOS MITADES, Y LAS DOS IMPORTAN ──────────────────────────────────
+  //
+  // La segunda es la que hace la prueba. Una implementacion que abriera con
+  // REEMPLAZO en vez de con empuje pasaria la primera sin despeinarse —el panel
+  // tambien desapareceria— y sacaria al admin de la seccion entera. El plan
+  // 08-11 lo midio en el quinto panel: con la prop de reemplazo puesta y una
+  // sola entrada en el historial, el boton atras dejaba el navegador en
+  // `about:blank`.
+  await expect(panel, 'CRITERIO 3: el boton atras no cerro el panel').toHaveCount(0);
+
+  expect(
+    paginaAdmin.url(),
+    'CRITERIO 3: el boton atras saco de la seccion en vez de cerrar el panel',
+  ).toMatch(/\/apartamentos$/);
+});
+
+test('CRITERIO 3 · el chevron devuelve a la ficha incluso entrando por direccion directa', async ({
+  paginaAdmin,
+}) => {
+  // Es la RAMA DE REEMPLAZO del chevron de §8.2, y solo se ejerce entrando de
+  // fuera: cuando el panel llego desde la ficha, la entrada anterior del
+  // historial ES la ficha y el chevron navega hacia atras. Entrando por un
+  // enlace pegado en un chat no hay a donde volver, y un `back()` ahi sacaria
+  // del producto. El plan 08-10 la comprobo a mano; aqui queda fijada.
+  await paginaAdmin.goto(`/apartamentos?apartamento=${idPrimera}&vista=calendario`);
+
+  const panel = paginaAdmin.getByRole('dialog');
+  const chevron = panel.getByRole('link', { name: 'Volver a la ficha' });
+  await esperarControlHidratado(chevron);
+  await chevron.click();
+
+  await esperarUrlDeCliente(paginaAdmin, /\/apartamentos\?apartamento=[0-9a-f-]{36}$/);
+
+  // La espera no es la asercion, y la asercion se escribe contra EL IDENTIFICADOR
+  // que se pidio: con un patron generico, un chevron que llevara a otro
+  // apartamento pasaria en verde.
+  expect(
+    paginaAdmin.url(),
+    'CRITERIO 3: el chevron no dejo la direccion en la ficha de ESTE apartamento',
+  ).toMatch(new RegExp(`/apartamentos\\?apartamento=${idPrimera}$`));
+
+  // Y no se salio de la seccion: el panel sigue abierto, ahora en la ficha.
+  await expect(panel).toBeVisible();
+  await expect(
+    panel.getByText(/^UBICACIÓN Y ACCESO$/),
+    'CRITERIO 3: el chevron cambio la direccion pero el cuerpo no es la ficha',
+  ).toBeVisible();
+});
+
+// ── CRITERIO 5: EL SECRETO QUE NO PUEDE VIAJAR EN UNA DIRECCION COMPARTIBLE ──
+
+test('CRITERIO 5 · el codigo de la cerradura no esta en el documento antes de pulsar, y la credencial del calendario no sale nunca', async ({
+  paginaAdmin,
+}) => {
+  // ════════════════════════════════════════════════════════════════════════
+  // LA ASERCION ES CONTRA EL CONTENIDO DEL DOCUMENTO, NO CONTRA LO QUE SE VE.
+  //
+  // Esa distincion es TODA la prueba. Lo que se pasa como prop a un componente
+  // de cliente viaja en la carga de React y **queda en el documento aunque no
+  // se pinte**: un `useState` que empiece oculto no esconde nada. Una asercion
+  // sobre visibilidad pasaria en verde con el secreto dentro del documento, que
+  // es exactamente el defecto que se quiere atrapar.
+  //
+  // El patron es el de `calendario.spec.ts` para la credencial del calendario
+  // (T-02-74), sobre esta misma tabla y por el mismo motivo. Y el motivo aqui es
+  // mas fuerte todavia: la direccion de este panel es COMPARTIBLE POR DISEÑO
+  // (criterio 2 del ROADMAP), asi que un codigo renderizado al abrir se entrega
+  // a quien sea que abra el chat donde se pego el enlace.
+  // ════════════════════════════════════════════════════════════════════════
+  // ── EL CUERPO DE LA RESPUESTA SE ATRAPA CON UN DESVIO, Y NO CON UNA ESPERA ─
+  //
+  // `waitForResponse(...).text()` NO SIRVE aqui, y se descubrio en rojo: la
+  // accion revalida y el enrutador navega inmediatamente despues, asi que para
+  // cuando la prueba pide el cuerpo el navegador ya lo descarto. El error es
+  // literal: *"Response body is not available for a response that was navigated
+  // away from"*. Desviando la peticion, el cuerpo se lee ANTES de devolverselo
+  // al documento, que es el unico momento en que existe con seguridad.
+  const cargas: string[] = [];
+
+  await paginaAdmin.route(
+    (url) => url.pathname === '/apartamentos',
+    async (ruta) => {
+      if (ruta.request().method() !== 'POST') {
+        await ruta.fallback();
+        return;
+      }
+
+      const respuesta = await ruta.fetch();
+      const cuerpo = await respuesta.text();
+      cargas.push(cuerpo);
+      await ruta.fulfill({ response: respuesta, body: cuerpo });
+    },
+  );
+
+  await paginaAdmin.goto(`/apartamentos?apartamento=${idPrimera}`);
+
+  const panel = paginaAdmin.getByRole('dialog');
+  await expect(panel).toBeVisible();
+
+  // CONTROL: la fila del codigo esta, y esta en su estado oculto. Sin esta
+  // mitad, las dos aserciones de abajo pasarian sobre un panel que no llego a
+  // pintar la fila, o sobre un apartamento sin codigo detras.
+  const mostrar = panel.getByRole('button', { name: 'Mostrar' });
+  await expect(mostrar, 'CONTROL: la fila del codigo no llego a su estado oculto').toBeVisible();
+
+  const antesDePulsar = await paginaAdmin.content();
+  expect(
+    antesDePulsar,
+    'T-08-57: el codigo de la cerradura esta en el documento antes de que nadie lo pida',
+  ).not.toContain(CODIGO_SEMBRADO);
+  expect(
+    antesDePulsar,
+    'T-08-58: la credencial del calendario esta en el documento de la ficha',
+  ).not.toContain(SECRETO_ICAL);
+
+  // ── LA OTRA MITAD: PULSAR, Y MIRAR LO QUE LA ACCION DEVUELVE ─────────────
+  //
+  // La respuesta se atrapa DE LA RED y no del documento, y esa eleccion es lo
+  // que hace que la segunda asercion valga algo: la accion podria devolver las
+  // cuatro credenciales y el panel seguiria pintando solo el codigo, asi que
+  // mirando el documento la fuga no se veria. Lo que sale por el cable es lo que
+  // hay que mirar.
+  await esperarControlHidratado(mostrar);
+  await mostrar.click();
+
+  // El codigo aparece, con el ambito en el dialogo.
+  await expect(
+    panel.getByText(CODIGO_SEMBRADO, { exact: true }),
+    'El codigo no aparecio tras pulsar: la accion no esta trayendo nada',
+  ).toBeVisible();
+
+  const carga = cargas.join('\n');
+
+  // CONTROL de que se esta mirando la respuesta correcta y no otra peticion
+  // cualquiera. Sin el, la asercion de abajo pasaria sobre un cuerpo vacio.
+  expect(carga, 'CONTROL: la respuesta atrapada no es la de la accion del codigo').toContain(
+    CODIGO_SEMBRADO,
+  );
+
+  // Y LA ASERCION: de las cuatro credenciales que la lectura delegada devuelve,
+  // la del calendario NO sale. El tipo de retorno de la accion es lo unico que
+  // lo impide, y un `return secretos` —que compila— la abriria entera.
+  expect(
+    carga,
+    'T-08-58: la credencial del calendario viajo en la respuesta de la accion del codigo',
+  ).not.toContain(SECRETO_ICAL);
+
+  // Y tampoco acaba en el documento por la puerta de atras.
+  expect(
+    await paginaAdmin.content(),
+    'T-08-58: la credencial del calendario acabo en el documento tras revelar el codigo',
+  ).not.toContain(SECRETO_ICAL);
 });
 
 test('un aseador no llega al catalogo del admin', async ({ paginaAseador }) => {

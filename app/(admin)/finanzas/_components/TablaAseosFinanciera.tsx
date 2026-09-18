@@ -221,9 +221,22 @@ export function TablaAseosFinanciera({
                     Al apartamento, no al aseo: esta es una pantalla de plata y
                     saltar desde aqui a la operacion mezcla las dos cosas que D7-1
                     separo. `title` porque la celda trunca en tablet apaisada.
+
+                    A LA FICHA, NO AL FORMULARIO (Fase 8). Hasta la Fase 7 esto
+                    apuntaba a `/apartamentos/{id}`, que es el formulario de
+                    edicion de doce campos: era el unico sitio que habia. Desde
+                    que existe la ficha de lectura (08-UI-SPEC §7), el destino de
+                    «quiero ver este apartamento» es el panel, y editar es otra
+                    intencion que ese panel ofrece en su pie.
+
+                    SIN desactivar el salto de scroll, y a proposito: esto navega
+                    a OTRA ruta, asi que conservar la posicion de esta pantalla
+                    dejaria al admin a media pagina de una lista que no ha visto.
+                    La regla de §5.2 es para los enlaces que abren un panel
+                    ENCIMA de su propia pantalla.
                   */}
                   <Link
-                    href={`/apartamentos/${fila.apartamentoId}`}
+                    href={`/apartamentos?apartamento=${fila.apartamentoId}`}
                     title={fila.apartamento}
                     className="transicion truncate rounded-sm font-semibold text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   >

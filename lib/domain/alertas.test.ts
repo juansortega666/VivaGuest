@@ -18,6 +18,7 @@ import {
   presentacionDeAlerta,
   venceEnMs,
 } from './alertas';
+import type { ConsumoDeStorage } from './almacenamiento';
 import { UMBRAL_SYNC_CAIDA_MS } from './salud-sync';
 
 /**
@@ -179,7 +180,7 @@ describe('presentacionDeAlerta', () => {
 });
 
 describe('ORDEN_DE_TIPOS', () => {
-  it('lista las doce claves y arranca con las siete del UI-SPEC §11.1 en su orden exacto', () => {
+  it('lista las trece claves y arranca con las siete del UI-SPEC §11.1 en su orden exacto', () => {
     // El orden del FILTRO es fijo y es el de la tabla del contrato. No es el
     // orden de la LISTA de alertas, que es cronológico: son dos cosas
     // distintas y confundirlas produce una lista de filtro que se reordena
@@ -194,8 +195,12 @@ describe('ORDEN_DE_TIPOS', () => {
       'hora_limite_vencida',
     ]);
 
-    expect(ORDEN_DE_TIPOS).toHaveLength(12);
-    expect(new Set(ORDEN_DE_TIPOS).size).toBe(12);
+    // Trece desde RET-07: `almacenamiento_lleno` entró AL FINAL, después de
+    // `retencion_proxima`, para no mover de sitio ninguna opción que el admin ya
+    // aprendió.
+    expect(ORDEN_DE_TIPOS).toHaveLength(13);
+    expect(new Set(ORDEN_DE_TIPOS).size).toBe(13);
+    expect(ORDEN_DE_TIPOS.at(-1)).toBe('almacenamiento_lleno');
   });
 
   it('cada clave del orden tiene entrada en el mapa, y al revés', () => {
@@ -313,6 +318,7 @@ describe('alertasComputadas · urgente', () => {
       maxUltimoExito: '2026-09-04T17:00:00+00:00',
       ahoraMs: AHORA,
       hoy: HOY,
+      consumo: null,
     });
 
     expect(clavesDe(alertas, 'urgente')).toEqual(['ok-pendiente', 'ok-en-curso']);
@@ -326,6 +332,7 @@ describe('alertasComputadas · urgente', () => {
       maxUltimoExito: '2026-09-04T17:00:00+00:00',
       ahoraMs: AHORA,
       hoy: HOY,
+      consumo: null,
     }).filter((a) => a.clave === 'urgente');
 
     expect(alerta.ocurrioEnMs).toBe(Date.parse('2026-09-04T09:15:00.000Z'));
@@ -337,6 +344,7 @@ describe('alertasComputadas · urgente', () => {
       maxUltimoExito: '2026-09-04T17:00:00+00:00',
       ahoraMs: AHORA,
       hoy: HOY,
+      consumo: null,
     }).filter((a) => a.clave === 'urgente');
 
     expect(alerta.atendible).toBe(false);
@@ -369,6 +377,7 @@ describe('horaLimiteVencida', () => {
         maxUltimoExito: '2026-09-04T17:00:00+00:00',
         ahoraMs: AHORA,
         hoy: HOY,
+        consumo: null,
       }),
       'hora_limite_vencida',
     );
@@ -416,6 +425,7 @@ describe('alertasComputadas · hora límite vencida', () => {
       maxUltimoExito: '2026-09-04T17:00:00+00:00',
       ahoraMs: AHORA,
       hoy: HOY,
+      consumo: null,
     });
 
     expect(clavesDe(alertas, 'hora_limite_vencida')).toEqual(['pactada-temprano']);
@@ -431,6 +441,7 @@ describe('alertasComputadas · hora límite vencida', () => {
       maxUltimoExito: '2026-09-04T17:00:00+00:00',
       ahoraMs: AHORA,
       hoy: HOY,
+      consumo: null,
     });
 
     expect(clavesDe(alertas, 'hora_limite_vencida')).toEqual([]);
@@ -455,6 +466,7 @@ describe('alertasComputadas · hora límite vencida', () => {
       maxUltimoExito: '2026-09-04T17:00:00+00:00',
       ahoraMs: AHORA,
       hoy: HOY,
+      consumo: null,
     });
 
     expect(clavesDe(alertas, 'hora_limite_vencida')).toEqual(['vivo']);
@@ -466,6 +478,7 @@ describe('alertasComputadas · hora límite vencida', () => {
       maxUltimoExito: '2026-09-04T17:00:00+00:00',
       ahoraMs: AHORA,
       hoy: HOY,
+      consumo: null,
     }).filter((a) => a.clave === 'hora_limite_vencida');
 
     // El copy del repo decía `La hora límite de las 11:30 pasó y el aseo no ha
@@ -481,6 +494,7 @@ describe('alertasComputadas · hora límite vencida', () => {
       maxUltimoExito: '2026-09-04T17:00:00+00:00',
       ahoraMs: AHORA,
       hoy: HOY,
+      consumo: null,
     }).filter((a) => a.clave === 'hora_limite_vencida');
 
     // `11:30` de un día que ya pasó no responde la pregunta que el admin tiene:
@@ -499,6 +513,7 @@ describe('alertasComputadas · hora límite vencida', () => {
       maxUltimoExito: '2026-09-04T17:00:00+00:00',
       ahoraMs: AHORA,
       hoy: HOY,
+      consumo: null,
     }).filter((a) => a.clave === 'hora_limite_vencida');
 
     // NINGÚN OCTAVO TIPO. §12.6: la distinción vive en el copy y en el orden
@@ -525,6 +540,7 @@ describe('alertasComputadas · hora límite vencida', () => {
       maxUltimoExito: '2026-09-04T17:00:00+00:00',
       ahoraMs: AHORA,
       hoy: HOY,
+      consumo: null,
     }).filter((a) => a.clave === 'hora_limite_vencida');
 
     expect(alerta.titulo).toContain('1 de septiembre');
@@ -540,6 +556,7 @@ describe('alertasComputadas · hora límite vencida', () => {
       maxUltimoExito: '2026-09-04T17:00:00+00:00',
       ahoraMs: AHORA,
       hoy: HOY,
+      consumo: null,
     }).filter((a) => a.clave === 'hora_limite_vencida');
 
     expect(alerta.ocurrioEnMs).toBe(venceEnMs('2026-09-02', '14:00:00'));
@@ -555,6 +572,7 @@ describe('alertasComputadas · calendario caído (global)', () => {
       maxUltimoExito: '2026-09-04T16:00:00+00:00', // hace 2 h
       ahoraMs: AHORA,
       hoy: HOY,
+      consumo: null,
     });
 
     expect(alertas).toEqual([]);
@@ -566,6 +584,7 @@ describe('alertasComputadas · calendario caído (global)', () => {
       maxUltimoExito: '2026-09-04T13:00:00+00:00', // hace 5 h
       ahoraMs: AHORA,
       hoy: HOY,
+      consumo: null,
     });
 
     expect(alertas).toHaveLength(1);
@@ -591,6 +610,7 @@ describe('alertasComputadas · calendario caído (global)', () => {
       maxUltimoExito: marca,
       ahoraMs: AHORA,
       hoy: HOY,
+      consumo: null,
     });
 
     expect(alerta.ocurrioEnMs).toBe(Date.parse(marca) + UMBRAL_SYNC_CAIDA_MS);
@@ -606,6 +626,7 @@ describe('alertasComputadas · calendario caído (global)', () => {
       maxUltimoExito: null,
       ahoraMs: AHORA,
       hoy: HOY,
+      consumo: null,
     });
 
     expect(alerta.clave).toBe('calendario_caido');
@@ -618,10 +639,95 @@ describe('alertasComputadas · calendario caído (global)', () => {
     // umbral aquí con otro número, esto se pone rojo.
     const justoDentro = new Date(AHORA - UMBRAL_SYNC_CAIDA_MS).toISOString();
     const justoFuera = new Date(AHORA - UMBRAL_SYNC_CAIDA_MS - 60_000).toISOString();
-    const base = { aseos: [], ahoraMs: AHORA, hoy: HOY };
+    const base = { aseos: [], ahoraMs: AHORA, hoy: HOY, consumo: null };
 
     expect(alertasComputadas({ ...base, maxUltimoExito: justoDentro })).toEqual([]);
     expect(alertasComputadas({ ...base, maxUltimoExito: justoFuera })).toHaveLength(1);
+  });
+});
+
+describe('alertasComputadas · almacenamiento', () => {
+  const GB = 1024 * 1024 * 1024;
+
+  /** Sincronización sana, para que la única alerta posible sea la del Storage. */
+  const SANO = {
+    aseos: [],
+    maxUltimoExito: '2026-09-04T17:30:00+00:00',
+    ahoraMs: AHORA,
+    hoy: HOY,
+  };
+
+  function consumo(over: Partial<ConsumoDeStorage> = {}): ConsumoDeStorage {
+    return { usadoBytes: 0, cupoBytes: GB, umbralPct: 70, cruceAt: null, ...over };
+  }
+
+  it('por debajo del umbral no emite nada', () => {
+    const alertas = alertasComputadas({
+      ...SANO,
+      consumo: consumo({ usadoBytes: Math.round(GB * 0.69) }),
+    });
+
+    expect(alertas).toEqual([]);
+  });
+
+  it('al 70% CLAVADO sí emite', () => {
+    // El caso que fija la decisión de implementar «superar el 70%» como
+    // «llegar al 70%». Con `>` en vez de `>=` esta línea se pone roja.
+    const [alerta] = alertasComputadas({
+      ...SANO,
+      consumo: consumo({
+        usadoBytes: GB * 0.7,
+        cruceAt: '2026-09-04T09:00:00+00:00',
+      }),
+    });
+
+    expect(alerta.clave).toBe('almacenamiento_lleno');
+    expect(alerta.id).toBe('almacenamiento_lleno:sistema');
+    expect(alerta.apartamento).toBe('Todo el sistema');
+    expect(alerta.cleaningId).toBeNull();
+    expect(alerta.propertyId).toBeNull();
+    // Sin URL, y con razón escrita: el remedio está fuera de la aplicación.
+    expect(alerta.url).toBeNull();
+    // No tiene fila en `notifications`, luego no tiene `read_at`, luego no se
+    // puede atender. Un botón ahí sería un botón que miente.
+    expect(alerta.atendible).toBe(false);
+    // LA CIFRA REAL, no un adjetivo.
+    expect(alerta.titulo).toContain('717 MB de 1 GB (70%)');
+    // Y EL SÍNTOMA, que es la mitad del valor de esta alerta.
+    expect(alerta.cuerpo).toContain('no van a poder subir las fotos de evidencia');
+  });
+
+  it('con consumo nulo NO emite: no medido no es lleno', () => {
+    // Un fallo de la lectura no puede producir una alerta de capacidad.
+    // Afirmar que está lleno sin haberlo medido es tan falso como afirmar que
+    // está vacío. Quien tiene que gritar el fallo es el medidor de la cabecera.
+    expect(alertasComputadas({ ...SANO, consumo: null })).toEqual([]);
+  });
+
+  it('el instante sale de cruceAt y NO de ahoraMs', () => {
+    // Con `ahoraMs` la alerta saltaría al tope del panel en cada render y
+    // empujaría hacia abajo hechos más recientes que ella. El instante existe y
+    // es estable: el `created_at` del objeto en que la suma corrida cruzó.
+    const cruce = '2026-09-01T10:00:00+00:00';
+    const [alerta] = alertasComputadas({
+      ...SANO,
+      consumo: consumo({ usadoBytes: GB, cruceAt: cruce }),
+    });
+
+    expect(alerta.ocurrioEnMs).toBe(Date.parse(cruce));
+    expect(alerta.ocurrioEnMs).not.toBe(AHORA);
+  });
+
+  it('con cruceAt nulo cae a ahoraMs, y el instante no es NaN', () => {
+    // Misma rama que `maxUltimoExito` nulo tres bloques más arriba: una alerta
+    // con instante `NaN` cae en un sitio arbitrario del orden.
+    const [alerta] = alertasComputadas({
+      ...SANO,
+      consumo: consumo({ usadoBytes: GB, cruceAt: null }),
+    });
+
+    expect(alerta.ocurrioEnMs).toBe(AHORA);
+    expect(Number.isNaN(alerta.ocurrioEnMs)).toBe(false);
   });
 });
 
@@ -665,6 +771,7 @@ function computadasDelCasoDeOrden(): Alerta[] {
     maxUltimoExito: '2026-09-04T17:30:00+00:00', // sana: no hay alerta global
     ahoraMs: AHORA,
     hoy: HOY,
+    consumo: null,
   });
 }
 
@@ -823,6 +930,7 @@ describe('mezclarAlertas · deduplicación', () => {
       maxUltimoExito: '2026-09-04T17:30:00+00:00',
       ahoraMs: AHORA,
       hoy: HOY,
+      consumo: null,
     });
     expect(computadas.map((c) => c.id)).toEqual(['hora_limite_vencida:c2']);
 
@@ -840,6 +948,7 @@ describe('mezclarAlertas · deduplicación', () => {
       maxUltimoExito: '2026-09-04T17:30:00+00:00',
       ahoraMs: AHORA,
       hoy: HOY,
+      consumo: null,
     });
 
     // Mismo aseo pero otro tipo, y mismo tipo pero otro aseo. Ninguna suprime.
@@ -873,6 +982,7 @@ describe('mezclarAlertas · deduplicación', () => {
       maxUltimoExito: '2026-09-04T13:00:00+00:00', // caída
       ahoraMs: AHORA,
       hoy: HOY,
+      consumo: null,
     });
     expect(computadas.map((c) => c.id)).toEqual(['calendario_caido:sistema']);
 
@@ -930,9 +1040,9 @@ describe('conteosPorTipo', () => {
       mezclarAlertas([notif({ id: 'y1', type: 'dano_reportado' })], []),
     );
 
-    expect(conteos).toHaveLength(12);
-    expect(conteos.filter((c) => c.conteo === 0)).toHaveLength(11);
-    expect(conteosPorTipo([])).toHaveLength(12);
+    expect(conteos).toHaveLength(13);
+    expect(conteos.filter((c) => c.conteo === 0)).toHaveLength(12);
+    expect(conteosPorTipo([])).toHaveLength(13);
     expect(conteosPorTipo([]).every((c) => c.conteo === 0)).toBe(true);
   });
 
@@ -981,7 +1091,7 @@ describe('conteosPorTipo', () => {
 
     const conteos = conteosPorTipo(alertas);
 
-    expect(conteos).toHaveLength(12);
+    expect(conteos).toHaveLength(13);
     expect(conteos.every((c) => c.conteo === 0)).toBe(true);
   });
 });

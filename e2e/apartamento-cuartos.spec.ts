@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { expect, test } from './fixtures';
+import { esperarUrlDeCliente, expect, test } from './fixtures';
 import { cargarEnvLocal, clienteDeServicio } from './global-setup';
 
 /**
@@ -137,25 +137,58 @@ async function agregarCuarto(p: Page, fila: number, tipo: string, etiqueta: stri
   await etiquetaDeCuarto(p, fila).fill(etiqueta);
 }
 
-/** Crea un borrador con nombre y cluster, y devuelve su id ya en el detalle. */
+/**
+ * Crea un borrador con nombre y cluster, y devuelve su id ya en el formulario.
+ *
+ * ── LA ESPERA CAMBIO DE FORMA, Y NADA MAS (§5.4) ────────────────────────────
+ * Desde la Fase 8, `Guardar` aterriza en `/apartamentos?apartamento={uuid}`: la
+ * lista con el panel abierto, no el formulario. La espera pasa a
+ * `esperarUrlDeCliente()` con ese patrón, porque la espera de URL de Playwright
+ * sondea dentro del documento y se traba con el commit de la transición de React
+ * (INSTRUCCION 7 del plan 08-02). Y como todo lo que este archivo ejerce vive en
+ * el FORMULARIO —las filas de cuartos y de faltantes no existen en el panel—, el
+ * ayudante navega ahí antes de devolver.
+ *
+ * **El id se sigue resolviendo contra la BASE, no contra la dirección**, aunque
+ * ahora esté ahí a la vista: leerlo de la URL haría que la prueba confiara en lo
+ * mismo que está probando. Es la regla 2 de §5.4. Lo único que cambió es CUANDO
+ * se resuelve: antes de la espera, para que un rojo en la espera no deje un
+ * apartamento huérfano que reviente el control de entorno de media suite.
+ */
 async function crearBorrador(p: Page, nombre: string): Promise<string> {
   await p.goto('/apartamentos/nuevo');
   await p.getByLabel('Nombre', { exact: true }).fill(nombre);
   await elegirCluster(p, CLUSTER);
   await botonGuardar(p).click();
-  await p.waitForURL(/\/apartamentos\/[0-9a-f-]{36}$/);
 
-  const { data, error } = await servicio
-    .from('properties')
-    .select('id')
-    .eq('nombre', nombre)
-    .maybeSingle();
+  let encontrado: string | undefined;
+  await expect
+    .poll(
+      async () => {
+        const { data, error } = await servicio
+          .from('properties')
+          .select('id')
+          .eq('nombre', nombre)
+          .maybeSingle();
 
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error(`No se creó el apartamento "${nombre}"`);
+        if (error) throw new Error(error.message);
+        encontrado = data?.id;
+        return encontrado !== undefined;
+      },
+      { timeout: 15_000, message: `No se creó el apartamento "${nombre}"` },
+    )
+    .toBe(true);
 
-  creados.add(data.id);
-  return data.id;
+  if (encontrado === undefined) throw new Error(`No se creó el apartamento "${nombre}"`);
+  creados.add(encontrado);
+
+  await esperarUrlDeCliente(p, /\/apartamentos\?apartamento=[0-9a-f-]{36}$/);
+  // La espera no es la aserción: la aserción se escribe después, y contra el id
+  // que salió de la base.
+  expect(p.url()).toMatch(new RegExp(`\\?apartamento=${encontrado}$`));
+
+  await p.goto(`/apartamentos/${encontrado}`);
+  return encontrado;
 }
 
 /** Los cuartos de un apartamento tal como están en la base. */
