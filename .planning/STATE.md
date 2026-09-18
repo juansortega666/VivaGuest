@@ -502,6 +502,7 @@ Ninguno.
 | 260907-703 | `AlertDialog` y `Tooltip` median 4 y 32 px: tokens `--container-*` con nombre propio en las dos primitivas | 2026-09-07 | dbf8a98 | [260907-703-max-w-primitivas-rotas](./quick/260907-703-max-w-primitivas-rotas/) |
 | 260908-7w0 | `Dialog` y `Sheet` dejaban de nacer con caja de 8px; `ci:arch` ahora atrapa las clases de ancho con nombre de talla | 2026-09-08 | 628720d | [260908-7w0-purgar-los-max-w-con-nombre-de-talla-de-](./quick/260908-7w0-purgar-los-max-w-con-nombre-de-talla-de-/) |
 | 260918-a33 | RET-07: el admin ve el consumo de Storage y la alerta salta al 70%. Lo unico que avisa antes de llenarse, porque el dueno decidio que nada se borra nunca | 2026-09-18 | e4de15a | [260918-a33-alerta-de-storage](./quick/260918-a33-alerta-de-storage/) |
+| 260918-h47 | Fuera el asistente de instalacion entero: 1842 lineas de una isla muerta, los cuatro enlaces rotos y el item del menu. El dueno instala cada telefono a mano | 2026-09-18 | c471318 | [260918-h47-fuera-el-asistente-de-instalacion](./quick/260918-h47-fuera-el-asistente-de-instalacion/) |
 | 260918-h47 | Fuera el asistente de instalacion, entero: la isla muerta de `/instalar`, los cuatro enlaces del banner que caian en 404 y el link del menu del admin. `BotonActivarAvisos` y toda la deteccion de instalacion se conservan | 2026-09-18 | 793091b | [260918-h47-fuera-el-asistente-de-instalacion](./quick/260918-h47-fuera-el-asistente-de-instalacion/) |
 
 ## Consecuencias de la Fase 1 para fases posteriores
