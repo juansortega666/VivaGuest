@@ -82,6 +82,30 @@ let idFeedSembrado = '';
  */
 const ID_QUE_NO_EXISTE = '00000000-0000-4000-8000-000000000000';
 
+/**
+ * EL CODIGO DE LA CERRADURA QUE ESTE SPEC SIEMBRA, y el valor exacto que NO
+ * puede estar en el documento antes de que alguien pulse.
+ *
+ * Lleva marca de tiempo por la misma razon que el secreto de `calendario.spec`:
+ * un valor corto y comun (`4821`) puede aparecer en el documento por accidente
+ * —dentro de un identificador, de una clase generada, de un numero de version—
+ * y entonces la asercion seria roja sin que nada estuviera mal. Esta cadena no
+ * puede salir de ningun otro sitio que no sea la fila que este archivo sembro.
+ */
+const CODIGO_SEMBRADO = `CODIGOE2E${Date.now()}`;
+
+/**
+ * La credencial del calendario del MISMO apartamento.
+ *
+ * Es el Hallazgo 7 convertido en asercion: la lectura en la que la accion
+ * delega devuelve CUATRO credenciales en un solo objeto, y solo dos pueden
+ * salir. Esta es una de las dos que no pueden, y su cabecera en la base lo dice
+ * con todas las letras: quien la tenga ve la ocupacion completa del apartamento
+ * SIN AUTENTICARSE.
+ */
+const SECRETO_ICAL = `SECRETOICALE2E${Date.now()}`;
+const URL_ICAL = `https://www.airbnb.com/calendar/ical/e2e-0812.ics?s=${SECRETO_ICAL}`;
+
 const TARIFA = 120000;
 const PAGO = 45000;
 
@@ -194,6 +218,20 @@ test.beforeAll(async () => {
     .single();
   if (feed.error) throw new Error(`No se pudo sembrar el feed: ${feed.error.message}`);
   idFeedSembrado = feed.data.id;
+
+  // Las DOS credenciales del mismo apartamento, en la misma fila. Van juntas a
+  // proposito: el caso del secreto afirma que una sale con un gesto y la otra no
+  // sale nunca, y esas dos cosas solo se pueden medir sobre la misma unidad.
+  //
+  // Se escriben con el cliente de servicio porque esta tabla NO TIENE GRANT para
+  // `authenticated`: no hay forma de sembrarla desde la interfaz.
+  const secretos = await servicio.from('property_secrets').upsert({
+    property_id: idPrimera,
+    codigo_acceso: CODIGO_SEMBRADO,
+    tipo_cerradura: 'inteligente',
+    ical_url: URL_ICAL,
+  });
+  if (secretos.error) throw new Error(`No se pudieron sembrar los secretos: ${secretos.error.message}`);
 });
 
 test.afterAll(async () => {
@@ -223,6 +261,13 @@ test.afterAll(async () => {
   // suites de integracion sin que nada apunte a este archivo.
   if (idFeedSembrado) {
     await servicio.from('calendar_feeds').delete().eq('id', idFeedSembrado);
+  }
+
+  // Y las dos credenciales. Dejarlas puestas no rompe nada visible, y por eso
+  // mismo hay que borrarlas: un codigo de prueba que sobrevive en la base es un
+  // secreto que nadie sabe que esta ahi.
+  if (idPrimera) {
+    await servicio.from('property_secrets').delete().eq('property_id', idPrimera);
   }
 });
 
@@ -942,6 +987,111 @@ test('CRITERIO 3 · el chevron devuelve a la ficha incluso entrando por direccio
     panel.getByText(/^UBICACIÓN Y ACCESO$/),
     'CRITERIO 3: el chevron cambio la direccion pero el cuerpo no es la ficha',
   ).toBeVisible();
+});
+
+// ── CRITERIO 5: EL SECRETO QUE NO PUEDE VIAJAR EN UNA DIRECCION COMPARTIBLE ──
+
+test('CRITERIO 5 · el codigo de la cerradura no esta en el documento antes de pulsar, y la credencial del calendario no sale nunca', async ({
+  paginaAdmin,
+}) => {
+  // ════════════════════════════════════════════════════════════════════════
+  // LA ASERCION ES CONTRA EL CONTENIDO DEL DOCUMENTO, NO CONTRA LO QUE SE VE.
+  //
+  // Esa distincion es TODA la prueba. Lo que se pasa como prop a un componente
+  // de cliente viaja en la carga de React y **queda en el documento aunque no
+  // se pinte**: un `useState` que empiece oculto no esconde nada. Una asercion
+  // sobre visibilidad pasaria en verde con el secreto dentro del documento, que
+  // es exactamente el defecto que se quiere atrapar.
+  //
+  // El patron es el de `calendario.spec.ts` para la credencial del calendario
+  // (T-02-74), sobre esta misma tabla y por el mismo motivo. Y el motivo aqui es
+  // mas fuerte todavia: la direccion de este panel es COMPARTIBLE POR DISEÑO
+  // (criterio 2 del ROADMAP), asi que un codigo renderizado al abrir se entrega
+  // a quien sea que abra el chat donde se pego el enlace.
+  // ════════════════════════════════════════════════════════════════════════
+  // ── EL CUERPO DE LA RESPUESTA SE ATRAPA CON UN DESVIO, Y NO CON UNA ESPERA ─
+  //
+  // `waitForResponse(...).text()` NO SIRVE aqui, y se descubrio en rojo: la
+  // accion revalida y el enrutador navega inmediatamente despues, asi que para
+  // cuando la prueba pide el cuerpo el navegador ya lo descarto. El error es
+  // literal: *"Response body is not available for a response that was navigated
+  // away from"*. Desviando la peticion, el cuerpo se lee ANTES de devolverselo
+  // al documento, que es el unico momento en que existe con seguridad.
+  const cargas: string[] = [];
+
+  await paginaAdmin.route(
+    (url) => url.pathname === '/apartamentos',
+    async (ruta) => {
+      if (ruta.request().method() !== 'POST') {
+        await ruta.fallback();
+        return;
+      }
+
+      const respuesta = await ruta.fetch();
+      const cuerpo = await respuesta.text();
+      cargas.push(cuerpo);
+      await ruta.fulfill({ response: respuesta, body: cuerpo });
+    },
+  );
+
+  await paginaAdmin.goto(`/apartamentos?apartamento=${idPrimera}`);
+
+  const panel = paginaAdmin.getByRole('dialog');
+  await expect(panel).toBeVisible();
+
+  // CONTROL: la fila del codigo esta, y esta en su estado oculto. Sin esta
+  // mitad, las dos aserciones de abajo pasarian sobre un panel que no llego a
+  // pintar la fila, o sobre un apartamento sin codigo detras.
+  const mostrar = panel.getByRole('button', { name: 'Mostrar' });
+  await expect(mostrar, 'CONTROL: la fila del codigo no llego a su estado oculto').toBeVisible();
+
+  const antesDePulsar = await paginaAdmin.content();
+  expect(
+    antesDePulsar,
+    'T-08-57: el codigo de la cerradura esta en el documento antes de que nadie lo pida',
+  ).not.toContain(CODIGO_SEMBRADO);
+  expect(
+    antesDePulsar,
+    'T-08-58: la credencial del calendario esta en el documento de la ficha',
+  ).not.toContain(SECRETO_ICAL);
+
+  // ── LA OTRA MITAD: PULSAR, Y MIRAR LO QUE LA ACCION DEVUELVE ─────────────
+  //
+  // La respuesta se atrapa DE LA RED y no del documento, y esa eleccion es lo
+  // que hace que la segunda asercion valga algo: la accion podria devolver las
+  // cuatro credenciales y el panel seguiria pintando solo el codigo, asi que
+  // mirando el documento la fuga no se veria. Lo que sale por el cable es lo que
+  // hay que mirar.
+  await esperarControlHidratado(mostrar);
+  await mostrar.click();
+
+  // El codigo aparece, con el ambito en el dialogo.
+  await expect(
+    panel.getByText(CODIGO_SEMBRADO, { exact: true }),
+    'El codigo no aparecio tras pulsar: la accion no esta trayendo nada',
+  ).toBeVisible();
+
+  const carga = cargas.join('\n');
+
+  // CONTROL de que se esta mirando la respuesta correcta y no otra peticion
+  // cualquiera. Sin el, la asercion de abajo pasaria sobre un cuerpo vacio.
+  expect(carga, 'CONTROL: la respuesta atrapada no es la de la accion del codigo').toContain(
+    CODIGO_SEMBRADO,
+  );
+
+  // Y LA ASERCION: de las cuatro credenciales que la lectura delegada devuelve,
+  // la del calendario NO sale. El tipo de retorno de la accion es lo unico que
+  // lo impide, y un `return secretos` —que compila— la abriria entera.
+  expect(
+    carga,
+    'T-08-58: la credencial del calendario viajo en la respuesta de la accion del codigo',
+  ).not.toContain(SECRETO_ICAL);
+
+  // Y tampoco acaba en el documento por la puerta de atras.
+  expect(
+    await paginaAdmin.content(),
+    'T-08-58: la credencial del calendario acabo en el documento tras revelar el codigo',
+  ).not.toContain(SECRETO_ICAL);
 });
 
 test('un aseador no llega al catalogo del admin', async ({ paginaAseador }) => {
