@@ -61,6 +61,27 @@ let nombreActiva = '';
 let idInactiva = '';
 let nombreInactiva = '';
 
+/**
+ * La primera unidad gestionada por orden de nombre. Es la que abren por
+ * DIRECCION DIRECTA los casos del criterio 2, y la unica a la que este spec le
+ * siembra un feed de calendario.
+ */
+let idPrimera = '';
+let nombrePrimera = '';
+
+/** El feed sembrado, para borrarlo despues sin barrer los de nadie mas. */
+let idFeedSembrado = '';
+
+/**
+ * Un identificador CON FORMA VALIDA que no existe en la base.
+ *
+ * Es la otra mitad de §11.4, la que nadie escribe porque parece que no pasa
+ * nada: la pantalla tiene que verse normal. El valor es fijo y su forma es de
+ * identificador de version 4, asi que la comprobacion de forma lo deja pasar y
+ * la resolucion contra el catalogo es la que no lo encuentra.
+ */
+const ID_QUE_NO_EXISTE = '00000000-0000-4000-8000-000000000000';
+
 const TARIFA = 120000;
 const PAGO = 45000;
 
@@ -145,6 +166,34 @@ test.beforeAll(async () => {
     })
     .eq('id', idInactiva);
   if (inactiva.error) throw new Error(`No se pudo preparar la fila: ${inactiva.error.message}`);
+
+  // ── LA UNIDAD DE LOS CASOS DE DIRECCION DIRECTA, Y SU FEED ────────────────
+  //
+  // La vista de calendario se dispara con la FILA del feed, no con sus reservas:
+  // sin fila, el panel entero cae al estado vacio de §11.2 y sus tres grupos no
+  // existen. Asi que el feed hace falta, y basta con el: los tres grupos se
+  // pintan con sus vacios, que es justo lo que este spec tiene que ver.
+  //
+  // Se siembra UNA fila y se borra por su identificador en la limpieza. El
+  // aviso lo dejo el plan 08-10 y vale igual: un feed olvidado contamina las
+  // suites de integracion que cuentan feeds activos.
+  const [primera] = filas.filter((f) => f.gestion_vivaguest);
+  idPrimera = primera.id;
+  nombrePrimera = primera.nombre;
+
+  const feed = await servicio
+    .from('calendar_feeds')
+    .insert({
+      property_id: idPrimera,
+      provider: 'airbnb',
+      is_active: true,
+      consecutive_failures: 0,
+      last_success_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single();
+  if (feed.error) throw new Error(`No se pudo sembrar el feed: ${feed.error.message}`);
+  idFeedSembrado = feed.data.id;
 });
 
 test.afterAll(async () => {
@@ -167,6 +216,13 @@ test.afterAll(async () => {
         responsable_id: null,
       })
       .eq('id', id);
+  }
+
+  // El feed de los casos de direccion directa. Se borra SIEMPRE, y por su
+  // identificador: un feed activo olvidado en la base cambia los conteos de las
+  // suites de integracion sin que nada apunte a este archivo.
+  if (idFeedSembrado) {
+    await servicio.from('calendar_feeds').delete().eq('id', idFeedSembrado);
   }
 });
 
@@ -727,6 +783,165 @@ test('CRITERIO 1 · cerrar el panel devuelve al mismo sitio, con el filtro intac
 
   // Y la quinta del caso de cerrar: el panel se fue de verdad.
   await expect(panel).toHaveCount(0);
+});
+
+// ── CRITERIO 2: UN ENLACE PEGADO EN UN CHAT ABRE EL PANEL ──────────────────
+//
+// Los tres casos que siguen entran por DIRECCION DIRECTA, sin pulsar nada. Es
+// la mitad del criterio 2 que no se puede afirmar navegando por dentro: lo que
+// se prueba es que la pantalla se reconstruye entera desde la direccion, que es
+// lo unico que viaja cuando alguien pega un enlace.
+
+test('CRITERIO 2 · una direccion con el parametro del panel lo abre, y abre el que dice', async ({
+  paginaAdmin,
+}) => {
+  await paginaAdmin.goto(`/apartamentos?apartamento=${idPrimera}`);
+
+  const panel = paginaAdmin.getByRole('dialog');
+  await expect(panel, 'CRITERIO 2: la direccion directa no abrio el panel').toBeVisible();
+
+  // EL AMBITO ES EL DIALOGO, y no es un detalle de estilo: el contenido del
+  // panel se portalea fuera del contenedor de pagina, asi que acotar por ese
+  // contenedor deja la asercion mirando una caja vacia. Y ampliarla a toda la
+  // pantalla tampoco vale: el nombre del apartamento tambien esta en su fila de
+  // la tabla de detras, asi que pasaria con el panel cerrado.
+  await expect(
+    panel.getByText(nombrePrimera, { exact: true }),
+    'CRITERIO 2: el panel abrio, pero no el del apartamento que dice la direccion',
+  ).toBeVisible();
+});
+
+test('CRITERIO 2 · con los dos parametros, el panel abre en la vista de calendario', async ({
+  paginaAdmin,
+}) => {
+  await paginaAdmin.goto(`/apartamentos?apartamento=${idPrimera}&vista=calendario`);
+
+  const panel = paginaAdmin.getByRole('dialog');
+  await expect(panel).toBeVisible();
+
+  // Los tres encabezados de grupo de §8.1, en el dialogo. El del mes se afirma
+  // por forma y no por nombre: el mes es SIEMPRE el corriente, asi que fijar
+  // `SEPTIEMBRE` convertiria este caso en una bomba de relojeria que estalla el
+  // dia uno del mes que viene por una razon que no tiene que ver con el panel.
+  await expect(panel.getByText(/^PRÓXIMO CHECKOUT$/)).toBeVisible();
+  await expect(panel.getByText(/^CHECKOUTS DE [A-ZÁÉÍÓÚÑ]+$/)).toBeVisible();
+  await expect(panel.getByText(/^CALENDARIO$/)).toBeVisible();
+
+  // CONTROL de que la vista es la de calendario y no la ficha: la linea de
+  // apoyo de §8.2 solo la escribe este cuerpo. Sin ella, los tres encabezados de
+  // arriba podrian estar afirmando un panel que no es el que se pidio.
+  await expect(panel.getByText(/^ Calendario · /)).toBeVisible();
+});
+
+test('CRITERIO 2 · un identificador que no existe deja la pantalla normal, y no limpia la direccion', async ({
+  paginaAdmin,
+}) => {
+  // ── LA OTRA MITAD DE §11.4, Y SUS CUATRO PUNTOS ──────────────────────────
+  //
+  // Un enlace pegado en un chat sobrevive al apartamento que nombra: alguien lo
+  // borra y el enlace sigue circulando. Lo que §11.4 pide entonces es que NO
+  // pase nada raro, y "no pasa nada" es justo lo que nadie escribe como caso,
+  // porque no se ve. Las cuatro afirmaciones van por separado.
+  const respuesta = await paginaAdmin.goto(`/apartamentos?apartamento=${ID_QUE_NO_EXISTE}`);
+
+  // 1. Sin 404. La pantalla responde como cualquier otra.
+  expect(respuesta?.status(), '§11.4: un identificador huerfano devolvio un error HTTP').toBe(200);
+
+  // 2. La pantalla se ve normal, con sus 39 filas.
+  await expect(
+    paginaAdmin.getByRole('row'),
+    '§11.4: la lista no se pinto con un identificador huerfano en la direccion',
+  ).toHaveCount(totalUnidades + 1);
+
+  // 3. Sin panel. Ni vacio, ni con un esqueleto que no se resuelve nunca.
+  await expect(
+    paginaAdmin.getByRole('dialog'),
+    '§11.4: se abrio un panel para un apartamento que no existe',
+  ).toHaveCount(0);
+
+  // 4. Y sin aviso de error. Reportar esto seria contarle al que abrio el enlace
+  //    que ese identificador NO existe, que es informacion que no le toca.
+  //
+  //    SE CUENTA EL COMPONENTE, NO EL ROL, y se descubrio escribiendo este caso:
+  //    `getByRole('alert')` devuelve SIEMPRE uno, porque el enrutador de Next
+  //    monta un `<div id="__next-route-announcer__" role="alert">` vacio en cada
+  //    pagina para anunciar los cambios de ruta. Contra el rol, esta asercion
+  //    seria roja en cualquier pantalla del producto; contra el componente, mide
+  //    lo que dice medir.
+  await expect(
+    paginaAdmin.locator('[data-slot="alert"]'),
+    '§11.4: la pantalla anuncio un error por un identificador huerfano',
+  ).toHaveCount(0);
+
+  // 5. Y LA QUE DE VERDAD IMPORTA: el parametro sigue en la direccion. Limpiarlo
+  //    reescribiria el enlace que alguien pego en un chat, y entonces reenviarlo
+  //    ya no llevaria a ningun sitio ni siquiera cuando la fila vuelva a existir.
+  expect(paginaAdmin.url(), '§11.4: la pantalla limpio el parametro huerfano').toContain(
+    `apartamento=${ID_QUE_NO_EXISTE}`,
+  );
+});
+
+// ── CRITERIO 3: EL BOTON ATRAS CIERRA EL PANEL, NO LA SECCION ──────────────
+
+test('CRITERIO 3 · el boton atras cierra el panel y deja la direccion dentro de la seccion', async ({
+  paginaAdmin,
+}) => {
+  await prepararElSitio(paginaAdmin);
+  await abrirDesdeElDocumento(paginaAdmin, FILA_BAJA);
+
+  const panel = paginaAdmin.getByRole('dialog');
+  await expect(panel, 'CONTROL: el panel llego a abrirse').toBeVisible();
+
+  await paginaAdmin.goBack();
+  await esperarUrlDeCliente(paginaAdmin, /\/apartamentos$/);
+
+  // ── LAS DOS MITADES, Y LAS DOS IMPORTAN ──────────────────────────────────
+  //
+  // La segunda es la que hace la prueba. Una implementacion que abriera con
+  // REEMPLAZO en vez de con empuje pasaria la primera sin despeinarse —el panel
+  // tambien desapareceria— y sacaria al admin de la seccion entera. El plan
+  // 08-11 lo midio en el quinto panel: con la prop de reemplazo puesta y una
+  // sola entrada en el historial, el boton atras dejaba el navegador en
+  // `about:blank`.
+  await expect(panel, 'CRITERIO 3: el boton atras no cerro el panel').toHaveCount(0);
+
+  expect(
+    paginaAdmin.url(),
+    'CRITERIO 3: el boton atras saco de la seccion en vez de cerrar el panel',
+  ).toMatch(/\/apartamentos$/);
+});
+
+test('CRITERIO 3 · el chevron devuelve a la ficha incluso entrando por direccion directa', async ({
+  paginaAdmin,
+}) => {
+  // Es la RAMA DE REEMPLAZO del chevron de §8.2, y solo se ejerce entrando de
+  // fuera: cuando el panel llego desde la ficha, la entrada anterior del
+  // historial ES la ficha y el chevron navega hacia atras. Entrando por un
+  // enlace pegado en un chat no hay a donde volver, y un `back()` ahi sacaria
+  // del producto. El plan 08-10 la comprobo a mano; aqui queda fijada.
+  await paginaAdmin.goto(`/apartamentos?apartamento=${idPrimera}&vista=calendario`);
+
+  const panel = paginaAdmin.getByRole('dialog');
+  const chevron = panel.getByRole('link', { name: 'Volver a la ficha' });
+  await esperarControlHidratado(chevron);
+  await chevron.click();
+
+  await esperarUrlDeCliente(paginaAdmin, /\/apartamentos\?apartamento=[0-9a-f-]{36}$/);
+
+  // La espera no es la asercion, y la asercion se escribe contra EL IDENTIFICADOR
+  // que se pidio: con un patron generico, un chevron que llevara a otro
+  // apartamento pasaria en verde.
+  expect(
+    paginaAdmin.url(),
+    'CRITERIO 3: el chevron no dejo la direccion en la ficha de ESTE apartamento',
+  ).toMatch(new RegExp(`/apartamentos\\?apartamento=${idPrimera}$`));
+
+  // Y no se salio de la seccion: el panel sigue abierto, ahora en la ficha.
+  await expect(panel).toBeVisible();
+  await expect(
+    panel.getByText(/^UBICACIÓN Y ACCESO$/),
+    'CRITERIO 3: el chevron cambio la direccion pero el cuerpo no es la ficha',
+  ).toBeVisible();
 });
 
 test('un aseador no llega al catalogo del admin', async ({ paginaAseador }) => {
