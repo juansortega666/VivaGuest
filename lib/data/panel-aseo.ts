@@ -14,7 +14,7 @@ import {
  * LA LECTURA DEL PANEL LATERAL DE ASEO DEL ADMIN (08-UI-SPEC §10, criterio 4).
  *
  * ════════════════════════════════════════════════════════════════════════════
- * CINCO LECTURAS Y UNA LATENCIA, QUE NO ES LO MISMO QUE UNA LECTURA.
+ * SEIS LECTURAS Y UNA LATENCIA, QUE NO ES LO MISMO QUE UNA LECTURA.
  *
  * §10.4 regla 2 pide que "los cuatro grupos salgan de una sola lectura, no de
  * cuatro", y su argumento es la latencia: cuatro viajes por apertura es cuatro
@@ -42,8 +42,8 @@ import {
  * ── EL ORDEN: LA DEFINER VA PRIMERO Y SOLA ────────────────────────────────
  *
  * Si devuelve cero filas, el aseo no existe o no se puede ver, y las otras
- * cuatro lecturas sobran. NO ES UNA FRONTERA DE SEGURIDAD (cada tabla tiene su
- * policy y la RLS responde igual de bien sin este atajo): es no hacer cuatro
+ * cinco lecturas sobran. NO ES UNA FRONTERA DE SEGURIDAD (cada tabla tiene su
+ * policy y la RLS responde igual de bien sin este atajo): es no hacer cinco
  * viajes por nada.
  *
  * ── LO QUE ESTA CAPA NO HACE ──────────────────────────────────────────────
@@ -60,10 +60,10 @@ import {
  *
  * ── EL PRESUPUESTO, MEDIDO, Y LA PALANCA QUE NO SE TIRA TODAVÍA ───────────
  *
- * `/operacion` hace hoy 8 consultas y este panel le suma 5 más hasta 6 firmas.
+ * `/operacion` hace hoy 8 consultas y este panel le suma 6 más hasta 6 firmas.
  * Es la pantalla que más crece, la que menos margen tiene y la ÚNICA con
  * Realtime: ante cualquier evento de aseos se refresca, y con el panel abierto
- * eso repite las cinco lecturas Y las seis firmas. En una ráfaga de quince
+ * eso repite las seis lecturas Y las seis firmas. En una ráfaga de quince
  * eventos en una transacción son hasta 90 firmas de 300 segundos.
  *
  * No se arregla de entrada: se mide. Y la palanca, si molesta, NO es cambiar el
@@ -71,7 +71,7 @@ import {
  * de otro plan.
  *
  * La segunda palanca, escrita para que nadie la tome antes de tiempo: si la
- * medición dijera que cinco lecturas no alcanzan, se pliegan gastos y daños en
+ * medición dijera que seis lecturas no alcanzan, se pliegan gastos y daños en
  * una segunda definer con forma de unión (tipo, concepto, monto, moneda), que es
  * exactamente la forma que `gastos_de_aseadora` ya tiene. No se hace hoy: la
  * recomendación del research es empezar por PostgREST, que es menos superficie
@@ -151,6 +151,39 @@ export interface CabeceraDelPanelDeAseo {
   /** Día calendario de negocio, en forma `YYYY-MM-DD`. Nunca un instante. */
   fecha: string;
   estado: Database['public']['Enums']['cleaning_state'] | null;
+  /**
+   * CUÁNDO SE CONFIRMÓ, Y NO SALE DE LA DEFINER: SALE DE `cleanings` POR RLS.
+   *
+   * ── POR QUÉ HACE FALTA, Y POR QUÉ NO SE PUEDE DEDUCIR DE `estado` ───────
+   *
+   * La entrada de `estadoDeAseo()` son TRES columnas, no dos: `is_managed`,
+   * `state` y ESTA. Es la tercera la que separa `Sin confirmar` de `Pendiente`,
+   * porque las dos comparten el mismo valor del enum (`pendiente`) y lo que las
+   * distingue es si alguien ya puso el número de huéspedes. Sin ella, el panel
+   * de un aseo sin confirmar diría `Pendiente` mientras la fila que está justo
+   * detrás, en la misma pantalla, dice `Sin confirmar`: dos superficies del
+   * mismo render contradiciéndose sobre el mismo aseo.
+   *
+   * Derivarla de otra cosa tampoco sirve. El total del checklist en cero
+   * correlaciona (las tareas las materializa `confirm_cleaning`), pero
+   * correlacionar no es ser: sería una segunda verdad sobre el mismo dato, que
+   * es exactamente contra lo que advierten las cabeceras de `EstadoAseo.tsx` y
+   * de `FilaAseo.tsx`.
+   *
+   * ── Y POR QUÉ NO ENTRA EN LA DEFINER ───────────────────────────────────
+   *
+   * Por la regla de esta misma cabecera: la definer solo recupera lo que el
+   * grant por columna de la migración 24 le cerró a todo el mundo, que son las
+   * dos cifras de dinero. `confirmado_at` no está detrás de ese grant y
+   * `leerOperacion()` la lee por RLS desde la Fase 4. Meterla en la definer
+   * ampliaría el radio de una función que corre saltando la seguridad de fila
+   * para traer un dato que la policy de admin ya entrega, y además costaría una
+   * migración.
+   *
+   * El coste real es UNA lectura más, y **no una latencia más**: viaja en el
+   * mismo `Promise.all` que las cuatro colecciones.
+   */
+  confirmadoAt: string | null;
   aseadorId: string | null;
   /**
    * Nulo y no un texto de relleno cuando no hay nadie asignado: la fila que
@@ -265,6 +298,15 @@ const SELECT_GASTOS = 'id, concepto, monto, moneda';
 const SELECT_DANOS = 'id, descripcion';
 
 /**
+ * La tercera columna que `estadoDeAseo()` necesita y la definer no devuelve.
+ *
+ * Una sola columna, enumerada como todas las demás. Ver el comentario de
+ * `confirmadoAt` en `CabeceraDelPanelDeAseo` para el porqué de que venga por
+ * aquí y no por la función.
+ */
+const SELECT_CONFIRMACION = 'confirmado_at';
+
+/**
  * Lee todo lo que el panel de aseo pinta, o `null` si no hay aseo que pintar.
  *
  * `null` cubre dos casos y los trata igual a propósito: el identificador no
@@ -295,9 +337,9 @@ export async function leerPanelDeAseo(
   // ── (a) LA DEFINER, PRIMERO Y SOLA ────────────────────────────────────────
   //
   // Cero filas significa que no se renderiza el panel, y entonces las otras
-  // cuatro lecturas sobran. Repetido aquí porque es lo que justifica que esta
+  // cinco lecturas sobran. Repetido aquí porque es lo que justifica que esta
   // espera NO esté dentro del `Promise.all` de abajo: no es una frontera de
-  // seguridad, es no hacer cuatro viajes por nada.
+  // seguridad, es no hacer cinco viajes por nada.
   const { data: detalle, error: errorDetalle } = await supabase.rpc(RPC_DETALLE_DE_ASEO, {
     p_cleaning: identificador,
   });
@@ -307,12 +349,17 @@ export async function leerPanelDeAseo(
   const fila = detalle?.[0];
   if (!fila) return null;
 
-  // ── (b) LAS CUATRO COLECCIONES, EN PARALELO ───────────────────────────────
+  // ── (b) LAS CUATRO COLECCIONES Y LA CONFIRMACIÓN, EN PARALELO ─────────────
   //
-  // Una sola espera, así que una sola latencia. Las cuatro van por RLS con las
-  // policies de admin de la migración 08, y las cuatro proyecciones están
+  // Una sola espera, así que una sola latencia. Las cinco van por RLS con las
+  // policies de admin de la migración 08, y las cinco proyecciones están
   // enumeradas: ni un comodín.
-  const [checklist, fotos, gastos, danos] = await Promise.all([
+  //
+  // La quinta es UNA columna de `cleanings` y entra acá y no en la definer por
+  // la razón escrita en `confirmadoAt`: no está detrás del grant por columna de
+  // la migración 24, así que la policy de admin ya la entrega y no hay nada que
+  // recuperar saltándose la seguridad de fila.
+  const [checklist, fotos, gastos, danos, confirmacion] = await Promise.all([
     supabase.from('cleaning_checklist_items').select(SELECT_CHECKLIST).eq('cleaning_id', identificador),
     supabase
       .from('cleaning_photos')
@@ -336,12 +383,21 @@ export async function leerPanelDeAseo(
       .select(SELECT_DANOS)
       .eq('cleaning_id', identificador)
       .order('created_at', { ascending: true }),
+    supabase
+      .from('cleanings')
+      .select(SELECT_CONFIRMACION)
+      .eq('id', identificador)
+      // `maybeSingle` y no `single`: la definer ya dijo que la fila existe, pero
+      // `single` convierte una carrera (un borrado entre las dos lecturas) en un
+      // error `PGRST116` y acá eso no es un fallo, es un nulo.
+      .maybeSingle(),
   ]);
 
   if (checklist.error) throw new Error(checklist.error.message);
   if (fotos.error) throw new Error(fotos.error.message);
   if (gastos.error) throw new Error(gastos.error.message);
   if (danos.error) throw new Error(danos.error.message);
+  if (confirmacion.error) throw new Error(confirmacion.error.message);
 
   const tareas = (checklist.data ?? []) as FilaDeChecklist[];
   const todasLasFotos = fotos.data ?? [];
@@ -414,6 +470,7 @@ export async function leerPanelDeAseo(
       gestionPropia: fila.is_managed,
       fecha: fila.fecha_programada,
       estado: fila.estado ?? null,
+      confirmadoAt: confirmacion.data?.confirmado_at ?? null,
       aseadorId: fila.aseador_id ?? null,
       aseador: fila.aseador_nombre ?? null,
       iniciadoAt: fila.iniciado_at ?? null,

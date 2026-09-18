@@ -436,6 +436,14 @@ describe('leerPanelDeAseo compone las cinco lecturas contra la base real', () =>
     expect(panel.cabecera.aseoId).toBe(escenario.aseoSinConfirmar);
     expect(panel.cabecera.estado).toBe('pendiente');
 
+    // ── LA TERCERA COLUMNA DE `estadoDeAseo()`, Y ESTE ES SU ÚNICO CASO ────
+    //
+    // `estado` vale `pendiente` en los DOS: en el confirmado y en el que no.
+    // Lo que los separa es esta marca, y sin ella el panel del admin diría
+    // `Pendiente` mientras la fila que tiene justo detrás, en la misma
+    // pantalla, dice `Sin confirmar`.
+    expect(panel.cabecera.confirmadoAt).toBeNull();
+
     // ── ESTO NO ES UN ERROR, Y ES EL CASO QUE MÁS SE PARECE A UNO ──────────
     //
     // Las tareas del checklist SE MATERIALIZAN AL CONFIRMAR el aseo, no al
@@ -450,6 +458,9 @@ describe('leerPanelDeAseo compone las cinco lecturas contra la base real', () =>
     // produce la confirmación y no una consulta rota.
     const confirmado = await leerPanelDeAseo(comoAdmin(), escenario.aseoPendiente);
     expect(confirmado?.progreso).toEqual({ hechas: 0, total: 3 });
+    // La otra mitad del control: el mismo `estado`, la marca puesta.
+    expect(confirmado?.cabecera.estado).toBe('pendiente');
+    expect(confirmado?.cabecera.confirmadoAt).not.toBeNull();
   });
 
   test('un aseo sin fotos devuelve la tira vacía y conteo cero, sin firmar nada', async () => {
