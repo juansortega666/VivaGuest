@@ -103,13 +103,52 @@ function rotuloDeFecha(fecha: string): string {
  * DISTINTOS, así que un `getByText(..., { exact: true })` no puede darse por
  * satisfecho con el del paso anterior. Si algún día dos pasos comparten copy,
  * hay que distinguirlos aquí, no volver a esperar al desvanecido.
+ *
+ * ── EL ROJO INTERMITENTE DE ESTA FUNCIÓN NO ES DE ESTA FUNCIÓN. MEDIDO ──────
+ *
+ * Esta espera se pone roja de vez en cuando (~32 %, 7 de 22 corridas del
+ * 2026-09-18) con `element(s) not found`, y la lectura obvia es que la pila de
+ * toasts se llenó y la librería dejó de renderizar. **Está medido que NO es
+ * eso, y el arreglo que parece evidente no sirve.** Queda escrito para que
+ * nadie vuelva a gastar la tarde:
+ *
+ *   1. NO HAY PILA QUE DRENAR, y es estructural. `paginaAdmin` es un fixture de
+ *      ÁMBITO DE TEST (`e2e/fixtures.ts`): cada caso abre un `browser.newContext()`
+ *      y una página nuevas, así que ningún toast del caso anterior sobrevive.
+ *      Limpiar la pila en el `beforeEach` es literalmente un no-op.
+ *   2. EN EL INSTANTE DEL ROJO EL DOM TIENE CERO TOASTS. Medido con volcado:
+ *      `[data-sonner-toast]` en 0 y `[data-sonner-toaster]` en 0. No es que el
+ *      toast se tape: es que no existe.
+ *   3. Y NO ES QUE APAREZCA Y SE VAYA. Con un `MutationObserver` instalado sobre
+ *      `document.body` ANTES del clic, el rojo registra CERO inserciones en los
+ *      15 s enteros. El mismo observador, en una corrida verde, registra el alta
+ *      a los 520 ms con el texto exacto. Y su array sobrevive al fallo, o sea
+ *      que tampoco hubo recarga de página.
+ *   4. LA CADENA DE PRODUCTO SÍ FUNCIONA: la RPC escribió (`state` en
+ *      `cancelada`) y el diálogo se cerró. Lo único que se pierde es el aviso.
+ *
+ * O sea que el toast se publica y nunca llega a pintarse. Es un defecto DEL
+ * PRODUCTO, no del instrumento: un admin que cancela un aseo se queda sin su
+ * confirmación una de cada tres veces. El sospechoso es la forma que comparten
+ * `DialogoCancelarAseo` y `DialogoReprogramar` (los dos que fallan, y los dos
+ * los monta `MenuAseo`): `toast.success(...)` y acto seguido cerrar el diálogo,
+ * que dispara `router.refresh()` en el mismo tick. Meter tres escrituras
+ * síncronas entre las dos líneas hizo desaparecer el rojo en 8 de 8 corridas,
+ * contra 2 de 8 en rojo con el árbol intacto.
+ *
+ * ── LO QUE ESTÁ PROHIBIDO HACER CON ESTO ───────────────────────────────────
+ *
+ * NO subir el timeout, NO quitarle el `exact: true`, NO cambiar la aserción por
+ * una sobre la fila y NO marcar el caso con `test.fail()` (es intermitente: un
+ * `test.fail()` se pondría rojo las dos de cada tres veces que hoy pasa). La
+ * aserción mide lo que tiene que medir. Lo que hay que arreglar es el producto,
+ * y está declarado con dueño en el SUMMARY de 09-02.
  */
 async function esperarToast(p: Page, texto: string) {
   // El puntero se queda donde cayó el último clic, y la pila de toasts vive
   // abajo a la derecha: si el clic cae encima, la librería pausa el temporizador
-  // y los toasts se AMONTONAN. Con más de tres apilados deja de renderizar los
-  // nuevos, y el síntoma es "el toast del paso 4 no aparece" tres pasos después
-  // de la causa. Apartar el puntero antes de mirar deja que expiren solos.
+  // y los toasts se AMONTONAN. Apartar el puntero antes de mirar deja que
+  // expiren solos. (Lo que NO explica esto es el rojo intermitente: ver arriba.)
   await p.mouse.move(4, 4);
 
   const toast = p.locator('[data-sonner-toast]').getByText(texto, { exact: true });
