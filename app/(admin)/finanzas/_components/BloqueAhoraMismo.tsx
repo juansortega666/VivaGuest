@@ -55,8 +55,23 @@ import { EstadoAseo } from '../../operacion/_components/EstadoAseo';
  * Se resuelven en una funcion y no con tres ramas de JSX: la estructura de los
  * tres es identica y duplicarla es como se pierde el `aria-hidden` de uno de los
  * iconos, o como el copy de uno se queda atras cuando el contrato cambia.
+ *
+ * ── SE EXPORTA DESDE LA FASE 8, Y ESA ES LA RAZON DE QUE SIGA VIVA ───────
+ *
+ * `08-UI-SPEC` §9.2 manda que el grupo `AHORA MISMO` del panel de aseadora
+ * reutilice este copy y estos tres estados **palabra por palabra, ni una coma
+ * distinta**. La unica forma de garantizar eso es que los dos sitios llamen a la
+ * misma funcion: una segunda copia del copy se queda atras en el primer retoque
+ * del contrato y entonces la misma frase se lee distinta en dos superficies.
+ *
+ * Lo que el panel NO reutiliza es el JSX de abajo: §17.8 le prohibe la linea que
+ * fecha el dato, con su argumento.
  */
-function resolver(ahora: AhoraMismo): { icono: LucideIcon; clase: string; texto: string } {
+export function estadoDeAhoraMismo(ahora: AhoraMismo): {
+  icono: LucideIcon;
+  clase: string;
+  texto: string;
+} {
   if (!ahora.estaActiva) {
     return {
       icono: UserRoundX,
@@ -89,7 +104,7 @@ function resolver(ahora: AhoraMismo): { icono: LucideIcon; clase: string; texto:
 }
 
 export function BloqueAhoraMismo({ ahora }: { ahora: AhoraMismo }) {
-  const { icono: Icono, clase, texto } = resolver(ahora);
+  const { icono: Icono, clase, texto } = estadoDeAhoraMismo(ahora);
   const enCurso = ahora.estaActiva && ahora.enCurso !== null;
 
   return (

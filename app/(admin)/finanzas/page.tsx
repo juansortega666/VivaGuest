@@ -2,6 +2,8 @@ import { CalendarX } from 'lucide-react';
 import type { Metadata } from 'next';
 
 import { leerCostoPorAseadora, leerResumenFinanciero } from '@/lib/data/finanzas';
+import { identificadorValido } from '@/lib/data/finanzas-detalle';
+import { leerPanelDeAseadora } from '@/lib/data/panel-aseadora';
 import { hoyBog } from '@/lib/domain/dates';
 import {
   etiquetaDeRango,
@@ -14,6 +16,7 @@ import { EstadoVacio } from '../_components/EstadoVacio';
 import { BloqueAseosDelPeriodo } from './_components/BloqueAseosDelPeriodo';
 import { BloqueCostoPorAseadora } from './_components/BloqueCostoPorAseadora';
 import { FiltroPeriodo } from './_components/FiltroPeriodo';
+import { PanelAseadora } from './_components/PanelAseadora';
 import { SubNavFinanzas } from './_components/SubNavFinanzas';
 import { TarjetaKPI } from './_components/TarjetaKPI';
 
@@ -98,6 +101,44 @@ export const metadata: Metadata = {
  *
  * Es de lectura. Ningun relleno de acento, porque no hay nada que hacer aqui
  * mas que mirar y entrar al detalle.
+ *
+ * ── Y DESDE LA FASE 8 ES TAMBIEN EL ANFITRION DEL PANEL DE ASEADORA ──────
+ *
+ * `?aseadora={uuid}` abre el panel encima del Resumen, y **reemplaza la pagina
+ * `/finanzas/aseadoras/[id]`, que se borro en este mismo plan**. El periodo
+ * viaja en los dos sentidos: el enlace que abre lo conserva y la ruta al cerrar
+ * se compone aqui con los parametros vivos dentro.
+ *
+ * ── LA EXISTENCIA NO SE VALIDA CONTRA LA LISTA QUE ESTA PAGINA YA LEYO ───
+ *
+ * Y esta es la diferencia con `/apartamentos`, que si puede. `leerCostoPorAseadora`
+ * devuelve **solo las personas con aseos o gastos EN EL RANGO FILTRADO**: con el
+ * filtro en dia, una aseadora que no trabajo ese dia no sale de esa lista aunque
+ * exista. Resolver el identificador contra `aseadoras` haria que un enlace
+ * perfectamente valido, pegado en un chat, abriera la pantalla **sin panel**.
+ *
+ * Por eso se valida con `leerPanelDeAseadora`, que empieza por la lectura que
+ * filtra por el papel de aseador y devuelve nulo indistintamente para «no
+ * existe» y «no lo puedes ver». Los cuatro puntos de §11.4 se cumplen igual: sin
+ * 404, sin aviso, sin panel vacio, y **el parametro huerfano SE QUEDA** en la
+ * direccion, porque limpiarlo reescribiria el enlace que alguien pego.
+ *
+ * ── EL PANEL SE RENDERIZA COMO HERMANO DEL FILTRO, NUNCA COMO HIJO ───────
+ *
+ * Es la regla dura de este anfitrion, y es de POSICION EN EL ARBOL, no de lo que
+ * pinta. Todo el contenido de esta pantalla es hijo de `FiltroPeriodo`, que
+ * **atenua a sus hijos y les apaga los eventos de puntero** mientras navega.
+ * Dentro, cambiar de periodo con el panel abierto lo dejaria atenuado y, sin
+ * eventos, **sin poder cerrarse**. El portal lo saca del DOM de todas formas,
+ * pero la clase la decide la posicion en el arbol de React, no la del DOM. Y
+ * §11.1 prohibe por nombre atenuar durante la apertura de un panel.
+ *
+ * ── Y EL EFECTO ESPEJO, DECIDIDO A PROPOSITO ─────────────────────────────
+ *
+ * El filtro navega conservando los parametros que no gobierna, asi que **cambiar
+ * de periodo con el panel abierto lo deja abierto**. Es la lectura coherente con
+ * D8-1: la seleccion no cambio, solo el periodo de la pantalla de atras. Queda
+ * escrito para que el siguiente no lo lea como un defecto.
  * ════════════════════════════════════════════════════════════════════════════
  */
 
@@ -145,16 +186,55 @@ export default async function FinanzasPage({
 
   const { desde, hasta } = rangoDePeriodo(rango, ancla);
 
+  // PRIMERO LA FORMA, ANTES DE TOCAR LA BASE. Una cadena arbitraria llegaria a
+  // Postgres como argumento de tipo identificador y volveria como `22P02`, o sea
+  // un error de sintaxis que la pantalla no sabria explicar. La funcion ya
+  // existe y se reutiliza: un regex nuevo seria una segunda definicion de la
+  // misma forma.
+  const crudoAseadora = parametros.aseadora;
+  const pedida = identificadorValido(
+    typeof crudoAseadora === 'string' ? crudoAseadora : undefined,
+  );
+
   const supabase = await createClient();
 
-  // Las dos lecturas van en paralelo: son dos funciones distintas de la base y
-  // encadenarlas sería sumar dos latencias por nada. Si alguna falla, la capa de
+  // Las lecturas van en paralelo: son funciones distintas de la base y
+  // encadenarlas sería sumar latencias por nada. Si alguna falla, la capa de
   // datos lanza y la pantalla cae entera, que es lo correcto: media pantalla de
   // cifras es peor que ninguna.
-  const [resumen, aseadoras] = await Promise.all([
+  //
+  // La tercera solo se dispara con el parámetro puesto, y entra aquí y no
+  // después para que su primera consulta no cueste una latencia propia. El
+  // presupuesto entero está contado en la cabecera de `lib/data/panel-aseadora.ts`.
+  const [resumen, aseadoras, abierta] = await Promise.all([
     leerResumenFinanciero(supabase, { desde, hasta }),
     leerCostoPorAseadora(supabase, { desde, hasta }),
+    pedida === null ? null : leerPanelDeAseadora(supabase, pedida),
   ]);
+
+  // LA RUTA AL CERRAR SE COMPONE AQUÍ, EN EL SERVIDOR, donde los parámetros ya
+  // están normalizados, y baja como prop. Cerrar contra una constante borraría
+  // el rango y el ancla, y el periodo del admin volvería a mes actual sin que
+  // nada se lo dijera: es el defecto que la aserción de ancla del spec de
+  // finanzas existe para atrapar.
+  //
+  // Se parte de los parámetros vivos y se quita SOLO el del panel, igual que
+  // hace el filtro de periodo con los que no gobierna. Los mismos parámetros,
+  // con el del panel añadido, son los que el enlace que ABRE tiene que conservar
+  // (INSTRUCCIÓN 5).
+  const vivos = new URLSearchParams();
+  for (const [clave, valor] of Object.entries(parametros)) {
+    if (clave === 'aseadora') continue;
+    if (typeof valor === 'string') vivos.set(clave, valor);
+    else if (Array.isArray(valor)) for (const uno of valor) vivos.append(clave, uno);
+  }
+  // El rango y el ancla NORMALIZADOS, no los crudos: una dirección sin ellos, o
+  // con un valor que no existe, tiene que cerrar en el periodo que la pantalla
+  // está mostrando de verdad y no en el que decía la dirección.
+  vivos.set('rango', rango);
+  vivos.set('ancla', ancla);
+
+  const rutaAlCerrar = `/finanzas?${vivos.toString()}`;
 
   const etiqueta = etiquetaDeRango(rango, desde, hasta);
   const periodoSinAseos = resumen.aseos_hechos === 0;
@@ -234,6 +314,21 @@ export default async function FinanzasPage({
           )}
         </div>
       </FiltroPeriodo>
+
+      {/*
+        HERMANO DEL FILTRO, NO HIJO SUYO, Y ESO NO ES UN DETALLE DE ANIDAMIENTO.
+
+        `FiltroPeriodo` atenúa a sus hijos y les apaga los eventos mientras
+        navega. Con el panel dentro, cambiar de periodo con el panel abierto lo
+        dejaría atenuado y sin poder cerrarse. Ver la cabecera de este archivo.
+
+        LA CLAVE VA AQUÍ Y EN NINGÚN OTRO SITIO (INSTRUCCIÓN 3): sobre el panel,
+        para que abrir una segunda persona no reutilice el árbol de la primera.
+        Nunca sobre nada que envuelva al contenido del filtro.
+      */}
+      {abierta !== null && (
+        <PanelAseadora key={abierta.id} datos={abierta} rutaAlCerrar={rutaAlCerrar} />
+      )}
     </div>
   );
 }
