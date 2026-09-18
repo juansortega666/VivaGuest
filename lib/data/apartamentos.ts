@@ -73,7 +73,19 @@ import type { Database, Tables } from '@/lib/database.types';
  * probar. Construirlo dentro ataria el modulo a `next/headers`.
  */
 
-/** Las columnas de la tabla de UI-SPEC §7.1, mas los dos derivados que pinta. */
+/**
+ * Las columnas de la tabla de UI-SPEC §7.1, mas las CUATRO que la ficha de
+ * lectura del panel necesita (08-UI-SPEC §7.2), mas los derivados que pinta.
+ *
+ * ⚠ LAS CUATRO NUEVAS NO SON COLUMNAS NUEVAS DE LA TABLA, Y LA DIFERENCIA
+ *   IMPORTA AL LEER EL DIFF. La advertencia de `COLUMNAS_DE_PROPIEDAD` dice que
+ *   una columna NUEVA de `properties` hay que anadirla en dos sitios, el grant
+ *   de la migracion 24 y la constante de aqui. Esa regla NO se dispara con este
+ *   cambio: `direccion`, `maps_url`, `hora_limite` y `suplente_id` ya existen en
+ *   la tabla y ya estan en el grant desde la migracion 24 (lineas 175-180). Lo
+ *   unico que pasa es que esta lectura empieza a PEDIRLAS. No hay ninguna
+ *   migracion que buscar.
+ */
 export type ApartamentoDeLista = Pick<
   Tables<'properties'>,
   | 'id'
@@ -85,6 +97,11 @@ export type ApartamentoDeLista = Pick<
   | 'pago_aseador'
   | 'responsable_id'
   | 'contacto_externo'
+  // Las cuatro de §7.2 del panel. La tabla de la lista no las pinta.
+  | 'direccion'
+  | 'maps_url'
+  | 'hora_limite'
+  | 'suplente_id'
 > & {
   /**
    * Columna 6 de §7.1. `null` cuando no hay responsable, y tambien cuando el
@@ -92,6 +109,25 @@ export type ApartamentoDeLista = Pick<
    * distintos para la base y el mismo em dash en pantalla.
    */
   responsableNombre: string | null;
+  /**
+   * Si el responsable sigue activo. `null` cuando no hay nombre que marcar.
+   *
+   * Lo pide 08-UI-SPEC §7.2: un responsable desactivado lleva `(inactivo)`
+   * detras del nombre, que es la regla que fijo `02-UI-SPEC` §8.3 para el
+   * formulario. Sale de la MISMA consulta de perfiles, que ya se hace.
+   */
+  responsableActivo: boolean | null;
+  /**
+   * El suplente, que la tabla de la lista no pinta y el panel si (§7.2).
+   *
+   * SALE DEL MISMO MAPA DE PERFILES QUE EL RESPONSABLE Y NO CUESTA NI UNA
+   * CONSULTA MAS. La tentacion obvia es un segundo viaje a `profiles` filtrando
+   * por los `suplente_id`; para 39 filas y ~8 perfiles seria un viaje regalado,
+   * porque el mapa que resuelve al responsable ya trae a todos los aseadores.
+   */
+  suplenteNombre: string | null;
+  /** Igual que `responsableActivo`, para el suplente. */
+  suplenteActivo: boolean | null;
   /**
    * Columna 7 de §7.1: `CalendarCheck` / `CalendarX`. Es la EXISTENCIA de un
    * feed activo, nunca su URL. La URL es una credencial y no sale de
@@ -153,9 +189,22 @@ export const COLUMNAS_DE_PROPIEDAD = `
   contacto_externo, is_active, created_at, updated_at
 `;
 
-/** Lo que pinta la tabla de §7.1, sin las dos de dinero. */
+/**
+ * Lo que pinta la tabla de §7.1, sin las dos de dinero, MAS las cuatro que el
+ * panel de lectura de 08-UI-SPEC §7.2 necesita: `direccion`, `maps_url`,
+ * `hora_limite` y `suplente_id`.
+ *
+ * Las cuatro YA TIENEN GRANT desde la migracion 24 y ya estan en
+ * `COLUMNAS_DE_PROPIEDAD`: aqui no se anade ninguna columna a la tabla, solo se
+ * piden mas de las que la aplicacion ya puede leer. La regla de las dos listas
+ * no se dispara.
+ *
+ * Y se piden EN LA MISMA CONSULTA de las 39 filas, no en una segunda lectura al
+ * abrir el panel: cuatro columnas mas sobre 39 filas no se notan, y una lectura
+ * por apertura si se nota cuando el admin abre veinte fichas seguidas.
+ */
 const COLUMNAS_DE_LISTA =
-  'id, nombre, cluster, gestion_vivaguest, is_active, responsable_id, contacto_externo';
+  'id, nombre, cluster, direccion, maps_url, hora_limite, gestion_vivaguest, is_active, responsable_id, suplente_id, contacto_externo';
 
 /** Las columnas de `public.property_rooms`. Enumeradas por la misma regla. */
 const COLUMNAS_DE_CUARTO = 'id, property_id, room_type_id, etiqueta, sort_order, is_active';
@@ -223,6 +272,59 @@ export function fusionarTarifas<T extends { id: string }>(
   });
 }
 
+/** Un aseador tal como lo necesita el cruce de asignaciones. */
+export type PerfilAsignable = Pick<Tables<'profiles'>, 'id' | 'full_name' | 'is_active'>;
+
+/** Lo que el cruce de asignaciones le pega a cada fila. */
+export interface AsignacionesDeApartamento {
+  responsableNombre: string | null;
+  responsableActivo: boolean | null;
+  suplenteNombre: string | null;
+  suplenteActivo: boolean | null;
+}
+
+/**
+ * Resuelve responsable y suplente contra UN SOLO mapa de perfiles. Funcion PURA.
+ *
+ * ── CERO CONSULTAS PARA EL SUPLENTE, Y ESA ES LA RAZON DE QUE EXISTA ────
+ *
+ * La tentacion obvia al anadir el suplente al panel (08-UI-SPEC §7.2) es un
+ * segundo viaje a `profiles` filtrando por los `suplente_id`. Seria un viaje
+ * regalado: el mapa que ya se construye para el responsable trae a TODOS los
+ * aseadores, activos e inactivos, asi que el suplente ya esta ahi. Con 39 filas
+ * y ~8 perfiles, la diferencia entre una consulta y dos es gratis de escribir y
+ * cara de deshacer.
+ *
+ * Vive aparte y se exporta por la misma razon que `fusionarTarifas`: es la
+ * parte de la composicion que se puede probar SIN base. Los dobles de cliente
+ * de este repo no prueban nada sobre grants ni sobre que columnas llegan; lo
+ * que si se puede fijar es que el suplente salga del mismo mapa, que una fila
+ * sin suplente no reviente y que un perfil desactivado llegue marcado.
+ */
+export function fusionarAsignaciones<
+  T extends { responsable_id: string | null; suplente_id: string | null },
+>(filas: T[], perfiles: PerfilAsignable[]): (T & AsignacionesDeApartamento)[] {
+  const porId = new Map(perfiles.map((p) => [p.id, { nombre: p.full_name, activo: p.is_active }]));
+
+  // `null` cuando no hay asignacion, y tambien cuando el identificador apunta a
+  // un perfil que la RLS no deja ver: son casos distintos para la base y el
+  // mismo em dash en pantalla.
+  const asignado = (id: string | null) => (id === null ? undefined : porId.get(id));
+
+  return filas.map((fila) => {
+    const responsable = asignado(fila.responsable_id);
+    const suplente = asignado(fila.suplente_id);
+
+    return {
+      ...fila,
+      responsableNombre: responsable?.nombre ?? null,
+      responsableActivo: responsable?.activo ?? null,
+      suplenteNombre: suplente?.nombre ?? null,
+      suplenteActivo: suplente?.activo ?? null,
+    };
+  });
+}
+
 /**
  * Las 39 filas del catalogo con lo que la tabla de §7.1 necesita.
  *
@@ -235,8 +337,16 @@ export function fusionarTarifas<T extends { id: string }>(
  * LA CUARTA es `tarifas_de_apartamentos`, y es de la migracion 24: las dos
  * cifras de dinero ya no vienen en el select de arriba porque salieron del
  * grant de columna. Va SIN argumento, o sea una sola llamada para las 39, y se
- * cruza en memoria igual que los perfiles y los feeds. La forma que esta
- * funcion devuelve NO CAMBIA: los componentes que la consumen no se tocan.
+ * cruza en memoria igual que los perfiles y los feeds.
+ *
+ * ── EL PANEL DE LECTURA DE LA FASE 8 NO ANADIO NI UNA CONSULTA ────────────
+ *
+ * Ocho de los nueve datos de 08-UI-SPEC §7.2 salen de aqui: las cuatro columnas
+ * que se anadieron al select (direccion, enlace a Maps, hora limite y suplente)
+ * y el nombre del suplente, que se resuelve del MISMO mapa de perfiles que ya
+ * resolvia al responsable. Siguen siendo CUATRO consultas. El unico dato que
+ * cuesta un viaje nuevo es el proximo aseo, y vive en
+ * `lib/data/panel-apartamento.ts` porque solo se pide cuando el panel se abre.
  */
 export async function listarApartamentos(
   supabase: SupabaseClient<Database>,
@@ -254,7 +364,7 @@ export async function listarApartamentos(
   // que nada se lo diga.
   const { data: perfiles, error: errorPerfiles } = await supabase
     .from('profiles')
-    .select('id, full_name')
+    .select('id, full_name, is_active')
     .eq('role', 'aseador');
 
   if (errorPerfiles) throw new Error(errorPerfiles.message);
@@ -271,12 +381,15 @@ export async function listarApartamentos(
   // Las dos columnas que la migracion 24 saco del grant, por su via propia.
   const tarifas = await leerTarifasDeApartamentos(supabase);
 
-  const nombrePorId = new Map((perfiles ?? []).map((p) => [p.id, p.full_name]));
   const conFeed = new Set((feeds ?? []).map((f) => f.property_id));
 
-  return fusionarTarifas(propiedades ?? [], tarifas).map((p) => ({
+  // Las dos asignaciones salen del MISMO mapa de perfiles: ver
+  // `fusionarAsignaciones`. El suplente no cuesta ni una consulta mas.
+  return fusionarAsignaciones(
+    fusionarTarifas(propiedades ?? [], tarifas),
+    perfiles ?? [],
+  ).map((p) => ({
     ...p,
-    responsableNombre: p.responsable_id ? (nombrePorId.get(p.responsable_id) ?? null) : null,
     tieneCalendario: conFeed.has(p.id),
   }));
 }

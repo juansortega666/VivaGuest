@@ -1,15 +1,18 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  fusionarAsignaciones,
   fusionarTarifas,
   listarClusters,
   type ApartamentoDeLista,
+  type PerfilAsignable,
   type TarifaDeApartamento,
 } from './apartamentos';
 
 /**
- * Aqui solo se prueban las funciones PURAS del modulo: `listarClusters` y
- * `fusionarTarifas`. Las que hablan con PostgREST y su comportamiento real (que
+ * Aqui solo se prueban las funciones PURAS del modulo: `listarClusters`,
+ * `fusionarTarifas` y `fusionarAsignaciones`. Las que hablan con PostgREST y su
+ * comportamiento real (que
  * columnas trae, que ve cada rol) lo fija `lib/domain/apartamento.integration.test.ts`
  * contra la base viva. Un test con el cliente stubbeado solo comprobaria que el
  * stub devuelve lo que el stub devuelve.
@@ -21,6 +24,12 @@ import {
  * dentro de Postgres y con roles reales. Lo que SI se puede fijar sin base es la
  * COMPOSICION: que las dos cifras se peguen a la fila correcta y que una fila
  * sin cifras conocidas salga con las dos en `null` y no con `undefined`.
+ *
+ * Y VALE IGUAL PARA LAS CUATRO COLUMNAS QUE LA FASE 8 ANADIO A LA LISTA
+ * (`direccion`, `maps_url`, `hora_limite`, `suplente_id`). Que lleguen de la
+ * base es cosa del grant y del test de integracion; lo que se fija aqui es que
+ * el suplente se resuelva del MISMO mapa de perfiles que el responsable, o sea
+ * sin una consulta propia, y que una fila sin suplente no reviente.
  */
 
 /** Fila minima: solo importa `cluster`, el resto es relleno tipado. */
@@ -35,9 +44,21 @@ function fila(cluster: string): ApartamentoDeLista {
     pago_aseador: null,
     responsable_id: null,
     contacto_externo: null,
+    direccion: null,
+    maps_url: null,
+    hora_limite: '11:30:00',
+    suplente_id: null,
     responsableNombre: null,
+    responsableActivo: null,
+    suplenteNombre: null,
+    suplenteActivo: null,
     tieneCalendario: false,
   };
+}
+
+/** Un perfil de aseador, tal como lo devuelve la consulta de `profiles`. */
+function perfil(id: string, nombre: string, activo = true): PerfilAsignable {
+  return { id, full_name: nombre, is_active: activo };
 }
 
 describe('listarClusters', () => {
@@ -163,5 +184,90 @@ describe('fusionarTarifas', () => {
 
   test('sobre lista vacia devuelve []', () => {
     expect(fusionarTarifas([], [cifras('id-Armenia', 1, 1)])).toEqual([]);
+  });
+});
+
+describe('fusionarAsignaciones', () => {
+  const MARIA = perfil('p-maria', 'María González');
+  const ANA = perfil('p-ana', 'Ana Rodríguez');
+  const CARMEN = perfil('p-carmen', 'Carmen Díaz', false);
+
+  /** Una fila con las dos asignaciones puestas a mano. */
+  function conAsignaciones(
+    cluster: string,
+    responsable: string | null,
+    suplente: string | null,
+  ): ApartamentoDeLista {
+    return { ...fila(cluster), responsable_id: responsable, suplente_id: suplente };
+  }
+
+  test('resuelve responsable y suplente contra el MISMO mapa de perfiles', () => {
+    // Es la afirmacion central: el suplente NO cuesta una consulta propia. Si
+    // alguien lo moviera a un segundo viaje, esta llamada dejaria de resolverlo
+    // con la unica lista de perfiles que recibe.
+    const [salida] = fusionarAsignaciones(
+      [conAsignaciones('Armenia', MARIA.id, ANA.id)],
+      [MARIA, ANA],
+    );
+
+    expect(salida.responsableNombre).toBe('María González');
+    expect(salida.suplenteNombre).toBe('Ana Rodríguez');
+  });
+
+  test('una fila sin suplente sale con las dos columnas del suplente en null', () => {
+    // El suplente es OPCIONAL (08-UI-SPEC §7.2: vacio es em dash con `sin
+    // definir`). Una fila sin el no puede reventar ni salir con `undefined`,
+    // que en el panel pintaria distinto que `null`.
+    const [salida] = fusionarAsignaciones([conAsignaciones('Armenia', MARIA.id, null)], [MARIA]);
+
+    expect(salida.suplenteNombre).toBeNull();
+    expect(salida.suplenteActivo).toBeNull();
+  });
+
+  test('un perfil desactivado llega marcado, no filtrado', () => {
+    // La consulta trae activos E INACTIVOS a proposito: si el responsable de un
+    // apartamento quedo desactivado, su nombre tiene que seguir apareciendo,
+    // con la marca detras. Filtrarlo convertiria la fila en un em dash y el
+    // admin perderia el dato sin que nada se lo diga.
+    const [salida] = fusionarAsignaciones(
+      [conAsignaciones('Armenia', CARMEN.id, null)],
+      [MARIA, CARMEN],
+    );
+
+    expect(salida.responsableNombre).toBe('Carmen Díaz');
+    expect(salida.responsableActivo).toBe(false);
+  });
+
+  test('un identificador que no esta en la lista de perfiles sale como ausencia', () => {
+    // Es el caso de un perfil que la RLS no deja ver. Para la base es distinto
+    // de "sin asignar"; en pantalla es lo mismo, y lo importante es que no se
+    // cuele un `undefined`.
+    const [salida] = fusionarAsignaciones([conAsignaciones('Armenia', 'p-fantasma', null)], [MARIA]);
+
+    expect(salida.responsableNombre).toBeNull();
+    expect(salida.responsableActivo).toBeNull();
+  });
+
+  test('conserva las cuatro columnas nuevas de la lista', () => {
+    // Las cuatro de §7.2 viajan en la MISMA consulta de las 39 filas. Este caso
+    // fija que el cruce no las pierda por el camino: son las que alimentan el
+    // grupo `UBICACIÓN Y ACCESO` del panel.
+    const base: ApartamentoDeLista = {
+      ...conAsignaciones('Armenia', MARIA.id, ANA.id),
+      direccion: 'Calle 100 #15-20, apto 302',
+      maps_url: 'https://maps.google.com/?q=x',
+      hora_limite: '11:30:00',
+    };
+
+    const [salida] = fusionarAsignaciones([base], [MARIA, ANA]);
+
+    expect(salida.direccion).toBe('Calle 100 #15-20, apto 302');
+    expect(salida.maps_url).toBe('https://maps.google.com/?q=x');
+    expect(salida.hora_limite).toBe('11:30:00');
+    expect(salida.suplente_id).toBe(ANA.id);
+  });
+
+  test('sobre lista vacia devuelve []', () => {
+    expect(fusionarAsignaciones([], [MARIA])).toEqual([]);
   });
 });
