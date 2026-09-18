@@ -450,3 +450,36 @@ puerta a reabrir esa cobertura sin volver a escribirla.
 
 La nota completa, con su razón, vive en el bloque L de
 `supabase/tests/11_financiero.test.sql`.
+
+---
+
+## La rama con cifras del grupo 4 del panel de aseadora nunca se vio pintada
+
+> Transcrito desde `08-13-SUMMARY.md` §"Lo que se dejó fuera" el 2026-09-18, por
+> el orquestador, después de que `08-VERIFICATION.md` señalara que este hallazgo
+> vivía **solo** en un SUMMARY. Es la amenaza T-08-72 ocurriendo: deuda de
+> ejecución perdida entre catorce resúmenes. Acá sí se lee.
+
+**Qué pasa:** el grupo 4 del panel de aseadora ("lo que lleva ganado en el
+periodo abierto") tiene una rama con cifras que **no se ha visto renderizada
+nunca**, en ninguna corrida de ninguna wave.
+
+**El argumento fácil NO sirve, y está medido.** `08-08` y `08-11` lo dejaron
+escrito como *"basta con sembrar un periodo vencido sin cerrar"*. Contra la
+migración 25: `periodo_pendiente_de_cierre()` devuelve el periodo más reciente
+cuyo día de cierre ya pasó **y** que no tiene cabecera en `payout_periods`, y
+además **solo mira lo posterior al último periodo cerrado**. En el fixture
+financiero los dos periodos pasados están cerrados y el tercero contiene hoy, así
+que **no hay ningún hueco que sembrar**: habría que **BORRAR** la cabecera del
+periodo reciente, y eso se lleva por delante los tres pagos de `esc.pagos`, de los
+que dependen **catorce casos** de `finanzas.spec.ts` y `mis-pagos.spec.ts`.
+
+**La forma barata de verdad:** sembrar un **cuarto** periodo anterior y dejarlo
+sin cerrar. Eso toca `sembrarFinanzas()` en `e2e/fixtures.ts`, del que dependen
+tres specs.
+
+**Dueño:** quien toque `e2e/fixtures.ts` del lado de finanzas a continuación.
+
+**Por qué no bloquea la Fase 8:** ninguno de los seis criterios del ROADMAP
+depende de esa rama. Es cobertura de un caso de presentación, no de seguridad ni
+de dinero.
