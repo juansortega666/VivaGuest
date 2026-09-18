@@ -268,3 +268,185 @@ que ya limpia los aseos y las alertas.
 **Quién debería cerrarlo:** un plan que pueda tocar el arnés de
 `e2e/operacion.spec.ts` sin estar escribiendo casos encima. No 08-14, que es una
 puerta y no debería estar arreglando instrumentos.
+
+---
+---
+
+# La deuda que la Fase 8 deja escrita al cerrar
+
+**Escrito por `08-14`, la compuerta de la fase, el 2026-09-18.**
+
+Los diez puntos de `08-UI-SPEC.md` §17 ya están declarados en el contrato y **no
+se duplican acá**. Lo que sigue es lo que salió **de ejecutar** y no estaba ahí.
+
+---
+
+## 1. Cobertura perdida sin sustituto: la línea que fechaba el dato
+
+**`Al momento de abrir esta página.` murió y no se reemplazó por nada.**
+
+Fijaba **D-14**: un dato operativo que parece vivo y no lo está es peor que uno
+fechado. `AHORA MISMO` es exactamente ese dato: dice dónde está la aseadora **en
+el instante en que se abrió el panel**. §17.8 punto 8 la prohíbe por nombre en un
+panel, con argumento, y la decisión es correcta. **Y la cobertura se pierde.**
+
+Desde esta fase, **ninguna prueba del repo afirma que el admin sepa de cuándo es
+ese dato**.
+
+**Y la compuerta encontró que la pérdida es doble.** La única copia de esa línea
+en el árbol vive dentro de `BloqueAhoraMismo`, la función de render que se quedó
+huérfana cuando 08-08 borró la página (ver el punto 5). O sea que tampoco hay un
+camino de producto que la siga diciendo por otro lado.
+
+**Condición de reapertura, y la pone el propio §17.8:** si el admin empieza a
+dejar el panel abierto, se reabre.
+
+**Lo que NO se puede hacer:** contar esta fase como que "no perdió cobertura".
+
+---
+
+## 2. Los dos señuelos que faltaban, encontrados por el cruce del inventario
+
+El barrido de 08-02 clasificó **cinco** aserciones de la ficha de aseadora como
+EN RIESGO. El plan 08-11 corrió señuelos para tres de ellas. **Las otras dos se
+quedaron sin contra-prueba**, y el cruce de 08-14 las encontró:
+
+| Fila de §5.3 | Qué se rompió | Qué se puso rojo |
+|---|---|---|
+| **a** (`:589`) | `FilaAseadora.tsx` compone el destino sin `aseadora: fila.aseadoraId` | `La navegación de cliente no dejó la URL en /aseadora=[0-9a-f-]{36}/ tras 15000 ms` |
+| **i** (`:620-625`) | `PanelAseadora.tsx` pinta el `<dd>` del estado dos veces | `Expected: 1` · `Received: 2` |
+
+**Las dos se pusieron rojas, se revirtieron, y el caso volvió al verde.** No hubo
+hallazgo del tipo de los señuelos 1 y 2 de la Fase 7: ninguna de las dos estaba
+sostenida por una segunda capa que la hiciera pasar sin mirar.
+
+**Lo que queda escrito para la próxima:** un plan que retargetea seis aserciones
+puede correr señuelos de todas menos de dos sin que nadie lo note, porque el
+recuento no lo hace nadie hasta la compuerta. El recuento es barato: son cinco
+filas y nueve señuelos, y cuadrarlo cuesta un minuto.
+
+---
+
+## 3. La ráfaga de Realtime: medida, no arreglada, con la palanca nombrada
+
+`08-07` la midió con andamio desechable, cuatro corridas, con el panel abierto:
+
+| Qué | Medido |
+|---|---|
+| Refrescos RSC en una ráfaga de quince eventos | **1 o 2**, nunca 15 (corridas: 2, 2, 1, 2) |
+| Firmas emitidas | **6 por refresco**, o sea **6 a 12 en toda la ráfaga** |
+| ¿El panel se cierra o parpadea? | **No.** Ni la URL ni el estado de cliente cambian |
+
+**El riesgo estaba sobrestimado por un orden de magnitud.** La cabecera de
+`lib/data/panel-aseo.ts` calculaba "hasta 90 firmas de 300 segundos" asumiendo
+quince refrescos. El debounce de 400 ms que la Fase 4 puso por T-04-18 ya
+colapsaba la ráfaga, y su comentario ya lo decía.
+
+**La palanca, por si algún día molesta, y está nombrada a propósito:** acotar el
+disparo del refresco. **NO** reducir el contrato de las seis firmas. Cambiar ese
+contrato rompe la tira de evidencia; acotar el disparo no rompe nada.
+
+---
+
+## 4. El enlace externo que pasa a dar 404, decidido y no arreglado
+
+`/finanzas/aseadoras/{id}` **ya no existe**: 08-08 borró la página y su contenido
+vive en `/finanzas?aseadora={id}`.
+
+Un enlace pegado en un chat hace meses **pasa a dar 404**. Se decidió
+explícitamente **no** hacer un redirect de compatibilidad (asunción A7 de 08-08,
+disposición `accept` de T-08-38): sería una ruta nueva que hay que mantener para
+siempre por un enlace que probablemente nadie guardó.
+
+**Queda contado, no escondido.** Si aparece alguien con el enlace viejo, el
+arreglo es de una línea y el argumento para hacerlo ya cambió.
+
+---
+
+## 5. Código huérfano que la fase dejó, con los nombres
+
+La nota de higiene del bloque L de `11_financiero.test.sql` declaraba tres
+funciones de base y cuatro de datos sin llamador. **Estaba incompleta.** La
+compuerta midió los consumidores y encontró dos más, del lado de los componentes:
+
+| Qué | Consumidores hoy |
+|---|---|
+| `app/(admin)/finanzas/_components/FichaAseadora.tsx` (el archivo entero) | **cero** en `app`, `lib`, `components` y `e2e` |
+| la función `BloqueAhoraMismo` de `BloqueAhoraMismo.tsx` | **cero**. Su único importador era `FichaAseadora` |
+
+Con `FichaAseadora` se quedan sin alcanzar sus dos funciones internas
+(`BloquePagos` y `BloqueGastos`). Lo que **sí** sigue vivo de
+`BloqueAhoraMismo.tsx` es `estadoDeAhoraMismo`, que es lo que consume
+`PanelAseadora`.
+
+**No se borran desde la compuerta:** este plan es una puerta y su diff son
+documentos y comentarios. Borrar producto desde acá sería exactamente la clase de
+cosa que la regla de alcance de esta fase existe para impedir.
+
+---
+---
+
+# Lo que la FASE 9 tiene que leer antes de empezar
+
+**Son dos, y las dos salen de esta fase. `08-UI-SPEC.md` §17 no es sitio
+suficiente para ellas, porque la Fase 9 no va a leer el contrato de la 8.**
+
+---
+
+## (a) Un enlace a un aseo ya borrado abre la lista sin panel y sin decir por qué
+
+**Hoy es inofensivo. Con la retención de seis meses deja de serlo, y ese es el
+momento exacto de reabrirlo.**
+
+§17.2 lo declaró así: un identificador que no resuelve deja la pantalla normal,
+sin 404, sin aviso y sin panel vacío. El caso que lo afirma existe y está verde
+(`e2e/apartamentos-lista.spec.ts:881`). **La decisión es correcta mientras nada
+se borre.**
+
+La Fase 9 es la que empieza a borrar. A partir de ahí:
+
+- un enlace a un aseo purgado abre `/operacion?aseo={uuid}` y el admin ve la
+  lista del día **sin saber que lo que buscaba ya no está**,
+- y no hay forma de distinguir "lo borró la retención" de "te equivocaste de
+  identificador", que son dos cosas que el admin necesita distinguir.
+
+**Lo que la Fase 9 tiene que decidir**, y no es una tarea de esta:
+
+1. Si el panel de un identificador purgado dice algo, y qué dice.
+2. Si lo dice, de dónde saca que fue la purga y no un error: hoy la lectura
+   devuelve vacío y no distingue los dos casos.
+
+**Y si decide que no dice nada, que lo escriba.** Lo que no vale es heredar la
+decisión de §17.2 sin volver a mirarla, porque se tomó con un supuesto
+(*"nada se borra"*) que la Fase 9 es justamente la que rompe.
+
+---
+
+## (b) Tres funciones de base y dos componentes sin llamador, conservados a propósito
+
+Si la Fase 9 hace limpieza de schema, **va a encontrar tres funciones sin ningún
+consumidor en producción y no tiene que adivinar si sobran**:
+
+```
+public.aseos_de_aseadora(uuid, date, date)
+public.gastos_de_aseadora(uuid, date, date)
+public.pagos_de_aseadora(uuid)
+```
+
+**NO se borran.** Tienen aserciones vivas en `11_financiero.test.sql` que las
+ejercen (grants, radio del `security definer`, forma del `returns table` y las
+cifras del fixture mutilado del bloque G). Borrarlas sería una migración que
+nadie pidió para quitar cobertura que ya está escrita y en verde.
+
+Del lado de TypeScript, sin consumidor en producción y con sus pruebas
+unitarias vivas: `leerAseosDeAseadora`, `leerGastosDeAseadora`,
+`leerPagosDeAseadora` y `costoDeLaFicha`, todas en `lib/data/finanzas-detalle.ts`.
+
+**Y el código huérfano de verdad, que sí es candidato a borrado:**
+`FichaAseadora.tsx` entero y la función `BloqueAhoraMismo`. Ver el punto 5 de
+arriba. **Antes de borrar `BloqueAhoraMismo` conviene leer el punto 1**, porque
+ahí vive la única copia de la línea que fechaba el dato, y borrarla cierra la
+puerta a reabrir esa cobertura sin volver a escribirla.
+
+La nota completa, con su razón, vive en el bloque L de
+`supabase/tests/11_financiero.test.sql`.
