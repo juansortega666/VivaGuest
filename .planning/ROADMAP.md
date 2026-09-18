@@ -349,6 +349,7 @@ Plans:
 
 ### Phase 9: El producto probado de punta a punta
 
+**Status**: **PARADA A PROPOSITO el 2026-09-18 en 3/7 planes**, por decision del dueno: *"dejemos hasta el plan 4 y ahi cerramos porque vamos a empezar a hacer cosas mas cool"*. Lo construido esta completo y en verde, y no deja nada a medias. Ejecutados: `09-01` (el arnes), `09-02` (los rojos intermitentes en cero) y `09-04` (**el recorrido del Core Value entero, que es el criterio 1**), mas un desvio de diagnostico que arreglo un defecto de producto. Pendientes: `09-05`, `09-06`, `09-07` y `09-03`, que es checkpoint humano
 **Goal**: Un checkout publicado en Airbnb llega hasta el pago de la aseadora sin que nadie lo empuje a mano, y eso queda probado con los 39 apartamentos reales cargados
 **Depends on**: Fase 8
 **Requirements**: Ninguno nuevo (prueba de punta a punta lo ya entregado)

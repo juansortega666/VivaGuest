@@ -4,11 +4,11 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 09
 current_phase_name: el-producto-probado-de-punta-a-punta
-status: executing
-stopped_at: Fase 09 planeada (7 planes, 4 waves, plan-checker en verde). Ejecutando en secuencia. 09-03 es checkpoint humano del dueno y va de ultimo
+status: paused
+stopped_at: Fase 09 PARADA A PROPOSITO en 3/7 (09-01, 09-02, 09-04) por decision del dueno. El criterio 1 esta cumplido: el recorrido del Core Value existe y pasa. Quedan 09-05, 09-06, 09-07 y 09-03 (checkpoint humano con los 39 feeds reales)
 last_updated: "2026-09-18T06:00:00.000Z"
 last_activity: 2026-09-18
-last_activity_desc: "Fase 08 cerrada y quick de RET-07 ejecutado. El dueno decidio que nada se borra nunca, asi que la alerta de Storage pasa a ser lo unico que avisa antes de llenarse"
+last_activity_desc: "El recorrido del Core Value existe por primera vez: del .ics de Airbnb al recibo de la aseadora, un solo test, 75 aserciones, cero insert directo"
 progress:
   total_phases: 9
   completed_phases: 6
