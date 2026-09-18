@@ -1,5 +1,11 @@
 import type { Enums, Tables } from '@/lib/database.types';
 
+import {
+  type ConsumoDeStorage,
+  formatearBytes,
+  porcentajeUsado,
+  superaElUmbral,
+} from './almacenamiento';
 import { formatFechaLargaBog } from './dates';
 import { UMBRAL_SYNC_CAIDA_MS, estadoDeSincronizacion } from './salud-sync';
 
@@ -15,7 +21,7 @@ import { UMBRAL_SYNC_CAIDA_MS, estadoDeSincronizacion } from './salud-sync';
  *
  *   EL COLOR NO CODIFICA EL TIPO DE ALERTA. PUNTO.
  *
- * Los doce iconos van en `text-status-warn`, las doce etiquetas en
+ * Los trece iconos van en `text-status-warn`, las trece etiquetas en
  * `text-muted-foreground`, y ninguna entrada puede tener tamaño, peso ni fondo
  * propio. Prohibido rojo para "urgente", ámbar para "hora límite", gris para
  * "faltantes", un `border-left` de color por tipo o un `Badge` de color por
@@ -71,11 +77,17 @@ const _cubreElEnum: _CubreElEnum = true;
 void _cubreElEnum;
 
 /**
- * Las claves del panel: los once tipos persistidos más `urgente`, que NO es un
- * valor del enum porque no es una notificación. Se computa al leer desde
- * `cleanings.is_urgent` (UI-SPEC §11.1, fila 1).
+ * Las claves del panel: los once tipos persistidos más `urgente` y
+ * `almacenamiento_lleno`, que NO son valores del enum porque no son
+ * notificaciones. Se computan al leer, la primera desde `cleanings.is_urgent`
+ * (UI-SPEC §11.1, fila 1) y la segunda desde `consumo_de_storage()` (RET-07).
+ *
+ * `almacenamiento_lleno` no es fila de `notifications` a propósito: es un
+ * ESTADO, no un evento. Se apaga sola el día que el dueño suba el cupo, igual
+ * que `urgente` se apaga al pasar la fecha. Persistirla obligaría a ir a borrar
+ * la fila a mano, y nadie se va a acordar.
  */
-export type ClaveDeAlerta = Enums<'notification_type'> | 'urgente';
+export type ClaveDeAlerta = Enums<'notification_type'> | 'urgente' | 'almacenamiento_lleno';
 
 /**
  * Nombres de icono de lucide, lista cerrada (UI-SPEC §17.3).
@@ -85,6 +97,12 @@ export type ClaveDeAlerta = Enums<'notification_type'> | 'urgente';
  * salir sin icono o desaparecer. Es una AMPLIACIÓN de la lista cerrada, no una
  * excepción a la regla de color: `Bell` va en el mismo `--status-warn` y al
  * mismo tamaño que los demás, así que no jerarquiza nada.
+ *
+ * `HardDrive` se añade por lo mismo, para `almacenamiento_lleno` (RET-07), y
+ * con el precedente de `Bell` nombrado. LA REGLA QUE NO SE TOCA NO ES "la lista
+ * no crece", ES "EL COLOR NO CODIFICA EL TIPO": va en el mismo
+ * `text-status-warn`, al mismo tamaño y con la misma clase de etiqueta que los
+ * otros doce.
  */
 export type IconoDeAlerta =
   | 'Zap'
@@ -98,6 +116,7 @@ export type IconoDeAlerta =
   | 'CircleCheck'
   | 'UserRoundCog'
   | 'History'
+  | 'HardDrive'
   | 'Bell';
 
 /**
@@ -144,7 +163,8 @@ export const PRESENTACION_GENERICA: PresentacionDeAlerta = {
 };
 
 /**
- * El mapa. Doce entradas: los once del enum más la computada `urgente`.
+ * El mapa. Trece entradas: los once del enum más las computadas `urgente` y
+ * `almacenamiento_lleno`.
  *
  * POR QUÉ DOCE Y NO LOS SIETE DEL UI-SPEC §11.1. Medido con grep exhaustivo
  * sobre `supabase/migrations/*.sql` el 2026-09-03:
@@ -206,6 +226,11 @@ export const MAPA_DE_ALERTAS: Record<ClaveDeAlerta, PresentacionDeAlerta> = {
   // un icono fuera de la lista ahora sería modificar el contrato a ciegas.
   gasto_reportado: { icono: 'Bell', etiqueta: 'GASTO', ...HOMOGENEO },
   retencion_proxima: { icono: 'History', etiqueta: 'RETENCIÓN', ...HOMOGENEO },
+
+  // La segunda computada sin fila en `notifications` (RET-07). Ver `HardDrive`
+  // arriba: es una ampliación declarada de la lista cerrada, no una excepción a
+  // la regla de color.
+  almacenamiento_lleno: { icono: 'HardDrive', etiqueta: 'ALMACENAMIENTO', ...HOMOGENEO },
 };
 
 /**
@@ -233,6 +258,10 @@ export const ORDEN_DE_TIPOS = [
   'aseo_completado',
   'gasto_reportado',
   'retencion_proxima',
+  // AL FINAL, y no intercalada por afinidad temática con `retencion_proxima`.
+  // El valor de este orden es que NO SE MUEVA: meter una opción en medio
+  // reordenaría las que el admin ya aprendió de sitio.
+  'almacenamiento_lleno',
 ] as const satisfies readonly ClaveDeAlerta[];
 
 /**
@@ -344,6 +373,19 @@ export type EntradaComputadas = {
   ahoraMs: number;
   /** El día de negocio de hoy en Bogotá, `'YYYY-MM-DD'`. Sale de `hoyBog()` o de `today_bog()`. */
   hoy: string;
+  /**
+   * El consumo de Storage, tal como lo devuelve `leerConsumoDeStorage()`.
+   *
+   * `null` SIGNIFICA "NO SE PUDO MEDIR", Y NO ES LO MISMO QUE CERO. Con `null`
+   * no se emite alerta: afirmar que está lleno sin haberlo medido es tan falso
+   * como afirmar que está vacío.
+   *
+   * Es un campo OBLIGATORIO y no opcional a propósito. Hay un solo consumidor
+   * de producción (`/operacion`) y lo que se compra con esto es que no pueda
+   * olvidarlo en silencio: sin el campo no compila, y una alerta que nunca se
+   * emite porque nadie le pasó el dato es exactamente el bug que no se ve.
+   */
+  consumo: ConsumoDeStorage | null;
 };
 
 /** Estados en los que un aseo todavía puede hacerse, y por lo tanto todavía puede alertar. */
@@ -424,13 +466,14 @@ export function horaLimiteVencida(
 }
 
 /**
- * Las tres alertas que NO son filas de `notifications` (UI-SPEC §11.2).
+ * Las cuatro alertas que NO son filas de `notifications` (UI-SPEC §11.2 y RET-07).
  *
  * | Tipo                | Condición                                                              | Instante para el orden              |
  * |---------------------|------------------------------------------------------------------------|-------------------------------------|
  * | Urgente             | `is_urgent` y `is_managed` y estado vivo y `scheduled_date >= hoy`      | `cleanings.created_at`              |
  * | Hora límite vencida | `is_managed` y estado vivo y `venceEnMs(...) < ahoraMs`                 | el vencimiento                      |
  * | Calendario caído    | `estadoDeSincronizacion(maxUltimoExito, ahoraMs) === 'caida'`           | `maxUltimoExito + UMBRAL`           |
+ * | Almacenamiento      | `consumo !== null` y `superaElUmbral(consumo)`                          | `consumo.cruceAt`                   |
  *
  * SOBRE `hora_limite_vencida`: NO HAY DECISIÓN QUE TOMAR, es obligatoriamente
  * computada. El valor del enum existe y **nada lo escribe en ninguna
@@ -451,7 +494,7 @@ export function horaLimiteVencida(
  * que el admin abre de todas formas.
  */
 export function alertasComputadas(entrada: EntradaComputadas): Alerta[] {
-  const { aseos, maxUltimoExito, ahoraMs, hoy } = entrada;
+  const { aseos, maxUltimoExito, ahoraMs, hoy, consumo } = entrada;
   const alertas: Alerta[] = [];
 
   for (const a of aseos) {
@@ -589,6 +632,61 @@ export function alertasComputadas(entrada: EntradaComputadas): Alerta[] {
       // una alerta que no es accionable desde donde se ve es una notificación,
       // no una alerta.
       url: '/apartamentos',
+      atendible: false,
+    });
+  }
+
+  // 4. ALMACENAMIENTO LLENO (RET-07). Misma forma que la caída global y por las
+  //    mismas razones: es del sistema entero, no de ningún apartamento, y es un
+  //    ESTADO que se apaga solo cuando el hecho se resuelve.
+  //
+  //    `consumo === null` ES "NO SE PUDO MEDIR", Y AHÍ NO SE ALERTA. Afirmar
+  //    que está lleno sin haberlo medido es tan falso como afirmar que está
+  //    vacío, y quien sí tiene que enterarse del fallo de lectura es el medidor
+  //    de la cabecera, que lo dice con todas sus letras.
+  if (consumo !== null && superaElUmbral(consumo)) {
+    // El instante del hecho es CUÁNDO SE CRUZÓ EL UMBRAL: el `created_at` del
+    // objeto en que la suma corrida lo pasó, que la base ya devuelve. Usar
+    // `ahoraMs` haría que la alerta saltara al tope de la lista en cada render,
+    // empujando hacia abajo hechos más recientes que ella. Es exactamente el
+    // razonamiento del bloque de arriba.
+    //
+    // Con `cruceAt` nulo no hay instante del que partir (la base solo lo deja
+    // nulo si no hay cruce, así que llegar aquí con nulo significa que el
+    // veredicto y el instante discrepan). Ahí el hecho es "ahora mismo", y hay
+    // que escribirlo, porque una alerta con instante `NaN` cae en un sitio
+    // arbitrario del orden.
+    const marcaMs = consumo.cruceAt === null ? null : instanteDeLaBase(consumo.cruceAt);
+    const ocurrioEnMs = marcaMs === null || Number.isNaN(marcaMs) ? ahoraMs : marcaMs;
+
+    // LA CIFRA REAL, NO UN ADJETIVO. "El almacenamiento está casi lleno" no
+    // dice si quedan tres días o tres meses; `412 MB de 1 GB (40%)` sí.
+    const titulo = `El almacenamiento va en ${formatearBytes(consumo.usadoBytes)} de ${formatearBytes(
+      consumo.cupoBytes,
+    )} (${porcentajeUsado(consumo)}%).`;
+
+    alertas.push({
+      // Fijo, como la caída global: solo puede haber una a la vez por
+      // definición, y no hay `cleaning_id` ni `property_id` que la hagan única.
+      id: 'almacenamiento_lleno:sistema',
+      clave: 'almacenamiento_lleno',
+      ocurrioEnMs,
+      titulo,
+      // EL SÍNTOMA ES LA MITAD DEL VALOR DE ESTA ALERTA. Sin él, el admin lee un
+      // porcentaje y no sabe qué se rompe cuando llegue a 100.
+      cuerpo: `${titulo} Cuando se llene, las aseadoras no van a poder subir las fotos de evidencia.`,
+      apartamento: 'Todo el sistema',
+      cleaningId: null,
+      propertyId: null,
+      // SIN URL, Y ESTÁ JUSTIFICADO. D-08 pide que una alerta sea accionable
+      // desde donde se ve; aquí el remedio (subir el plan de Supabase, o el cupo
+      // en `app_settings`) está FUERA de la aplicación. Un enlace a una pantalla
+      // que no arregla nada sería peor que ninguno, y `Alerta.url` admite `null`
+      // exactamente para esto.
+      url: null,
+      // No tiene fila en `notifications`, luego no tiene `read_at`, luego no se
+      // puede atender. Un botón ahí sería un botón que miente: la alerta
+      // reaparecería en la lectura siguiente.
       atendible: false,
     });
   }

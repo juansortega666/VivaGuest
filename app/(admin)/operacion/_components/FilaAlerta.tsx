@@ -8,6 +8,7 @@ import {
   CircleCheck,
   CircleSlash,
   Hammer,
+  HardDrive,
   History,
   Hourglass,
   PackageOpen,
@@ -70,7 +71,7 @@ import { devolverAlertaAlPanel, marcarAlertaAtendida } from '../_actions';
  */
 
 /**
- * Los doce nombres de icono de `IconoDeAlerta`, resueltos a componentes.
+ * Los trece nombres de icono de `IconoDeAlerta`, resueltos a componentes.
  *
  * `lib/domain/alertas.ts` es puro y devuelve NOMBRES: no importa React ni lucide.
  * La resolucion vive aca, que es la capa que pinta. El `Record<IconoDeAlerta, …>`
@@ -89,6 +90,7 @@ const ICONOS: Record<IconoDeAlerta, LucideIcon> = {
   CircleCheck,
   UserRoundCog,
   History,
+  HardDrive,
   Bell,
 };
 
