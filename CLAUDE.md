@@ -27,6 +27,28 @@ Plataforma que automatiza la asignación y ejecución de aseos en propiedades de
 <!-- GSD:stack-start source:research/STACK.md -->
 ## Technology Stack
 
+> ## ⚠ ESTA SECCION ES RESEARCH PREVIO, NO EL STACK REAL
+>
+> Todo lo que sigue se escribio **antes de construir**, en agosto de 2026. Ocho
+> fases despues, cuatro de sus elecciones **no son lo que esta instalado**, y
+> este archivo se carga como instrucciones vinculantes en cada sesion. Medido
+> contra `package.json` el **2026-09-18**:
+>
+> | Esta seccion dice | Lo que de verdad hay | Por que cambio |
+> |---|---|---|
+> | `node-ical@0.27.1` | **parser propio en `lib/domain/ical.ts`**, sin dependencia | dos fallas medidas contra los feeds reales |
+> | `browser-image-compression@2.0.2` | **`compressorjs@1.3.0`** | — |
+> | `radix-ui` como primitivas | **`@base-ui/react@1.7.0`** | shadcn 4.19 con `-p nova` genera Base UI |
+> | retencion de 6 meses y fotos a 30 dias | **nada se borra nunca** | decision del dueno del 2026-09-18 |
+>
+> **La fuente de verdad del stack es `.planning/codebase/STACK.md`**, escrita por
+> el mapeo del 2026-09-18 leyendo el codigo. Lo de abajo se conserva porque su
+> valor no esta en la lista de paquetes sino en el **razonamiento y la evidencia
+> primaria**: el analisis de 830 snapshots de feeds reales de Airbnb y Booking,
+> las trampas de `@supabase/ssr`, los limites medidos de Vercel Cron, y la lista
+> "What NOT to Use", que sigue siendo vinculante salvo en las cuatro filas de
+> arriba.
+
 ## Recommended Stack
 ### Core Technologies
 | Technology | Version | Purpose | Why Recommended |
