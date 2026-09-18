@@ -1,5 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 
+import { UMBRAL_SYNC_CAIDA_MS } from '@/lib/domain/salud-sync';
+
 import {
   expect,
   fijarSaludDeSync,
@@ -120,11 +122,54 @@ test.beforeEach(async () => {
 });
 
 /**
+ * La hora límite que se siembra para la alerta de vencimiento.
+ *
+ * Son las 00:00 y no las 00:01, y la diferencia es de reloj: el vencimiento es
+ * el instante que ordena esa alerta, y con 00:01 hay sesenta segundos al día,
+ * justo después de medianoche, en los que todavía no ha vencido, la alerta no
+ * existe y el panel enseña SEIS filas. A las 00:00 el vencimiento es el primer
+ * instante del día de negocio, así que ya pasó a cualquier hora a la que alguien
+ * corra la suite.
+ */
+const HORA_LIMITE_SEMBRADA = '00:00';
+
+/**
  * Deja los SIETE tipos en el panel a la vez y devuelve el orden cronológico
  * esperado, de más reciente a más antiguo.
  *
- * Los instantes se reparten a mano y no se dejan al azar: el orden del panel es
- * el criterio 4 y hay que poder afirmarlo contra una secuencia conocida.
+ * ════════════════════════════════════════════════════════════════════════════
+ * EL ORDEN ESPERADO SE DERIVA DE LOS INSTANTES SEMBRADOS, Y NO SE ESCRIBE A
+ * MANO. ES UN ROJO MEDIDO, NO UNA PRECAUCIÓN.
+ *
+ * Hasta el 2026-09-18 esta función devolvía una lista literal que daba por
+ * sentado que `HORA LÍMITE VENCIDA` es siempre la más antigua de las siete. Eso
+ * es falso durante la primera hora del día: `CALENDARIO CAÍDO` se fecha en la
+ * última sincronización buena MÁS el umbral, o sea `ahora − 4 h + 3 h`, y antes
+ * de la 01:01 ese instante cae en el día anterior, así que las dos se
+ * intercambian. Medido por 08-11 a las 00:21: cuatro corridas de cuatro en rojo.
+ *
+ * Y el orden que la pantalla pintaba era el CRONOLÓGICAMENTE CORRECTO. El
+ * producto ordena bien; lo que estaba mal era la expectativa, que codificaba una
+ * suposición sobre la hora a la que se corre la suite.
+ *
+ * Por eso el orden sale ahora de los instantes que este mismo caso siembra. Los
+ * dos que el caso no fija con un número propio se LEEN DE LA BASE, que es de
+ * donde el producto los va a leer:
+ *
+ *   | Alerta                | Instante que la ordena        | De dónde sale aquí          |
+ *   |-----------------------|-------------------------------|-----------------------------|
+ *   | URGENTE               | `cleanings.created_at`        | releído por id              |
+ *   | NO PUEDO / DAÑO /     | `notifications.created_at`    | lo fija el caso, en minutos |
+ *   | FALTANTES / EXTENSIÓN |                               |                             |
+ *   | CALENDARIO CAÍDO      | `max(last_success_at)+umbral` | releído de `calendar_feeds` |
+ *   | HORA LÍMITE VENCIDA   | el vencimiento del aseo       | `hoy` + `HORA_LIMITE_...`   |
+ *
+ * NO se llama a `alertasComputadas()` ni a `venceEnMs()` para construir la
+ * expectativa: eso la volvería tautológica, porque compararía el producto
+ * consigo mismo. El instante de la hora límite se compone aquí con el desfase
+ * fijo de Colombia (UTC−5, sin DST, que es un constraint del proyecto) sobre el
+ * día que devuelve `today_bog()`.
+ * ════════════════════════════════════════════════════════════════════════════
  */
 async function sembrarLosSieteTipos(): Promise<string[]> {
   const { gestionada, segunda, tercera, aseadoraA, fechas } = escenario;
@@ -133,8 +178,8 @@ async function sembrarLosSieteTipos(): Promise<string[]> {
 
   // ── Los tres COMPUTADOS ──────────────────────────────────────────────────
   // `urgente`: aseo vivo, gestionado, con `is_urgent` y fecha de hoy en adelante.
-  // Su instante de orden es `created_at`, o sea AHORA.
-  await sembrarAseos(servicio, [
+  // Su instante de orden es `created_at`, que lo pone la base al insertar.
+  const [idUrgente] = await sembrarAseos(servicio, [
     {
       propiedad: gestionada.id,
       fecha: fechas.manana,
@@ -143,14 +188,13 @@ async function sembrarLosSieteTipos(): Promise<string[]> {
       urgente: true,
     },
     // `hora_limite_vencida`: aseo de HOY con la hora límite ya pasada. Su
-    // instante de orden es el vencimiento, o sea las 00:01 de hoy: el más
-    // antiguo de los siete, y por eso va último en el orden esperado.
+    // instante de orden es el vencimiento.
     {
       propiedad: segunda.id,
       fecha: fechas.hoy,
       aseador: aseadoraA.id,
       confirmado: true,
-      horaLimite: '00:01',
+      horaLimite: HORA_LIMITE_SEMBRADA,
     },
   ]);
 
@@ -193,19 +237,68 @@ async function sembrarLosSieteTipos(): Promise<string[]> {
   ];
   await sembrarAlertas(servicio, idAdmin, persistidas);
 
-  // El orden cronológico descendente esperado. `urgente` va primero porque su
-  // `created_at` es de hace segundos; `calendario_caido` cae entre medias
-  // (última sincronización buena + 3 h de umbral, o sea hace una hora); y
-  // `hora_limite_vencida` va último, con el vencimiento de las 00:01 de hoy.
-  return [
-    'URGENTE',
-    'NO PUEDO',
-    'DAÑO',
-    'FALTANTES',
-    'EXTENSIÓN MAL CREADA',
-    'CALENDARIO CAÍDO',
-    'HORA LÍMITE VENCIDA',
+  // ── Los dos instantes que NO los fija este caso con un número propio ──────
+
+  // El de `urgente` es el `created_at` que puso la base al insertar el aseo. Se
+  // relee en vez de darlo por `ahora`: `ahora` es el reloj de este proceso y el
+  // que ordena es el de Postgres.
+  const { data: filaUrgente, error: errorUrgente } = await servicio
+    .from('cleanings')
+    .select('created_at')
+    .eq('id', idUrgente)
+    .single();
+  if (errorUrgente || !filaUrgente) {
+    throw new Error(`No se pudo releer el aseo urgente: ${errorUrgente?.message}`);
+  }
+
+  // El de `calendario_caido` es `max(last_success_at)` sobre los feeds ACTIVOS
+  // más el umbral, que es exactamente lo que hace `leerUltimoExitoDeSync()`. La
+  // marca la escribe `fijarSaludDeSync()` con SU reloj, así que se lee y no se
+  // recalcula: recalcularla sería volver a suponer.
+  const { data: feed, error: errorFeed } = await servicio
+    .from('calendar_feeds')
+    .select('last_success_at')
+    .eq('is_active', true)
+    .order('last_success_at', { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+  if (errorFeed) throw new Error(`No se pudo releer la salud del sync: ${errorFeed.message}`);
+  if (!feed?.last_success_at) {
+    throw new Error('Ningún feed activo tiene `last_success_at`: la caída no se puede fechar.');
+  }
+
+  // El de `hora_limite_vencida` es el vencimiento: el día de negocio que devuelve
+  // `today_bog()` a la hora sembrada, en Bogotá. El desfase va literal porque
+  // Colombia es UTC−5 fijo y sin DST, que es un constraint del proyecto; componer
+  // el instante con `new Date(fecha)` lo leería como medianoche UTC y lo correría
+  // al día anterior, que es el bug que `dates.ts` existe para no repetir.
+  const venceHoraLimiteMs = Date.parse(`${fechas.hoy}T${HORA_LIMITE_SEMBRADA}:00-05:00`);
+
+  const instantes: Array<{ etiqueta: string; ms: number }> = [
+    { etiqueta: 'URGENTE', ms: Date.parse(filaUrgente.created_at) },
+    { etiqueta: 'NO PUEDO', ms: ahora - 2 * min },
+    { etiqueta: 'DAÑO', ms: ahora - 4 * min },
+    { etiqueta: 'FALTANTES', ms: ahora - 6 * min },
+    { etiqueta: 'EXTENSIÓN MAL CREADA', ms: ahora - 8 * min },
+    {
+      etiqueta: 'CALENDARIO CAÍDO',
+      ms: Date.parse(feed.last_success_at) + UMBRAL_SYNC_CAIDA_MS,
+    },
+    { etiqueta: 'HORA LÍMITE VENCIDA', ms: venceHoraLimiteMs },
   ];
+
+  // Los siete instantes tienen que ser DISTINTOS, o el orden dejaría de estar
+  // determinado por el dato y pasaría a depender del desempate. Con minutos de
+  // por medio no puede pasar, y si algún día pasa hay que enterarse acá y no en
+  // una comparación que falla una vez cada tanto.
+  if (new Set(instantes.map((i) => i.ms)).size !== instantes.length) {
+    throw new Error(
+      `Dos de las siete alertas comparten instante y el orden deja de ser derivable: ` +
+        JSON.stringify(instantes),
+    );
+  }
+
+  return [...instantes].sort((a, b) => b.ms - a.ms).map((i) => i.etiqueta);
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -353,6 +446,24 @@ test('las primeras cinco filas salen en orden cronológico y no agrupadas por ti
   // La secuencia COMPLETA, no solo las cinco primeras: con siete tipos y siete
   // filas, afirmar las siete cuesta lo mismo y ordenar por tipo rompe la lista
   // entera, no solo su cabeza.
+  //
+  // ── LOS TRES AFLOJAMIENTOS PROHIBIDOS, POR SU NOMBRE ─────────────────────
+  // Este caso existe para afirmar que el orden es CRONOLÓGICO y no por tipo, así
+  // que cualquiera de estas tres «soluciones» a un rojo lo destruye y deja el
+  // caso verde para siempre sin medir nada:
+  //
+  //   1. COMPARAR CONJUNTOS (`new Set(etiquetas)` contra `new Set(esperado)`, o
+  //      `toEqual(expect.arrayContaining(...))`): un panel que agrupe por tipo
+  //      pasaría, porque las siete siguen estando.
+  //   2. COMPARAR UN SUBCONJUNTO (solo las tres primeras, o «las siete están»):
+  //      lo mismo, con menos filas.
+  //   3. ORDENAR CUALQUIERA DE LAS DOS LISTAS POR TIPO antes de comparar: es
+  //      pedirle al test que acepte justo lo que el criterio 4 prohíbe.
+  //
+  // Si esto se pone rojo, la pregunta es qué instante cambió, no cómo ablandar
+  // la comparación. `esperado` sale de los instantes sembrados (ver la cabecera
+  // de `sembrarLosSieteTipos`), así que un rojo aquí significa que la pantalla
+  // ordena por otra cosa que no es el instante del hecho.
   expect(etiquetas).toEqual(esperado);
 });
 
