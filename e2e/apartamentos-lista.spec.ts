@@ -378,9 +378,17 @@ test('el nombre es un link real, no una fila con role de boton', async ({ pagina
 
   // El teclado tiene que llegar a un `<a>` con href, que es lo que §7.2 exige y
   // lo que una fila clicable con `onClick` no da.
+  //
+  // El DESTINO cambió en la Fase 8 y el fondo de esta aserción no: la celda ya no
+  // lleva al formulario de edición, lleva a la misma lista con el panel de
+  // lectura abierto (`?apartamento={uuid}`). Lo que se sigue afirmando es lo
+  // mismo: que hay un ancla de verdad con una dirección de verdad, no una fila
+  // con un manejador de clic. El grupo opcional del principio deja pasar la forma
+  // que compone el enlace cuando la pantalla tiene parámetros vivos, que es la
+  // regla de la INSTRUCCION 5 (abrir NO se lleva por delante los del anfitrión).
   await expect(
     paginaAdmin.getByRole('link', { name: '[PLACEHOLDER] Bogotá 1 — Apto 01' }),
-  ).toHaveAttribute('href', /^\/apartamentos\/[0-9a-f-]{36}$/);
+  ).toHaveAttribute('href', /^\/apartamentos\?(.+&)?apartamento=[0-9a-f-]{36}$/);
 
   await expect(paginaAdmin.getByRole('row').getByRole('button', { name: 'Nombre' })).toHaveCount(0);
 });

@@ -99,3 +99,48 @@ sea que este defecto ya estaba resuelto una vez, al lado. La forma natural es
 **Quién debería cerrarlo:** 08-13 (accesibilidad), que es quien puede reabrir la
 cadena del contrato, coordinado con 08-11 para que sus aserciones nazcan ya con
 la forma nueva.
+
+---
+
+## `e2e/operacion-alertas.spec.ts:341` se pone rojo entre medianoche y las 04:01, todos los días
+
+**Encontrado por 08-11, en la regresión completa de la wave. No es de este plan
+y no se arregló: el diff de 08-11 no toca ni una línea de alertas.**
+
+El caso afirma el orden cronológico de las siete alertas del panel. Dos de las
+siete se fechan así:
+
+| Alerta | Instante que la ordena | De dónde sale |
+|---|---|---|
+| `HORA LÍMITE VENCIDA` | **hoy a las 00:01** | la `hora_limite` que el propio caso siembra |
+| `CALENDARIO CAÍDO` | **ahora menos cuatro horas** | `fijarSaludDeSync()`, `e2e/fixtures.ts:993` |
+
+El caso da por sentado que la hora límite vencida es la más antigua de las siete,
+y lo dice en su comentario: *«el más antiguo de los siete, y por eso va último en
+el orden esperado»*. **Eso solo es cierto a partir de las 04:01.** Antes de esa
+hora, `ahora − 4h` cae en el día anterior y pasa a ser la más antigua, así que
+las dos se intercambian.
+
+**Medido el 2026-09-18 a las 00:21**, 4 corridas de 4 en rojo, con este diff:
+
+```
+-   "CALENDARIO CAÍDO",
+    "HORA LÍMITE VENCIDA",
++   "CALENDARIO CAÍDO",
+```
+
+**El orden que la pantalla pintó es el CRONOLÓGICAMENTE CORRECTO.** Ayer a las
+20:21 es anterior a hoy a las 00:01. El producto ordena bien; lo que está mal es
+la expectativa del caso, que codifica una suposición sobre la hora a la que se
+corre la suite.
+
+**El arreglo no es aflojar la aserción.** Es quitarle al caso su dependencia del
+reloj: fechar la caída del calendario con un desfase que la deje siempre del lado
+correcto de las 00:01 del día de negocio, o derivar el orden esperado de los
+instantes sembrados en vez de escribirlo a mano. Lo que **no** vale es ordenar
+por tipo ni comparar conjuntos en vez de secuencias: el caso existe justamente
+para afirmar que el orden es cronológico y no por tipo.
+
+**Quién debería cerrarlo:** 08-13, que es el plan que toca casos E2E. Y
+`08-14` tiene que saberlo para no contar este rojo como regresión de la fase:
+la misma suite, corrida después de las 04:01, da 134 en verde.
