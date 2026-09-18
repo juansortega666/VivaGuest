@@ -20,16 +20,32 @@ import { cargarEnvLocal, clienteDeServicio } from './global-setup';
  * ════════════════════════════════════════════════════════════════════════════
  * ESTE ARCHIVO NACE EN ROJO, Y ESO ES EL PLAN.
  *
- * Las cuatro pantallas que ejerce —`/finanzas`, `/finanzas/aseos`,
- * `/finanzas/aseadoras/[id]` y `/finanzas/pagos`— NO EXISTEN cuando este archivo
- * se escribe. Las construyen los planes 07-10, 07-11 y 07-12. Hasta entonces,
- * todo lo de aquí falla con 404 y es correcto que falle.
+ * Las cuatro pantallas que ejerce —`/finanzas`, `/finanzas/aseos`, la ficha de
+ * una aseadora y `/finanzas/pagos`— NO EXISTEN cuando este archivo se escribe.
+ * Las construyen los planes 07-10, 07-11 y 07-12. Hasta entonces, todo lo de
+ * aquí falla con 404 y es correcto que falle.
  *
  * **A partir del 07-12, un rojo en este archivo es una regresión.**
  *
  * El copy que se afirma NO es una sugerencia: sale literal de
  * `.planning/phases/07-financiero/07-UI-SPEC.md` §15.2, que el dueño aprobó. Si
  * una pantalla dice otra cosa, la pantalla está mal, no la aserción.
+ * ════════════════════════════════════════════════════════════════════════════
+ *
+ * ── LO QUE LA FASE 8 LE CAMBIO A ESTE ARCHIVO ────────────────────────────────
+ *
+ * **La ficha de aseadora ya no es una ruta.** `/finanzas/aseadoras/[id]` se
+ * borró y su contenido vive ahora en un panel sobre `/finanzas`, abierto con
+ * `?aseadora={uuid}` (08-UI-SPEC §0.1 conflicto B y §9). Las otras tres
+ * pantallas siguen siendo páginas y no cambiaron.
+ *
+ * **Y con eso llegó una trampa que vale para todo el que edite este archivo:**
+ * el contenido de un panel se portalea a `document.body`, así que **toda
+ * aserción acotada por `main`, por el `<table>` de la página o por cualquier
+ * contenedor de layout deja de ver el panel y pasa en verde sin comprobar
+ * nada**. Medido con un señuelo dentro del panel: con `locator('main')` las dos
+ * aserciones de no rastreo pasaron en VERDE con la palabra prohibida puesta.
+ * Lo que se lee del panel se acota con `getByRole('dialog')`, sin excepción.
  * ════════════════════════════════════════════════════════════════════════════
  *
  * ── POR QUÉ ESTE ARCHIVO EXISTE, TENIENDO pgTAP E INTEGRACIÓN SOBRE LO MISMO ──
@@ -576,63 +592,117 @@ test.describe('Finanzas, con dos periodos cerrados y uno en curso', () => {
   // 7. LA FICHA DE UNA ASEADORA
   // ═════════════════════════════════════════════════════════════════════════
 
-  test('la ficha tiene sus cuatro bloques, el de pagos ignora el filtro y lo dice, y no hay ni una palabra de ubicación', async ({
+  test('el panel tiene sus cuatro grupos, dice exactamente uno de los tres estados, y no hay ni una palabra de ubicación', async ({
     paginaAdmin,
   }) => {
     await paginaAdmin.goto(`/finanzas?rango=dia&ancla=${diaLimpio}`);
 
-    await paginaAdmin
-      .getByRole('link')
-      .filter({ hasText: esc.aseadoraUna.nombre })
-      .first()
-      .click();
-    await paginaAdmin.waitForURL(/\/finanzas\/aseadoras\//);
+    // La espera es `esperarUrlDeCliente()` (INSTRUCCION 7 del plan 08-02): la
+    // espera de URL de Playwright inyecta su sondeo dentro del documento y se
+    // traba con el commit de la transición de React. Y antes de pulsar hay que
+    // esperar a que React haya hidratado el ancla, porque si no el `<a>` navega
+    // duro. `pulsarHastaNavegar` hace las dos cosas.
+    await pulsarHastaNavegar(
+      paginaAdmin,
+      paginaAdmin.getByRole('link').filter({ hasText: esc.aseadoraUna.nombre }).first(),
+      /aseadora=[0-9a-f-]{36}/,
+    );
+
+    // La espera no es la aserción: la aserción sobre la URL se escribe después.
+    expect(paginaAdmin.url()).toMatch(/aseadora=[0-9a-f-]{36}/);
 
     // El periodo viaja también aquí.
     await expect(paginaAdmin).toHaveURL(new RegExp(`ancla=${diaLimpio}`));
 
-    // Los cuatro bloques, en su orden de lectura: primero lo que está pasando.
-    for (const titulo of [
-      'Ahora mismo',
-      'Sus aseos del periodo',
-      'Sus pagos mes a mes',
-      'Sus gastos reportados',
-    ]) {
-      await expect(paginaAdmin.getByText(titulo, { exact: true })).toBeVisible();
+    // ════════════════════════════════════════════════════════════════════════
+    // TODO LO QUE SIGUE SE ACOTA AL DIALOGO, Y NO ES UN DETALLE DE ESTILO.
+    //
+    // `SheetContent` se portalea a `document.body`: el panel NO vive dentro del
+    // contenedor principal de la página. Medido con un señuelo puesto a mano
+    // dentro del panel, las dos aserciones de no rastreo de más abajo, acotadas
+    // como estaban por `main`, **pasaron en verde con la palabra prohibida
+    // dentro del panel**. Ampliarlas a toda la página tampoco vale: volverían a
+    // ser verdaderas por accidente, mirando el resto de la pantalla.
+    //
+    // Y al revés: leer la PAGINA DE DETRAS con el panel abierto no se puede
+    // hacer por rol, porque Base UI la marca como oculta al árbol de
+    // accesibilidad; para eso se lee del DOM.
+    // ════════════════════════════════════════════════════════════════════════
+    const panel = paginaAdmin.getByRole('dialog');
+    await expect(panel).toBeVisible();
+
+    // Los cuatro grupos de §9.1, en su orden de lectura: primero lo que está
+    // pasando. Los dos de apartamentos llevan su conteo en el encabezado, que es
+    // el dato que el admin busca primero.
+    for (const encabezado of [/^AHORA MISMO$/, /^RESPONSABLE DE \(\d+\)$/, /^EN EL PERIODO ABIERTO$/]) {
+      await expect(panel.getByText(encabezado)).toBeVisible();
     }
 
-    // La etiqueta obligatoria de la cabecera: sin ella, una cifra grande junto a
-    // una persona se lee como "lo que se le debe", y lo que se debe vive en Pagos.
-    await expect(paginaAdmin.getByText('lo que cuesta en el periodo')).toBeVisible();
+    // El cuarto grupo, `SUPLENTE EN`, tiene DOS reglas y las dos se ejercen. Con
+    // esta aseadora el conteo es cero, y §9.3 dice que entonces el grupo entero
+    // NO se renderiza: un encabezado con cero son 46px para decir una ausencia
+    // que nadie fue a buscar.
+    await expect(panel.getByText(/^SUPLENTE EN/)).toHaveCount(0);
 
-    // ── EL BLOQUE 3 IGNORA EL FILTRO, Y LO DICE EN PANTALLA ────────────────
-    // Filtrar el historial de pagos por el rango de arriba dejaría "sus pagos"
-    // con una sola fila cuando el filtro está en `día`, que no responde nada.
-    await expect(paginaAdmin.getByText('Todos sus periodos cerrados')).toBeVisible();
+    // Y la otra mitad, sin la cual la de arriba pasaría con un grupo que no
+    // existe nunca: la aseadora que SI es suplente lo ve, y su panel se abre por
+    // DIRECCION DIRECTA, que es la otra cosa que el panel promete.
+    await paginaAdmin.goto(
+      `/finanzas?rango=dia&ancla=${diaLimpio}&aseadora=${esc.aseadoraDos.id}`,
+    );
+    await expect(panel.getByText(/^SUPLENTE EN \(\d+\)$/)).toBeVisible();
 
-    // Con el filtro en UN día, el bloque de pagos sigue mostrando los DOS
-    // periodos cerrados. Es la prueba de que ignora el filtro de verdad y no solo
-    // de que lo dice en una leyenda.
-    const rotulos = await paginaAdmin.getByText(/^Del\s/).allTextContents();
-    expect(rotulos.length).toBeGreaterThanOrEqual(2);
+    await paginaAdmin.goto(
+      `/finanzas?rango=dia&ancla=${diaLimpio}&aseadora=${esc.aseadoraUna.id}`,
+    );
 
-    // ── AHORA MISMO: uno de los tres estados, y NINGÚN RASTREO ─────────────
-    const ahoraMismo = await paginaAdmin
+    // ── CUATRO ASERCIONES DE LA FICHA MUEREN ACA, Y NINGUNA EN SILENCIO ────
+    //
+    // 1. `lo que cuesta en el periodo`, la etiqueta de la cabecera. La cabecera
+    //    del panel es nombre + estado (§9.2): ya no hay ninguna cifra grande
+    //    junto a la persona, así que la etiqueta que la desambiguaba no tiene
+    //    nada que desambiguar. Lo que dice la cifra lo dice ahora su propio
+    //    rótulo, `Lleva ganado`, dentro del grupo 4.
+    // 2. `Todos sus periodos cerrados` y 3. los rótulos `Del …` del bloque de
+    //    pagos mes a mes. El bloque se cae entero (§0.1 conflicto B). **La
+    //    cobertura que se pierde es de fondo:** era la única aserción del repo
+    //    que comprobaba que ese bloque IGNORA el filtro de periodo de arriba y
+    //    que lo dice en pantalla. Lo que queda vivo por otra ruta es que
+    //    `/finanzas/pagos` no tiene filtro de periodo, y eso sí tiene su caso.
+    //
+    // Las tres son alcanzables por otras rutas, que es el argumento con el que
+    // el dueño las sacó: `/finanzas/aseos?aseador={id}`, el mismo con
+    // `&filtro=con-gastos`, y `/finanzas/pagos`.
+
+    // ── AHORA MISMO: uno de los tres estados ──────────────────────────────
+    // El `toBe(1)` es MAS estricto acotado al panel que como estaba: con el
+    // panel encima de la lista, un estado que también se pintara en la página de
+    // detrás contaría dos veces.
+    const ahoraMismo = await panel
       .getByText(
         /Está en .+ desde las \d{2}:\d{2}\.|No tiene ningún aseo en curso\.|Esta cuenta está desactivada\./,
       )
       .count();
-    expect(ahoraMismo, 'el bloque dice exactamente uno de los tres estados (§8.4)').toBe(1);
+    expect(ahoraMismo, 'el grupo dice exactamente uno de los tres estados (§8.4)').toBe(1);
 
-    await expect(paginaAdmin.getByText('Al momento de abrir esta página.')).toBeVisible();
+    // 4. LA LINEA QUE FECHA EL DATO MUERE, Y ESTA ES LA PERDIDA REAL.
+    //    `Al momento de abrir esta página.` fijaba D-14: un dato operativo que
+    //    parece vivo y no lo está es peor que uno fechado. §17.8 la prohíbe por
+    //    nombre en un panel, con argumento: en algo que se abre y se cierra en
+    //    diez segundos, fecharlo ocupa una línea para decir lo que el gesto ya
+    //    dice. La decisión es correcta Y LA COBERTURA SE PIERDE SIN SUSTITUTO:
+    //    desde acá, ninguna prueba afirma que el admin sepa de cuándo es este
+    //    dato. Queda como deuda declarada, no como aserción reemplazada. La
+    //    condición de reapertura la pone el propio §17.8: si el admin empieza a
+    //    dejar el panel abierto, se reabre.
 
     // No hay GPS y no lo va a haber. Una interfaz que insinúa rastreo crea una
     // expectativa que nadie va a poder cumplir.
-    const pagina = (await paginaAdmin.locator('main').textContent()) ?? '';
-    expect(pagina, 'ninguna palabra de rastreo en la ficha (§8.4)').not.toMatch(
+    const contenido = (await panel.textContent()) ?? '';
+    expect(contenido, 'ninguna palabra de rastreo en el panel (§8.4)').not.toMatch(
       /ubicaci[oó]n|coordenad|GPS|en l[ií]nea|última vez activa/i,
     );
-    await expect(paginaAdmin.locator('main').getByRole('img', { name: /mapa/i })).toHaveCount(0);
+    await expect(panel.getByRole('img', { name: /mapa/i })).toHaveCount(0);
   });
 
   // ═════════════════════════════════════════════════════════════════════════
