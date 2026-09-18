@@ -1,4 +1,6 @@
-import { expect, test } from './fixtures';
+import type { Page } from '@playwright/test';
+
+import { esperarControlHidratado, esperarUrlDeCliente, expect, test } from './fixtures';
 import { cargarEnvLocal, clienteDeServicio } from './global-setup';
 
 /**
@@ -445,6 +447,286 @@ test('el encabezado sigue en pantalla despues de bajar por las 39 filas', async 
   expect(despues.y).toBeGreaterThanOrEqual(0);
   expect(despues.y).toBeLessThan(antes.y);
   await expect(paginaAdmin.getByRole('columnheader', { name: 'Tarifa' })).toBeInViewport();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOS CRITERIOS 1, 2 Y 3 DEL ROADMAP, SOBRE EL ANFITRION QUE MAS LOS EXIGE
+//
+// `08-VALIDATION.md` lista cinco comportamientos de estos tres criterios y los
+// marca TODOS como referencia faltante: hasta este plan no existia ni un solo
+// caso que los afirmara. El plan 08-06 los midio a mano con un andamio
+// desechable; lo que sigue es esa medicion convertida en aserciones que corren
+// en cada CI, para siempre.
+//
+// `/apartamentos` es el anfitrion donde el criterio 1 tiene su prueba mas dura:
+// tres piezas de estado de filtro que viven en el cliente y 39 filas, que es
+// scroll de verdad.
+//
+// ── EL INSTRUMENTO ESTA FIJADO Y NO ES NEGOCIABLE (08-02 §6.2, INSTRUCCION 7) ─
+//
+//   1. Para esperar una navegacion de cliente: `esperarUrlDeCliente()`. NUNCA
+//      `page.waitForURL` ni `expect(page).toHaveURL` COMO ESPERA. Los dos
+//      inyectan su sondeo DENTRO del documento y ese bucle se traba con el
+//      commit de la transicion de React. Medido en este repo el 2026-09-13: con
+//      20 segundos de plazo seguian viendo la URL vieja, mientras la URL leida
+//      desde Node aparece a los ~200 ms. La espera no es la asercion: la
+//      asercion sobre la URL se escribe despues, y se sigue escribiendo.
+//   2. Antes de pulsar un control que navega: `esperarControlHidratado()`. Sin
+//      ella el `<a>` navega DURO y recarga el documento, y entonces el criterio
+//      1 se estaria afirmando sobre una pagina recien cargada, que es justo lo
+//      contrario de lo que promete.
+//   3. Para leer el PANEL: `getByRole('dialog')`. `SheetContent` se portalea a
+//      `document.body`, asi que acotar por un contenedor de pagina deja la
+//      asercion mirando una caja vacia y pasa sin haber comprobado nada. Esta
+//      medido, con su verde falso impreso, en el SUMMARY del plan 08-11.
+//   4. Para leer la PAGINA DE DETRAS con el panel abierto: DEL DOM, nunca por
+//      rol. Base UI marca el resto del documento como oculto al arbol de
+//      accesibilidad, asi que un localizador por rol se cuelga hasta el plazo y
+//      una asercion negativa pasa sin mirar nada. Por eso `medirElSitio()` de
+//      abajo es un `evaluate` y no cuatro localizadores.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** El apartamento desde el que se abre el panel: una fila BAJA de las 23. */
+const FILA_BAJA = '[PLACEHOLDER] Bogotá 1 — Apto 22';
+/** El cluster con el que se filtra. Deja 23 de las 39, que es scroll de verdad. */
+const CLUSTER = 'Bogotá 1';
+
+/** El estado del anfitrion que el criterio 1 promete conservar, leido del DOM. */
+interface ElSitio {
+  scrollY: number;
+  busqueda: string | null;
+  cluster: string | null;
+  pendientes: string | null;
+  filas: number;
+}
+
+/**
+ * Las cuatro medidas del criterio 1, LEIDAS DEL DOM y no miradas.
+ *
+ * Todo pasa por un solo `evaluate` a proposito, y no por cuatro localizadores:
+ * esta funcion se llama tambien CON EL PANEL ABIERTO, y ahi el resto del
+ * documento esta marcado como oculto al arbol de accesibilidad. Un
+ * `getByLabel('Buscar apartamento')` en ese momento no se resuelve nunca.
+ *
+ * El scroll se lee como POSICION (`window.scrollY`) y no por visibilidad de una
+ * fila. La diferencia es toda la prueba: "la fila 22 sigue visible" es cierto
+ * para cualquier posicion que la contenga, incluida una que se movio 300px.
+ */
+async function medirElSitio(pagina: Page): Promise<ElSitio> {
+  return pagina.evaluate(() => {
+    const buscador = document.querySelector<HTMLInputElement>('input[type="search"]');
+    // El VALOR del select, no el disparador entero: el disparador arrastra
+    // ademas el glifo del chevron y devolveria `Bogotá 1▼`.
+    const cluster = document.querySelector<HTMLElement>(
+      '[aria-label="Filtrar por cluster"] [data-slot="select-value"]',
+    );
+    const pendientes = document.querySelector<HTMLElement>('[role="switch"]');
+
+    return {
+      scrollY: window.scrollY,
+      busqueda: buscador === null ? null : buscador.value,
+      cluster: cluster === null ? null : (cluster.textContent ?? '').trim(),
+      pendientes: pendientes === null ? null : pendientes.getAttribute('aria-checked'),
+      filas: document.querySelectorAll('tbody tr').length,
+    };
+  });
+}
+
+/**
+ * Deja el anfitrion con las tres piezas de filtro puestas y la pagina al fondo.
+ *
+ * El termino de busqueda es una sola letra que TODOS los nombres llevan, asi que
+ * quien discrimina es el cluster; lo que interesa del buscador acá no es cuanto
+ * filtra, sino que su texto sobreviva.
+ */
+async function prepararElSitio(pagina: Page): Promise<ElSitio> {
+  await pagina.goto('/apartamentos');
+
+  await pagina.getByLabel('Buscar apartamento').fill('a');
+
+  await pagina.getByRole('combobox', { name: 'Filtrar por cluster' }).click();
+  await pagina.getByRole('option', { name: CLUSTER, exact: true }).click();
+
+  await pagina.getByRole('switch', { name: 'Ver solo pendientes' }).click();
+
+  // Al fondo del todo, que es donde el criterio 1 se juega algo. Con la lista
+  // arriba, "conserva el scroll" se cumple con no hacer nada.
+  await pagina.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+
+  const antes = await medirElSitio(pagina);
+
+  // ── LOS CINCO CONTROLES DEL ESCENARIO, Y NINGUNO SOBRA ────────────────────
+  //
+  // Las aserciones del criterio 1 comparan un ANTES con un DESPUES, y esa forma
+  // tiene un modo de fallo silencioso: si una medida vale `null` en los dos
+  // momentos —porque el selector no encontro el control, porque el atributo se
+  // llama de otra forma— la comparacion pasa en verde sin haber mirado nada. Lo
+  // que sigue fija los cinco valores de partida, asi que ninguna comparacion de
+  // abajo puede ser verdadera por vacuidad.
+  //
+  // Y el primero es ademas el que hace real la mitad de scroll: sin el, "abrir
+  // conserva el scroll" se cumple con no hacer nada sobre una pagina en el tope.
+  expect(antes.scrollY, 'CONTROL: la pagina tiene recorrido vertical de verdad').toBeGreaterThan(
+    400,
+  );
+  expect(antes.busqueda, 'CONTROL: el buscador quedo con su texto').toBe('a');
+  expect(antes.cluster, 'CONTROL: el cluster quedo elegido').toBe(CLUSTER);
+  expect(antes.pendientes, 'CONTROL: el interruptor de pendientes quedo encendido').toBe('true');
+  expect(antes.filas, 'CONTROL: el filtro dejo las 23 filas del cluster').toBe(23);
+
+  return antes;
+}
+
+/**
+ * Pulsa el enlace de una fila DISPARANDO EL CLIC DESDE EL DOCUMENTO.
+ *
+ * ── POR QUE NO ES `locator.click()`, Y NO ES UN CAPRICHO ───────────────────
+ *
+ * El runner hace `scrollIntoViewIfNeeded` ANTES de pulsar. Sobre una pagina al
+ * fondo eso mueve el scroll por su cuenta, y la medida de "antes" que la
+ * asercion compara ya no seria la que el producto recibio: el criterio 1 se
+ * estaria midiendo contra un scroll que movio el instrumento. Es el sesgo 1 de
+ * `08-02-MEDICION.md` §1.1, y el plan 08-06 lo esquivo igual.
+ *
+ * La hidratacion SI se espera con el localizador, porque `Locator.evaluate` no
+ * desplaza nada: solo ejecuta el predicado sobre el nodo.
+ */
+async function abrirDesdeElDocumento(pagina: Page, nombre: string): Promise<void> {
+  await esperarControlHidratado(pagina.getByRole('link', { name: nombre, exact: true }));
+
+  await pagina.evaluate((texto) => {
+    const enlace = [...document.querySelectorAll('a')].find(
+      (a) => (a.textContent ?? '').trim() === texto,
+    );
+    if (enlace === undefined) throw new Error(`No hay ningun enlace con el texto ${texto}.`);
+    enlace.click();
+  }, nombre);
+
+  await esperarUrlDeCliente(pagina, /[?&]apartamento=[0-9a-f-]{36}/);
+}
+
+/**
+ * Deja un centinela mirando el documento: si el subarbol de la tabla llega a
+ * DESMONTARSE durante la apertura, lo apunta.
+ *
+ * Es la firma observable del esqueleto del segmento. `loading.tsx` es el
+ * fallback de Suspense DEL SEGMENTO y tambien se activa cuando solo cambian los
+ * parametros de la consulta, que es exactamente lo que hace abrir el panel. Al
+ * activarse, el contenido del segmento se quita del documento un instante —y el
+ * fallback puede no llegar a pintarse nunca, porque la respuesta vuelve en
+ * ~70 ms— la pagina pierde altura, el navegador recorta el scroll a cero, y
+ * cuando el contenido vuelve la posicion ya se perdio.
+ *
+ * Se miran los NODOS RETIRADOS de cada mutacion y no el conteo de filas del
+ * momento: las mutaciones se entregan en lote al final del microtask, asi que
+ * un quitar-y-poner sincronico se veria como si nada hubiera pasado.
+ */
+async function vigilarElRemonte(pagina: Page): Promise<void> {
+  await pagina.evaluate(() => {
+    const ventana = window as unknown as { __vgTablaRetirada?: boolean };
+    ventana.__vgTablaRetirada = false;
+
+    new MutationObserver((registros) => {
+      for (const registro of registros) {
+        for (const nodo of registro.removedNodes) {
+          if (!(nodo instanceof HTMLElement)) continue;
+          if (nodo.tagName === 'TABLE' || nodo.querySelector('table') !== null) {
+            ventana.__vgTablaRetirada = true;
+          }
+        }
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+}
+
+async function seRetiroLaTabla(pagina: Page): Promise<boolean> {
+  return pagina.evaluate(
+    () => (window as unknown as { __vgTablaRetirada?: boolean }).__vgTablaRetirada === true,
+  );
+}
+
+test('CRITERIO 1 · abrir el panel no mueve el scroll ni toca las tres piezas del filtro', async ({
+  paginaAdmin,
+}) => {
+  const antes = await prepararElSitio(paginaAdmin);
+
+  await vigilarElRemonte(paginaAdmin);
+  await abrirDesdeElDocumento(paginaAdmin, FILA_BAJA);
+
+  const panel = paginaAdmin.getByRole('dialog');
+  await expect(panel).toBeVisible();
+
+  const despues = await medirElSitio(paginaAdmin);
+
+  // ── LAS CUATRO MEDIDAS, CADA UNA CON SU MENSAJE ───────────────────────────
+  // Y son cuatro aserciones y no una sobre el objeto entero: si se juntan, el
+  // rojo dice "los objetos no son iguales" y no dice CUAL de las cuatro se
+  // perdio, que es lo unico que uno quiere saber leyendo ese rojo.
+  expect(despues.scrollY, 'CRITERIO 1: abrir el panel movio el scroll de la lista').toBe(
+    antes.scrollY,
+  );
+  expect(despues.busqueda, 'CRITERIO 1: abrir el panel borro el texto del buscador').toBe(
+    antes.busqueda,
+  );
+  expect(despues.cluster, 'CRITERIO 1: abrir el panel perdio el cluster elegido').toBe(
+    antes.cluster,
+  );
+  expect(despues.pendientes, 'CRITERIO 1: abrir el panel apago Ver solo pendientes').toBe(
+    antes.pendientes,
+  );
+
+  // Y la quinta, que es la consecuencia visible de las tres anteriores: la lista
+  // de detras no se recompuso.
+  expect(despues.filas, 'CRITERIO 1: la lista filtrada se recompuso al abrir').toBe(antes.filas);
+
+  // ── EL ESQUELETO DEL SEGMENTO NO APARECE, Y AQUI QUEDA FIJADO ─────────────
+  // El plan 08-02 midio que no aparece (VEREDICTO 3) y el 08-04 quito el archivo
+  // que lo causaba. Sin esta linea, el dia que alguien lo reintroduzca "para
+  // recuperar el esqueleto" las cuatro de arriba se caerian sin decir por que.
+  expect(
+    await seRetiroLaTabla(paginaAdmin),
+    'CRITERIO 1: la tabla se retiro del documento al abrir, o sea que el esqueleto del segmento se activo',
+  ).toBe(false);
+});
+
+test('CRITERIO 1 · cerrar el panel devuelve al mismo sitio, con el filtro intacto', async ({
+  paginaAdmin,
+}) => {
+  const antes = await prepararElSitio(paginaAdmin);
+  await abrirDesdeElDocumento(paginaAdmin, FILA_BAJA);
+
+  const panel = paginaAdmin.getByRole('dialog');
+  await expect(panel).toBeVisible();
+
+  // El control de cierre vive DENTRO del panel, asi que se acota al dialogo. Y
+  // se espera su hidratacion por lo mismo que el enlace de apertura.
+  const cerrar = panel.getByRole('button', { name: 'Cerrar' });
+  await esperarControlHidratado(cerrar);
+  await cerrar.click();
+
+  await esperarUrlDeCliente(paginaAdmin, /\/apartamentos$/);
+
+  // La espera no es la asercion.
+  expect(paginaAdmin.url()).toMatch(/\/apartamentos$/);
+
+  const despues = await medirElSitio(paginaAdmin);
+
+  expect(despues.scrollY, 'CRITERIO 1: cerrar el panel movio el scroll de la lista').toBe(
+    antes.scrollY,
+  );
+  expect(despues.busqueda, 'CRITERIO 1: cerrar el panel borro el texto del buscador').toBe(
+    antes.busqueda,
+  );
+  expect(despues.cluster, 'CRITERIO 1: cerrar el panel perdio el cluster elegido').toBe(
+    antes.cluster,
+  );
+  expect(despues.pendientes, 'CRITERIO 1: cerrar el panel apago Ver solo pendientes').toBe(
+    antes.pendientes,
+  );
+  expect(despues.filas, 'CRITERIO 1: la lista filtrada se recompuso al cerrar').toBe(antes.filas);
+
+  // Y la quinta del caso de cerrar: el panel se fue de verdad.
+  await expect(panel).toHaveCount(0);
 });
 
 test('un aseador no llega al catalogo del admin', async ({ paginaAseador }) => {
