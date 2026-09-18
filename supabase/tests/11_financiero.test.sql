@@ -248,6 +248,58 @@
 --   ninguna de las cuatro garantías, porque la función es nueva y no hay ningún
 --   CHECK ni ningún índice que la respalde por detrás.
 --
+-- ── CIERRE DE LA FASE 8, 2026-09-18, plan 08-14 (la compuerta) ─────────────
+--
+-- Este archivo NO cambió de aserciones en las waves 4, 5 y 6: sigue en
+-- `plan(105)` y las 380 de `db:test` están en verde. Lo que se anota acá es la
+-- CONTABILIDAD de los señuelos de la fase, porque la regla de arriba es de la
+-- fase entera y no solo de este archivo: una aserción sin señuelo corrido es una
+-- promesa sin recibo, viva donde viva.
+--
+--   Señuelos de BASE (este archivo):  4, más una variante. Números 7, 8, 8b,
+--                                     9 y 10 de arriba. Los cuatro en rojo a la
+--                                     primera, y DOS con radio distinto al
+--                                     predicho (8b y 9), que es lo más útil que
+--                                     dejó el bloque.
+--
+--   Señuelos de INTERFAZ (specs E2E): 9 en 08-11, 8 en 08-12, 8 en 08-13, y 2
+--                                     más que 08-14 tuvo que correr porque el
+--                                     cruce del inventario los encontró sin
+--                                     contra-prueba. Sus rojos reales están en
+--                                     los SUMMARY de cada plan; el de 08-14 en
+--                                     `08-14-SUMMARY.md`.
+--
+-- ── EL HALLAZGO MÁS TRANSFERIBLE DE LA FASE 8, Y LE VA A VOLVER A PASAR A ──
+--    QUIEN AÑADA UN PANEL EN LA FASE 9
+--
+-- Una aserción acotada por un contenedor que el portal deja vacío PASA SIN
+-- MIRAR NADA. No es un test que alguien debilitó: es un test que se debilitó
+-- solo, el día que la ficha de aseadora pasó de página a panel.
+--
+-- `SheetContent` se portalea a `document.body`, así que el panel NO vive dentro
+-- del contenedor principal de la página. El plan 08-11 lo midió en crudo: metió
+-- la palabra prohibida DENTRO del panel y corrió la misma aserción sobre el
+-- mismo documento cambiando SOLO el ámbito. La salida, literal:
+--
+--     ✓  1 CONTROL: el señuelo SI está dentro del panel
+--     ✓  2 CASO A · ambito viejo: pasa en VERDE con la palabra prohibida
+--          dentro del panel
+--     ✘  3 CASO B · ambito nuevo: se pone ROJO con el mismo señuelo
+--
+-- Las tres líneas, en orden: la palabra prohibida ESTÁ en el panel (sin ese
+-- control positivo, el caso A pasaría por no haber señuelo); con
+-- `locator('main')` la aserción pasa en verde; con `getByRole('dialog')` se
+-- pone roja.
+--
+-- **Y la otra mitad, que nadie escribe:** con el panel abierto, Base UI marca el
+-- resto del documento como oculto al árbol de accesibilidad. Un
+-- `toHaveCount(0)` o un `not.toMatch` sobre la PÁGINA DE DETRÁS pasa porque no
+-- ve nada. Para leer la página de detrás con un panel encima hay que leer del
+-- DOM, nunca por rol.
+--
+-- Esto vale para cualquier aserción de seguridad de este repo que se ejerza con
+-- un panel abierto, y por eso queda escrito aquí y no solo en un spec.
+--
 -- ── SEÑUELOS 1 Y 2: LOS DOS HALLAZGOS, Y POR QUÉ NO SON UN TRÁMITE ─────────
 --
 -- Ninguno de los dos puso NADA en rojo a la primera. No porque las líneas
@@ -1612,6 +1664,33 @@ select is(
 --    `lib/data/finanzas-detalle.ts` y todas con sus pruebas unitarias vivas.
 --    `leerAseadoraDeLaFicha`, `leerAhoraMismo` e `identificadorValido` SÍ siguen
 --    en uso: las consume el panel nuevo.
+--
+--    ── AMPLIACIÓN 08-14: LA LISTA DE ARRIBA ESTABA INCOMPLETA, Y LO QUE
+--       FALTABA ERAN COMPONENTES, NO FUNCIONES ────────────────────────────
+--
+--    La compuerta de la fase midió los consumidores de verdad y encontró DOS
+--    cosas más que se quedaron sin ninguno cuando la página se borró:
+--
+--      app/(admin)/finanzas/_components/FichaAseadora.tsx   ← el archivo ENTERO
+--        cero consumidores en `app`, `lib`, `components` y `e2e`. Con él se
+--        quedan sin alcanzar sus dos funciones internas, `BloquePagos` y
+--        `BloqueGastos`, y es el único importador que le queda a `DialogoRecibo`
+--        por esa vía.
+--
+--      la función `BloqueAhoraMismo` de `BloqueAhoraMismo.tsx`
+--        su ÚNICO importador era `FichaAseadora`. Lo que sí sigue vivo de ese
+--        archivo es `estadoDeAhoraMismo`, que es lo que consume `PanelAseadora`.
+--
+--    **Y tiene una consecuencia que no es de higiene sino de cobertura.** La
+--    línea `Al momento de abrir esta página.` vive SOLO dentro de esa función
+--    huérfana. O sea que no es que su aserción muriera y el producto siguiera
+--    diciéndolo por otro lado: el fechado del dato ya no tiene ningún camino de
+--    render. La pérdida declarada en `08-11-SUMMARY.md` es real por partida
+--    doble.
+--
+--    **NO SE BORRAN AQUÍ**, por la misma regla de alcance que gobierna toda la
+--    fase: este plan es una compuerta y su diff son documentos y comentarios.
+--    Queda escrito en `deferred-items.md` para quien haga limpieza.
 -- ═══════════════════════════════════════════════════════════════════════════
 
 -- 60 LA CONCILIACIÓN RESUMEN ↔ DETALLE. Se escribe como tres booleanos y no
