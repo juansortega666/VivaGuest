@@ -371,11 +371,18 @@ export function FormularioApartamento({
       toast.success(resultado.mensaje);
 
       if (!fila && resultado.id) {
-        // Al CREAR hay que quedarse en el detalle del apartamento nuevo. Sin
-        // esto, el segundo `Guardar` volvería a insertar y el admin se
-        // encontraría con `Ya existe un apartamento con ese nombre.` sobre un
-        // apartamento que acaba de crear él mismo.
-        router.replace(`/apartamentos/${resultado.id}`);
+        // Al CREAR hay que SALIR DEL FORMULARIO. Sin esto, el segundo `Guardar`
+        // volvería a insertar y el admin se encontraría con `Ya existe un
+        // apartamento con ese nombre.` sobre un apartamento que acaba de crear
+        // él mismo. Esa razón no ha cambiado y no se borra.
+        //
+        // Lo que cambia en la Fase 8 es el DESTINO (08-UI-SPEC §5.4, D8-11): se
+        // aterriza en la LISTA CON EL PANEL ABIERTO, no en el formulario de
+        // edición del recién creado. El defecto sigue cerrado —la lista tampoco
+        // tiene un `Guardar` que volver a pulsar— y el admin ve el apartamento
+        // en su sitio, entre los demás, en vez de releer los doce campos que
+        // acaba de llenar.
+        router.replace(`/apartamentos?apartamento=${resultado.id}`);
         return;
       }
 
