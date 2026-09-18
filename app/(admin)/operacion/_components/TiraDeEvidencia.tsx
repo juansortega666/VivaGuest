@@ -2,7 +2,8 @@ import { ImageOff } from 'lucide-react';
 
 import { MINIATURAS_VISIBLES, type FotoDelPanel } from '@/lib/data/panel-aseo';
 
-import { DialogoFoto, deQueEsLaFoto } from './DialogoFoto';
+import { DialogoFoto } from './DialogoFoto';
+import { deQueEsLaFoto } from './etiqueta-de-foto';
 
 /**
  * LA TIRA DE MINIATURAS DEL GRUPO `EVIDENCIA` (08-UI-SPEC §10.3).

@@ -17,6 +17,12 @@ import {
 import type { FotoDelPanel } from '@/lib/data/panel-aseo';
 import { formatHoraBog } from '@/lib/domain/dates';
 
+// La etiqueta vive en su propio módulo SIN directiva y no acá: la llama también
+// `TiraDeEvidencia`, que es de servidor, y exportarla desde un módulo de cliente
+// hace que esa llamada reviente en tiempo de render. La razón entera, con el
+// error literal y con por qué nadie lo vio hasta el plan 08-13, está allá.
+import { deQueEsLaFoto } from './etiqueta-de-foto';
+
 /**
  * UNA FOTO DE LA EVIDENCIA, EN GRANDE (08-UI-SPEC §10.3).
  *
@@ -93,18 +99,6 @@ function SinFoto() {
       </div>
     </div>
   );
-}
-
-/**
- * De qué es la foto, en palabras.
- *
- * `lib/data/panel-aseo.ts` ya resolvió la etiqueta contra el checklist, los
- * gastos y los daños que esa misma lectura trajo, así que acá no se cruza nada.
- * Nula cuando la foto no cuelga de nada con nombre, y entonces se dice lo único
- * que se sabe con certeza: que es del aseo.
- */
-export function deQueEsLaFoto(foto: FotoDelPanel): string {
-  return foto.etiqueta ?? 'el aseo';
 }
 
 export function DialogoFoto({
