@@ -3,11 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   diaDeLaSemana,
   formatFechaBog,
+  formatDiaCortoBog,
   formatFechaCortaBog,
   formatFechaLargaBog,
   formatHoraLimite,
   horasDesdeDtstamp,
   hoyBog,
+  formatSincronizacionBog,
   nombreDeDiaBog,
   nombreDeMesBog,
   primeroDelMes,
@@ -398,5 +400,72 @@ describe('primeroDelMes y ultimoDiaDelMes', () => {
         expect(siguiente).toBe(primeroDelMes(siguiente));
       }
     }
+  });
+});
+
+describe('formatDiaCortoBog', () => {
+  it('abrevia el dia de la semana y NO pone cero a la izquierda', () => {
+    // La anatomia de 08-UI-SPEC §8.1 pinta `jue 4`, no `jue 04`.
+    expect(formatDiaCortoBog('2026-09-04')).toBe('vie 4');
+    expect(formatDiaCortoBog('2026-09-18')).toBe('vie 18');
+  });
+
+  it('recorre los siete dias de una semana completa', () => {
+    // Del domingo al sabado, que es el orden de la tabla y el de
+    // `diaDeLaSemana()`. Un desfase de uno en el indice se ve aqui entero.
+    expect(formatDiaCortoBog('2026-09-13')).toBe('dom 13');
+    expect(formatDiaCortoBog('2026-09-14')).toBe('lun 14');
+    expect(formatDiaCortoBog('2026-09-15')).toBe('mar 15');
+    expect(formatDiaCortoBog('2026-09-16')).toBe('mié 16');
+    expect(formatDiaCortoBog('2026-09-17')).toBe('jue 17');
+    expect(formatDiaCortoBog('2026-09-18')).toBe('vie 18');
+    expect(formatDiaCortoBog('2026-09-19')).toBe('sáb 19');
+  });
+
+  it('el dia calendario no se corre en Bogota', () => {
+    // El defecto que este archivo entero existe para evitar: con
+    // `new Date('2026-09-04')` el 4 se pinta como 3 en UTC-5.
+    process.env.TZ = 'America/Bogota';
+    expect(formatDiaCortoBog('2026-09-04')).toBe('vie 4');
+    expect(formatDiaCortoBog('2026-01-01')).toBe('jue 1');
+  });
+});
+
+describe('formatSincronizacionBog', () => {
+  // Las 09:42 de Bogota del 17 de septiembre de 2026 son las 14:42 UTC.
+  const HOY = '2026-09-17';
+  const MANANA_DE_HOY = Date.UTC(2026, 8, 17, 14, 42);
+
+  it('el mismo dia de Bogota dice `hoy` y lleva hora', () => {
+    expect(formatSincronizacionBog(MANANA_DE_HOY, HOY)).toBe('hoy, 09:42');
+  });
+
+  it('el dia anterior dice `ayer` y lleva hora', () => {
+    // 21:15 de Bogota del 16 son las 02:15 UTC del 17: el corte es por DIA
+    // CALENDARIO de Bogota, no por una resta de 24 horas.
+    expect(formatSincronizacionBog(Date.UTC(2026, 8, 17, 2, 15), HOY)).toBe('ayer, 21:15');
+  });
+
+  it('mas atras pierde la hora y se queda en la fecha larga', () => {
+    expect(formatSincronizacionBog(Date.UTC(2026, 8, 4, 14, 0), HOY)).toBe('4 de septiembre');
+  });
+
+  it('el cruce de mes no rompe el `ayer`', () => {
+    // El 1 de octubre, lo del 30 de septiembre sigue siendo ayer. Una resta de
+    // numeros de dia daria `1 - 30` y no lo veria.
+    expect(formatSincronizacionBog(Date.UTC(2026, 8, 30, 19, 30), '2026-10-01')).toBe(
+      'ayer, 14:30',
+    );
+  });
+
+  it('una marca nula o ilegible devuelve null, no un 1970', () => {
+    // Un feed recien conectado no ha sincronizado nunca.
+    expect(formatSincronizacionBog(null, HOY)).toBeNull();
+    expect(formatSincronizacionBog(undefined, HOY)).toBeNull();
+    expect(formatSincronizacionBog('no es una marca', HOY)).toBeNull();
+  });
+
+  it('acepta la cadena ISO que devuelve PostgREST para un timestamptz', () => {
+    expect(formatSincronizacionBog('2026-09-17T14:42:00+00:00', HOY)).toBe('hoy, 09:42');
   });
 });
