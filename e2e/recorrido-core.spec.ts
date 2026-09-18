@@ -14,6 +14,7 @@ import { cargarEnvLocal, clienteDeServicio } from './global-setup';
 import {
   aseosDe,
   aseosVivosDe,
+  conectarFeed,
   correrSync,
   correrSyncEncadenado,
   icsDe,
@@ -53,8 +54,22 @@ import {
  * Un caso de veinte aserciones aborta en la primera que falle, así que un
  * señuelo puede poner rojo el caso sin que nadie sepa QUÉ aserción lo atrapó, o
  * peor: puede estar atrapándolo una aserción anterior por otro motivo. Por eso
- * TODA aserción de este archivo lleva mensaje propio, y la bitácora de señuelos
- * del SUMMARY anota el mensaje literal que salió en rojo, no «el caso falló».
+ * TODA aserción de este archivo lleva mensaje propio, y la bitácora de abajo
+ * anota el mensaje literal que salió en rojo, no «el caso falló».
+ *
+ * ── BITÁCORA DE SEÑUELOS (plan 09-01, 2026-09-18) ──────────────────────────
+ *
+ * Una suite en verde demuestra que el código pasa los tests. NO demuestra que
+ * los tests puedan fallar. Los cinco defectos de abajo se metieron a propósito
+ * EN EL PRODUCTO, se corrieron, se anotó qué se puso rojo y se revirtieron.
+ *
+ * | # | Qué se rompió | Qué se puso rojo |
+ * |---|---|---|
+ * | 1 | `ical-normalizar.ts`: un día menos al `DTEND` | (1ª vuelta, estadía de UNA noche) «el cuerpo trae UNA reserva clasificada…», NO la de la fecha. Con el rango colapsado, `res_dates_ok` la tumba antes. (2ª vuelta, cuatro noches) «el aseo va el día del DTEND (…), SIN sumarle ni restarle un día…», y ninguna otra: 1 caso rojo de 3 |
+ * | 2 | `ical-clasificar.ts`: el bloqueo devuelto como `reserva` | «el cuerpo trae UNA reserva clasificada…». Con `expect.soft` se midió el radio completo: caen también «el cuerpo trae UN bloqueo clasificado…» y «un checkout produce UN aseo…». Tres capas distintas, ninguna redundante |
+ * | 3 | migración 04: los dos índices únicos parciales dejan de cubrir los aseos VIVOS (`where state = 'cancelada'`) | los 3 casos. «un checkout produce UN aseo…», «después de la segunda corrida sigue habiendo UN aseo…» y «y lo crea DE VERDAD: `cleanings_created` en 1…». El duplicado del primer sync lo mete la REPESCA ADITIVA del paso (e.3) de la migración 13, que repite el paso (c): su idempotencia es el índice y nada más |
+ * | 4 | `route.ts` bloque 8: el atajo del hash sin su segunda condición | (1ª vuelta) NADA. El sembrador dejaba `last_payload_hash` en nulo, así que el atajo no se alcanzaba nunca. Es lo que obligó a escribir `conectarFeed()`. (2ª vuelta) «el worker tiene que terminar en `ok`…», y con `expect.soft` también «…UNA reserva clasificada», «…UN bloqueo clasificado» y «un checkout produce UN aseo…». `hits` sigue verde: el fetch sí ocurre |
+ * | 5 | `lib/data/operacion.ts`: ventana de lectura estrechada a `hoy + 1` | SOLO «el aseo que salió del feed tiene que verse en /operacion…». Las cinco aserciones de base pasaron. Es lo que demuestra que la pantalla y la base no miden lo mismo |
  */
 
 /** La cabecera colapsable de un bloque de día, por su rótulo. */
@@ -128,12 +143,28 @@ test('un checkout publicado en el .ics se vuelve un aseo con su fecha, y el admi
   const cuerpo = icsDe(hoy, [
     // Una reserva, con su código dentro de la `DESCRIPTION` como en los feeds de
     // verdad.
-    { desde: 1, hasta: 2, uid: `rec-reserva-${unidad.sufijo}@airbnb.com`, codigo: 'HMYXB825YD' },
+    //
+    // ── LA ESTADÍA ES DE CUATRO NOCHES Y NO DE UNA, Y ESO LO DECIDIÓ UN SEÑUELO ─
+    // Con `desde: 1` (una sola noche), restarle un día al `DTEND` en el
+    // normalizador deja `ends_on === starts_on`, la reserva incumple
+    // `res_dates_ok` del RPC y sale contada como DESCONOCIDA. O sea que el
+    // defecto de la fecha se manifestaba como «cero reservas» y lo atrapaba la
+    // aserción de conteos, tres aserciones ANTES de llegar a la de la fecha, que
+    // es la que este caso existe para sostener. Con cuatro noches el rango sigue
+    // siendo válido tras el defecto y el aseo aterriza en el día equivocado, que
+    // es lo que hay que poder ver.
+    { desde: -2, hasta: 2, uid: `rec-reserva-${unidad.sufijo}@airbnb.com`, codigo: 'HMYXB825YD' },
     // Y un bloqueo del propietario, que NO debe generar nada. Va en el mismo
     // cuerpo a propósito: si estuviera en otro caso, la aserción de «un solo
     // aseo» pasaría por no haber visto nunca un bloqueo.
     { desde: 20, hasta: 25, uid: `rec-bloqueo-${unidad.sufijo}@airbnb.com` },
   ]);
+
+  // El admin ya conectó el calendario con ESTE cuerpo, que es el estado de
+  // partida real: `last_payload_hash` escrito y ninguna corrida hecha todavía.
+  // Sin esto, el primer sync nunca entra en el atajo del hash y la guarda que lo
+  // impide se queda sin ejercitar (ver la cabecera de `conectarFeed`).
+  await conectarFeed(unidad.feedId, cuerpo);
 
   const corrida = await correrSync(request, unidad.feedId, cuerpo);
 
@@ -227,7 +258,10 @@ test('un checkout publicado en el .ics se vuelve un aseo con su fecha, y el admi
  */
 function icsDeUnaReserva(sufijo: string): string {
   return icsDe(hoy, [
-    { desde: 1, hasta: 2, uid: `rec-repetida-${sufijo}@airbnb.com`, codigo: 'HMYXB825YD' },
+    // Cuatro noches, por la misma razón que el caso del tramo completo: una
+    // estadía de una sola noche se vuelve inválida ante cualquier defecto que
+    // mueva un extremo, y el caso deja de medir lo que dice.
+    { desde: -2, hasta: 2, uid: `rec-repetida-${sufijo}@airbnb.com`, codigo: 'HMYXB825YD' },
   ]);
 }
 

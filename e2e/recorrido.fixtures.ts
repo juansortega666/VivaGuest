@@ -1,10 +1,12 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import type { APIRequestContext } from '@playwright/test';
 
 import type { Database } from '@/lib/database.types';
+import { contarPorClasificacion } from '@/lib/domain/ical-guardas';
+import { normalizarIcs } from '@/lib/domain/ical-normalizar';
 
 import { sumarDias, type Servicio } from './fixtures';
 
@@ -516,6 +518,53 @@ export async function sembrarUnidadDeRecorrido(
     tarifas: gestionada ? { ...TARIFAS } : null,
     sufijo,
   };
+}
+
+/**
+ * Deja el feed COMO LO DEJA EL ADMIN CUANDO CONECTA EL CALENDARIO, y sin esto
+ * hay una guarda del worker que ninguna prueba de interfaz puede alcanzar.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ESTA FUNCIÓN LA ESCRIBIÓ UN SEÑUELO QUE NO PUSO NADA EN ROJO.
+ *
+ * El bloque 8 de `app/api/cron/sync-feed/route.ts` corta con `sin_cambios`
+ * cuando el sha256 del cuerpo coincide con `last_payload_hash`, PERO solo si ya
+ * hubo una corrida `ok` antes. Esa segunda condición existe por un caso
+ * concreto: `guardarFeed` escribe `last_payload_hash` AL CONECTAR el calendario,
+ * sin haber llamado nunca al RPC, así que sin ella un apartamento recién
+ * conectado vería su primer sync cortado por el hash y NO GENERARÍA NI UN ASEO
+ * hasta que el proveedor cambiara el cuerpo.
+ *
+ * Medido: con el sembrador dejando `last_payload_hash` en nulo, quitar esa
+ * segunda condición del worker deja los tres casos de `recorrido-core` EN VERDE.
+ * O sea que el arnés no reproducía el estado de partida real y la guarda quedaba
+ * sin ejercitar. Con esta función, el recorrido arranca donde arranca de verdad:
+ * en un calendario que un admin ya validó.
+ * ════════════════════════════════════════════════════════════════════════════
+ *
+ * Los dos valores salen del MISMO camino que en producción: el hash del cuerpo
+ * y el conteo de reservas clasificadas, que es lo que `last_event_count` guarda
+ * (reservas, no eventos) y lo que la pantalla del calendario le mostró al admin.
+ */
+export async function conectarFeed(feedId: string, cuerpo: string): Promise<void> {
+  const estado = registro.get(feedId);
+  if (!estado) throw new Error(`El feed ${feedId} no lo sembró este arnés.`);
+
+  const ahora = new Date().toISOString();
+  const { error } = await estado.servicio
+    .from('calendar_feeds')
+    .update({
+      last_attempt_at: ahora,
+      last_success_at: ahora,
+      last_http_status: 200,
+      last_event_count: contarPorClasificacion(normalizarIcs(cuerpo)).reservation_count,
+      last_payload_hash: createHash('sha256').update(cuerpo).digest('hex'),
+      last_error: null,
+      consecutive_failures: 0,
+    })
+    .eq('id', feedId);
+
+  if (error) throw new Error(`No se pudo marcar el feed como conectado: ${error.message}`);
 }
 
 // ───────────────────────────────────────────────────────────────────────────
