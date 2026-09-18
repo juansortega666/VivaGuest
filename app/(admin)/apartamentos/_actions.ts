@@ -441,6 +441,24 @@ function filaDeProperties(
  * también: `properties` primero porque `property_secrets.property_id` es una FK
  * contra ella, así que al crear no hay a qué colgar los secretos hasta tener el
  * id.
+ *
+ * ── PARA QUÉ SE DEVUELVE EL `id`, Y DÓNDE ATERRIZA AHORA (§5.4, D8-11) ──────
+ *
+ * El `id` viaja de vuelta porque al CREAR hay que sacar al admin del formulario:
+ * sin eso, un segundo `Guardar` insertaría otra vez y chocaría con el índice
+ * único del nombre, y el admin leería `Ya existe un apartamento con ese nombre.`
+ * sobre un apartamento que acaba de crear él mismo.
+ *
+ * Lo que cambia en la Fase 8 es el DESTINO, no la razón. Antes se aterrizaba en
+ * `/apartamentos/{id}`, o sea en el formulario de edición del recién creado.
+ * Ahora se aterriza en `/apartamentos?apartamento={id}`: la lista con su panel
+ * abierto. El defecto sigue igual de cerrado —la lista tampoco tiene un botón
+ * `Guardar` que volver a pulsar— y encima el admin ve el apartamento en su
+ * sitio, entre los demás, en vez de mirando otra vez los doce campos que acaba
+ * de llenar.
+ *
+ * La navegación la hace quien llama, no esta función: la decisión de redirigir
+ * es de la pantalla, y `FormularioApartamento.tsx` es la única que crea.
  */
 export async function guardarApartamento(
   entrada: EntradaApartamento,
@@ -821,4 +839,137 @@ export async function leerSecretos(id: string): Promise<SecretosApartamento | nu
   if (error) return null;
 
   return data ?? null;
+}
+
+/**
+ * Lo único que puede salir de acá hacia el navegador cuando el admin pide el
+ * código (08-UI-SPEC §7.3). DOS campos, y el tipo es la barrera.
+ *
+ * ── POR QUÉ EL FALLO NO TRAE MENSAJE, Y ES DELIBERADO ───────────────────────
+ *
+ * La lectura en la que esta acción delega colapsa a propósito tres desenlaces
+ * distintos en un mismo `null`: que el apartamento no exista, que quien pregunta
+ * no sea admin, y que la base haya fallado. Los colapsa para no ser un oráculo
+ * de qué ids existen, y esa decisión ya está escrita y razonada en su cabecera.
+ *
+ * Consecuencia directa: acá no hay nada verdadero que decir más allá de "no".
+ * Inventar tres mensajes distintos desharía esa mitigación desde la puerta de al
+ * lado, y devolver uno solo sería el copy de §15.2 escrito dos veces, una en el
+ * servidor y otra en el cliente. El copy vive en el componente, que es donde
+ * vive todo el copy de la fase, y es el mismo para los tres desenlaces.
+ *
+ * Y la regla de que NUNCA se renderiza un texto crudo de Postgres se cumple acá
+ * por construcción, no por disciplina: ningún string de la base llega a cruzar,
+ * porque la lectura delegada ya se lo tragó antes.
+ */
+export type ResultadoCodigoDeAcceso =
+  | { ok: true; codigo: string | null; tipoCerradura: string }
+  | { ok: false };
+
+/**
+ * EL CÓDIGO DE LA CERRADURA, PARA EL ADMIN, Y SOLO CUANDO LO PIDE (§7.3).
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ES UNA ACCIÓN, Y NO UNA PROP DEL PANEL, POR UNA RAZÓN MEDIDA
+ *
+ * La dirección del panel de apartamento es COMPARTIBLE POR DISEÑO: es el
+ * criterio 2 del ROADMAP, el enlace se pega en un chat y abre lo mismo. Si el
+ * código se renderizara al abrir, ese enlace entregaría el código de la
+ * cerradura a quien sea que abra el chat.
+ *
+ * Y no bastaría con esconderlo detrás de un `useState`: lo que se pasa como prop
+ * a un componente de cliente VIAJA EN LA CARGA DE REACT y queda en el documento
+ * aunque no se pinte. Es la frase literal que ya está escrita en
+ * `apartamentos/[id]/calendario/page.tsx`, sobre ESTA MISMA TABLA, y su caso de
+ * punta a punta comprueba que el secreto no está en el documento antes de pulsar
+ * (T-02-74). El código de acceso recibe el mismo tratamiento porque es el mismo
+ * problema.
+ *
+ * ── POR QUÉ EL GUARD ESTÁ ESCRITO A MANO AUNQUE EL SCRIPT NO LO EXIJA ──────
+ *
+ * El guardarraíl 7 de `scripts/ci/check-service-role.sh` recorre las funciones
+ * que construyen la fábrica administrativa EN SU PROPIO CUERPO. Esta función
+ * delega esa construcción, así que el recorrido no ve nada dentro de ella y
+ * calla. Eso NO la exime: un Server Action es un endpoint HTTP público, y
+ * cualquiera con el id de la acción y un payload la invoca directamente. Es
+ * exactamente la clase de hueco que el propio script llama, con esas palabras,
+ * un falso verde POR AUSENCIA.
+ *
+ * Y el guardarraíl 8 tampoco se dispara, porque esta función no nombra la tabla
+ * de secretos. Si alguien "simplifica" escribiendo la consulta a mano, SÍ se
+ * dispara, que es justo el comportamiento correcto.
+ *
+ * ── NO MUTA Y NO REVALIDA ─────────────────────────────────────────────────
+ *
+ * Es una lectura. Y ninguna acción de esta fase pide revalidación de ruta:
+ * está medido en el plan 04-14 que eso cuelga el navegador en este árbol.
+ *
+ * El valor que devuelve NO se registra en ningún log (T-02-51), igual que la
+ * lectura de la que sale.
+ */
+export async function revelarCodigoDeAcceso(id: string): Promise<ResultadoCodigoDeAcceso> {
+  // ── 1. GUARD, ANTES QUE NADA ────────────────────────────────────────────────
+  try {
+    await exigirAdmin();
+  } catch (e) {
+    if (e instanceof NoAutorizado) return { ok: false };
+    throw e;
+  }
+
+  // ── 2. VALIDACIÓN ───────────────────────────────────────────────────────────
+  const revisado = esquemaId.safeParse(id);
+  if (!revisado.success) return { ok: false };
+
+  // ── 3. LA LECTURA QUE YA TIENE SU PROPIO GUARD Y SU PROPIA FÁBRICA ─────────
+  const secretos = await leerSecretos(revisado.data);
+  if (!secretos) return { ok: false };
+
+  // ── 4. PROYECCIÓN A DOS CAMPOS, Y ESTE PASO ES EL QUE NO SE PUEDE RESUMIR ──
+  //
+  // La lectura de arriba devuelve CUATRO credenciales en un solo objeto, y una
+  // de ellas es la del calendario. Esa no puede salir de esta función, y no es
+  // una cuestión de pulcritud: su propia cabecera dice que una petición a esa
+  // dirección revela la ocupación completa del apartamento SIN AUTENTICARSE.
+  //
+  // O sea que `return secretos` —que es lo que escribe cualquiera que tenga
+  // prisa, y compila— abriría al navegador exactamente la credencial que §8.2
+  // prohíbe explícitamente en el panel de calendario, conseguida por la puerta
+  // de al lado. El tipo de retorno de esta función es lo que lo impide, y por
+  // eso está declarado a mano y no inferido.
+  //
+  // El nombre literal de esa columna NO se escribe en este comentario a
+  // propósito: los guardarraíles de CI trabajan por expresión regular sobre el
+  // código y ya han roto el build cuatro veces por un comentario que citaba un
+  // token prohibido. Se describe el patrón, no se escribe el token.
+  return {
+    ok: true,
+    codigo: secretos.codigo_acceso,
+    tipoCerradura: secretos.tipo_cerradura,
+  };
+}
+
+/**
+ * SI EL APARTAMENTO TIENE CÓDIGO O NO. UN BOOLEANO, NUNCA EL VALOR.
+ *
+ * §7.3 tiene cinco estados y uno de ellos —`Sin código`— se decide ANTES de que
+ * nadie pulse nada: esa fila muestra la ausencia y NO lleva botón, porque un
+ * botón que abre un vacío es un viaje para nada. Para elegir entre ese estado y
+ * el estado oculto hace falta saber si hay algo detrás, y eso el panel no lo
+ * sabe: la lista de apartamentos no lee esta tabla, ni puede, porque no tiene
+ * grant para `authenticated`.
+ *
+ * Existe como función aparte, y no como una línea dentro del panel, justamente
+ * para que el objeto entero de credenciales NUNCA llegue a ser una variable en
+ * el ámbito de un componente que se renderiza. Ahí es donde una línea de
+ * descuido lo manda al documento, y el plan 08-06 ya lo dejó escrito al decidir
+ * que la máscara de esa fila fueran seis puntos literales y no el código
+ * enmascarado.
+ *
+ * Devuelve `false` también cuando no hay derecho a saberlo o cuando la lectura
+ * falla. Es la degradación correcta: la fila se pinta como ausencia y no ofrece
+ * un botón que de todos modos iba a fallar.
+ */
+export async function hayCodigoDeAcceso(id: string): Promise<boolean> {
+  const secretos = await leerSecretos(id);
+  return secretos?.codigo_acceso != null;
 }
