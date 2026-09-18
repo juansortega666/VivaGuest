@@ -46,6 +46,54 @@ export const metadata: Metadata = {
 };
 
 /**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ESTA RUTA NO TIENE ARCHIVO DE CARGA DE SEGMENTO, Y ES DELIBERADO. MEDIDO EL
+ * 2026-09-17 EN EL PLAN 08-02.
+ *
+ * Lo tuvo, con un esqueleto de geometria real que reproducia los dos carriles,
+ * la franja de chips, las cabeceras de dia y las dos cards del lateral. Se borro
+ * porque era la causa medida de que ABRIR UN PANEL LATERAL mandara la tabla del
+ * dia al tope.
+ *
+ * `loading.tsx` es el fallback de Suspense DEL SEGMENTO, y tambien se aplica
+ * cuando solo cambian los parametros de la consulta. Abrir `?aseo={id}` es
+ * exactamente eso. La cabecera de `app/(admin)/finanzas/page.tsx` ya lo dejo
+ * escrito con ocho corridas; esta medicion lo confirma sobre esta ruta y añade
+ * el mecanismo.
+ *
+ * El A/B, tres corridas por rama, apartando el archivo del arbol, con un evento
+ * de Realtime de por medio:
+ *
+ *     CON el archivo:  scrollY  277 / 0   / 0   / 0      3 de 3
+ *     SIN el archivo:  scrollY  277 / 277 / 277 / 277    3 de 3
+ *
+ * (antes de abrir / con el panel abierto / tras el evento de Realtime / al
+ * cerrar.)
+ *
+ * El mecanismo: el fallback SE ACTIVA aunque NO LLEGUE A PINTARSE (cero
+ * apariciones en doce corridas, porque la respuesta del servidor vuelve en
+ * ~70 ms). Al activarse, el contenido del segmento se desmonta un instante, el
+ * documento pierde altura, el navegador recorta la posicion a cero, y cuando el
+ * contenido vuelve la posicion ya se perdio. El estado de React del cliente SI
+ * sobrevive, porque un fallback de Suspense no desmonta el arbol, lo oculta.
+ *
+ * El escenario de control cierra el caso: un enlace de cliente que NO abre
+ * ningun panel pierde el scroll igual. **No es el panel**, y por eso
+ * `components/ui/sheet.tsx` no se toca.
+ *
+ * **Lo que se pierde:** el esqueleto de la PRIMERA carga de esta ruta. Es un
+ * coste real y acotado, identico al que se acepto en `/finanzas`, y es mucho
+ * menor que un criterio del ROADMAP incumplido.
+ *
+ * **Lo que NO se toca:** los demas archivos de carga del arbol. Esta fase borra
+ * exactamente dos, este y el de `/apartamentos`.
+ *
+ * **Y queda PROHIBIDO reintroducirlo** "para recuperar el esqueleto", ni ahora
+ * ni despues, sin volver a correr la medicion de `08-02-MEDICION.md` §3.
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+
+/**
  * Las filas de `cleanings` recortadas a lo que `alertasComputadas()` necesita.
  *
  * Es un mapeo, no una consulta: los ocho campos ya vienen en `FilaDeOperacion` y
