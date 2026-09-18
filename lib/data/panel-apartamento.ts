@@ -1,28 +1,54 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database, Tables } from '@/lib/database.types';
-import { hoyBog } from '@/lib/domain/dates';
+import { hoyBog, primeroDelMes, ultimoDiaDelMes } from '@/lib/domain/dates';
+
+/**
+ * El feed del apartamento se lee con la funcion que YA EXISTE, y se reexporta
+ * desde aqui para que la vista de calendario tenga un solo sitio de importacion.
+ *
+ * `leerFeedDeApartamento()` devuelve `null` en DOS casos distintos —el
+ * apartamento no tiene calendario, y la seguridad a nivel de fila no lo deja
+ * ver— y la pantalla trata los dos igual, que es "no hay calendario conectado".
+ * Escribir aqui una segunda consulta sobre `calendar_feeds` seria una segunda
+ * definicion de la misma lectura, con su propia lista de columnas que se
+ * quedaria atras el dia que la salud del feed gane una.
+ */
+export { leerFeedDeApartamento, type FeedDeApartamento } from '@/lib/data/feeds';
 
 /**
  * LA LECTURA DEL PANEL DE APARTAMENTO Y DE SU VISTA DE CALENDARIO
  * (08-UI-SPEC §7 y §8).
  *
  * ────────────────────────────────────────────────────────────────────────────
- * ALCANCE DECLARADO DESDE YA, PARA QUE NO NAZCA UN SEGUNDO ARCHIVO.
+ * ALCANCE COMPLETO: LAS DOS VISTAS DEL MISMO PANEL, EN UN SOLO ARCHIVO.
  *
- * Hoy este modulo tiene una sola funcion: el proximo aseo del apartamento
- * abierto. El plan 08-10 lo AMPLIA con los checkouts del mes y la salud del
- * feed, que son el contenido de la vista de calendario del mismo panel (§8.2).
- * Son lecturas del mismo sujeto y de la misma superficie, asi que viven juntas.
+ * El plan 08-06 dejo aqui el proximo aseo y declaro el alcance que faltaba; el
+ * plan 08-10 lo lleno con los checkouts del mes y el feed del apartamento, que
+ * son el contenido de la vista de calendario del MISMO panel (§8.2). Son
+ * lecturas del mismo sujeto y de la misma superficie, asi que viven juntas.
  * Crear `panel-calendario.ts` aparte dejaria dos archivos que hay que leer a la
  * vez para entender una pantalla.
  * ────────────────────────────────────────────────────────────────────────────
  *
- * ── ESTA LECTURA SOLO OCURRE CUANDO EL PANEL ESTA ABIERTO ────────────────
+ * ── CADA LECTURA SOLO OCURRE CUANDO SU VISTA ESTA PEDIDA ─────────────────
  *
- * El presupuesto de `/apartamentos` pasa de 4 consultas a 5, y solo cuando la
- * direccion trae el parametro del panel. Quien llama tiene esa condicion; este
- * modulo no la puede imponer y no la finge.
+ * El presupuesto de `/apartamentos`, medido en consultas:
+ *
+ *     sin panel                    4
+ *     panel en la ficha            5   (+ el proximo aseo)
+ *     panel en el calendario       6   (+ los checkouts del mes y el feed)
+ *
+ * Las dos ramas son EXCLUYENTES: con la vista de calendario pedida, el proximo
+ * aseo NO se lee, porque ese cuerpo no lo pinta. Quien llama tiene la condicion;
+ * este modulo no la puede imponer y no la finge.
+ *
+ * ── NINGUNA DE LAS TRES NECESITA UNA FUNCION NUEVA EN `public` ───────────
+ *
+ * `calendar_reservations` tiene `select` para `authenticated` desde la migracion
+ * 07 y su policy de admin desde la 08, y el indice `cal_res_prop_end_idx` de la
+ * migracion 04 esta hecho para esta consulta exacta: por apartamento y por fecha
+ * de fin, acotado a las reservas que siguen en el feed.
  *
  * ── PROYECCION ENUMERADA, POR LA MISMA REGLA QUE `lib/data/apartamentos.ts` ─
  *
@@ -130,4 +156,67 @@ export async function leerProximoAseo(
   if (error) throw new Error(error.message);
 
   return (data ?? null) as ProximoAseo | null;
+}
+
+
+/**
+ * Los checkouts de un mes calendario de un apartamento, como fechas de negocio
+ * `'YYYY-MM-DD'` y ordenadas (§8.2, grupos 1 y 2).
+ *
+ * ── LA FECHA DE FIN **ES** EL CHECKOUT, Y NO SE LE RESTA UN DIA ─────────
+ *
+ * El comentario de esa columna en la migracion 04 lo fija literal: *"DTEND del
+ * VEVENT de dia completo. Es EXCLUSIVO: coincide con la fecha del aseo. No
+ * restar un dia."* El reflejo de quien lee un calendario es corregir ese
+ * "exclusivo"; corregirlo programa todos los aseos con 24 horas de adelanto.
+ *
+ * ── PROYECCION DE UNA SOLA COLUMNA, Y HAY OTRA QUE NO PUEDE ENTRAR ──────
+ *
+ * El panel pinta fechas, asi que la proyeccion es la fecha de fin y nada mas.
+ * Esa tabla guarda ademas un campo de TEXTO LIBRE que llega tal cual del
+ * proveedor dentro de cada evento reservado, y que arrastra los ultimos digitos
+ * del telefono del huesped: es dato personal, la decision bloqueada de
+ * 03-CONTEXT.md es que no se persiste, y el guardarrail 9 de
+ * `scripts/ci/check-service-role.sh` rompe el build si CUALQUIER archivo de
+ * aplicacion lo nombra. Por eso aqui se describe y no se teclea, ni siquiera en
+ * este comentario (§14.6 punto 2, la trampa que ya mordio cuatro veces).
+ *
+ * ── SE FILTRAN LAS RESERVAS QUE YA NO ESTAN EN EL FEED ──────────────────
+ *
+ * Una reserva que desaparece del feed se MARCA, no se borra (anti-patron 4 de
+ * ARCHITECTURE.md): el feed puede venir vacio por un fallo del proveedor. Sin
+ * este filtro el panel enseñaria como checkout vigente algo que el calendario
+ * ya cancelo. Es exactamente lo que el indice parcial `cal_res_prop_end_idx`
+ * hace, asi que el filtro ademas deja la consulta dentro del indice.
+ *
+ * ── AQUI NO SE DERIVA NADA ──────────────────────────────────────────────
+ *
+ * Devuelve las fechas crudas. El proximo checkout, la lista del mes y la
+ * distancia en dias salen de `lib/domain/checkouts.ts`, que tiene sus 19 casos
+ * unitarios. Derivar aqui seria sacar la regla del unico sitio donde se mide.
+ *
+ * NO DEDUPLICA, por lo mismo que `checkoutsDelMes()`: dos reservas que terminen
+ * el mismo dia son dos checkouts el mismo dia.
+ */
+export async function leerCheckoutsDelMes(
+  supabase: SupabaseClient<Database>,
+  apartamentoId: string,
+  /** El mes corriente, en la forma `'YYYY-MM'`. */
+  mes: string,
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('calendar_reservations')
+    .select('ends_on')
+    .eq('property_id', apartamentoId)
+    // Los extremos salen de los dos helpers de `lib/domain/dates.ts`, que ya
+    // resuelven el ultimo dia sin tabla de longitudes de mes: la tabla es
+    // justamente donde falla febrero.
+    .gte('ends_on', primeroDelMes(mes))
+    .lte('ends_on', ultimoDiaDelMes(mes))
+    .is('disappeared_at', null)
+    .order('ends_on', { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((fila) => fila.ends_on);
 }
