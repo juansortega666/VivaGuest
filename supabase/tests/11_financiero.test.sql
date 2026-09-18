@@ -1582,6 +1582,36 @@ select is(
 --    mismo periodo, y el bloque 3 con el KPI 2. Si no cuadran, el admin ve dos
 --    cifras distintas para lo mismo en dos pantallas y deja de creerle a las
 --    dos.
+--
+--    ── NOTA DE HIGIENE, FASE 8 PLAN 08: TRES DE ESTAS FUNCIONES YA NO TIENEN
+--       NINGÚN LLAMADOR EN PRODUCCIÓN, Y SE CONSERVAN A PROPÓSITO ───────────
+--
+--    El plan 08-08 borró la página de la ficha de una persona. Lo que la
+--    reemplaza es un panel sobre el Resumen, y su contenido está cerrado por el
+--    dueño en cinco datos que dejan fuera, por nombre, el histórico de aseos,
+--    los pagos mes a mes y los gastos reportados: los tres son alcanzables por
+--    otras rutas de la sección.
+--
+--    Con la página se fueron los únicos consumidores en producción de:
+--
+--      public.aseos_de_aseadora(uuid, date, date)    ← bloque 2 de la ficha
+--      public.gastos_de_aseadora(uuid, date, date)   ← bloque 4 de la ficha
+--      public.pagos_de_aseadora(uuid)                ← bloque 3 de la ficha
+--
+--    **NO SE BORRAN.** Tienen aserciones aquí que las ejercen (grants, radio del
+--    `security definer`, forma del `returns table` y las cifras del fixture
+--    mutilado del bloque G), y borrarlas sería una migración que nadie pidió
+--    para quitar cobertura que ya está escrita y en verde.
+--
+--    Esta nota existe para que quien audite el schema y encuentre tres funciones
+--    sin llamador no tenga que adivinar si sobran o si falta el llamador.
+--
+--    Del lado de TypeScript, las cuatro que se quedaron sin consumidor en
+--    producción son `leerAseosDeAseadora`, `leerGastosDeAseadora`,
+--    `leerPagosDeAseadora` y `costoDeLaFicha`, todas en
+--    `lib/data/finanzas-detalle.ts` y todas con sus pruebas unitarias vivas.
+--    `leerAseadoraDeLaFicha`, `leerAhoraMismo` e `identificadorValido` SÍ siguen
+--    en uso: las consume el panel nuevo.
 -- ═══════════════════════════════════════════════════════════════════════════
 
 -- 60 LA CONCILIACIÓN RESUMEN ↔ DETALLE. Se escribe como tres booleanos y no

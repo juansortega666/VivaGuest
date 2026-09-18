@@ -30,11 +30,19 @@ import { cn } from '@/lib/utils';
  *
  * ── EL ACTIVO EN LAS HIJAS DEL RESUMEN ────────────────────────────────────
  *
- * `/finanzas/aseos` y `/finanzas/aseadoras/[id]` marcan `Resumen`: son sus
- * hijas, se llega a ellas desde ahi y se vuelve ahi. Por eso la activacion NO se
- * puede escribir como `ruta.startsWith(href)` para los dos enlaces: `/finanzas`
- * es prefijo de `/finanzas/pagos`, asi que las dos quedarian activas a la vez.
- * Cada enlace declara su propio predicado.
+ * `/finanzas/aseos` marca `Resumen`: es su hija, se llega a ella desde ahi y se
+ * vuelve ahi. Por eso la activacion NO se puede escribir como
+ * `ruta.startsWith(href)` para los dos enlaces: `/finanzas` es prefijo de
+ * `/finanzas/pagos`, asi que las dos quedarian activas a la vez. Cada enlace
+ * declara su propio predicado.
+ *
+ * **LA FASE 8 NO TOCO UNA SOLA LINEA DE LOGICA AQUI, Y ESE ERA EL PUNTO.** La
+ * ficha `/finanzas/aseadoras/[id]` se borro y su contenido paso a ser un panel
+ * sobre `?aseadora={id}`, o sea una ruta que ya era `/finanzas` a secas. El
+ * predicado del Resumen esta escrito como EXCLUSION precisamente para eso: para
+ * que una ruta nueva del Resumen no nazca sin marcar nada. Siguio funcionando
+ * solo. Lo unico que se actualizo fue este comentario, que citaba una ruta que
+ * ya no existe.
  * ════════════════════════════════════════════════════════════════════════════
  */
 const ENLACES: { href: string; etiqueta: string; activo: (ruta: string) => boolean }[] = [

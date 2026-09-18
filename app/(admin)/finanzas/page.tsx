@@ -53,10 +53,12 @@ export const metadata: Metadata = {
  * **Lo que se pierde:** el esqueleto de la PRIMERA carga de esta ruta. Es un
  * coste real y acotado, y es mucho menor que un filtro que se cuelga.
  *
- * **Lo que NO se toca:** las otras tres rutas de Finanzas (`/aseos`, `/pagos`,
- * `/aseadoras/[id]`) conservan su `loading.tsx` y sus casos siguen en verde. El
- * defecto es de esta pantalla, que es donde el filtro reescribe los parametros
- * sin cambiar de ruta.
+ * **Lo que NO se toca:** las otras dos rutas de Finanzas (`/aseos` y `/pagos`)
+ * conservan su `loading.tsx` y sus casos siguen en verde. El defecto es de esta
+ * pantalla, que es donde el filtro reescribe los parametros sin cambiar de ruta.
+ *
+ * *(Eran tres. La tercera, la ficha de una persona, se borro entera en la Fase 8
+ * y su contenido vive ahora como panel sobre ESTA ruta.)*
  *
  * **El arreglo fino, si algun dia se quiere recuperar el esqueleto:** envolver
  * solo los bloques de datos en un `Suspense` propio dentro de este archivo, con
