@@ -487,6 +487,13 @@ Ninguno.
 - **[Fase 7] Requisitos marcados Complete antes de tiempo:** FIN-03, FIN-04 y FIN-05 quedaron en `Complete` en REQUIREMENTS.md porque figuran en el frontmatter `requirements` de los planes de la Wave 0, y la Wave 0 solo escribe CONTRATOS: sus 87 casos estan en rojo hasta que 07-04 y 07-06 los pongan en verde. No se revierte desde un ejecutor de plan (tres planes corren en paralelo sobre el mismo arbol); lo reconcilia el verificador de fase
 - Los casos 2 y 3 de e2e/finanzas.spec.ts (la sub-pestana Resumen) estan rojos: 5 de 6 en aislamiento. No son del 07-12, que no toca ninguno de sus archivos y los vio en verde en las primeras corridas del dia. Medido y fechado en .planning/phases/07-financiero/deferred-items.md
 - La Fase 7 NO cierra hasta el checkpoint humano de 07-13: el recorrido de nueve puntos en un iPhone real. 07-13 no tiene SUMMARY a proposito, porque el resultado punto por punto es parte de su contenido
+- **[2026-09-18, quick `260918-h47`] La columna `AVISOS` de `/aseadores` ya no puede llegar a `Activos`, Y NO ES UN DEFECTO.** Al eliminar el asistente de instalacion se borro `app/(cleaner)/instalar/_actions.ts`, que era el **unico llamador en TypeScript** de `registrar_prueba_de_aviso()`, `confirmar_prueba_por_toque()` y `confirmar_prueba_a_mano()`. Esas tres funciones de la migracion 16 son lo unico en todo el sistema que escribe `verificacion_grado`, y `estado_avisos_aseadores()` deriva `verificado_por_toque` de esa columna. Consecuencia: **todo aseador con telefono registrado se queda en `Sin probar`, permanentemente.** Las cuatro cosas que hay que leer antes de "arreglarlo":
+  - **(a)** `Sin probar` es hoy el techo. Ninguna ruta viva llega a `Activos`.
+  - **(b)** **No miente.** Su significado literal es *hay a donde enviar, pero nadie comprobo que llegue*, y desde hoy eso es exactamente cierto para todos. La etiqueta no hay que reescribirla.
+  - **(c)** **La senal que el producto necesita de verdad sigue exacta:** `Sin avisos` (`suscripciones_vivas = 0`), que es quien se quedo mudo. No depende de la prueba para nada y es la red de seguridad que reemplaza al banner podado.
+  - **(d)** **La capacidad esta dormida en la base, no destruida.** La migracion 16 no se toco: las tres funciones, el token de un solo uso, su indice unico y el CHECK siguen ahi. Se recupera escribiendo superficie nueva **sin ninguna migracion** (candidato ya en el BACKLOG: *Enviar una prueba de aviso desde `/aseadores`*).
+
+  Colapsar los tres estados de esa columna a dos **es una fase, no un quick**: tocaria `lib/domain/avisos.ts`, `lib/data/avisos.ts`, `EstadoAvisosAseador.tsx`, `TiraAvisosAdmin.tsx`, los tests de los cuatro y probablemente la RPC. La nota con las mismas cuatro razones vive tambien dentro de `derivarClaveDeAseador`, que es donde se lee.
 
 ### Quick Tasks Completed
 
@@ -495,6 +502,7 @@ Ninguno.
 | 260907-703 | `AlertDialog` y `Tooltip` median 4 y 32 px: tokens `--container-*` con nombre propio en las dos primitivas | 2026-09-07 | dbf8a98 | [260907-703-max-w-primitivas-rotas](./quick/260907-703-max-w-primitivas-rotas/) |
 | 260908-7w0 | `Dialog` y `Sheet` dejaban de nacer con caja de 8px; `ci:arch` ahora atrapa las clases de ancho con nombre de talla | 2026-09-08 | 628720d | [260908-7w0-purgar-los-max-w-con-nombre-de-talla-de-](./quick/260908-7w0-purgar-los-max-w-con-nombre-de-talla-de-/) |
 | 260918-a33 | RET-07: el admin ve el consumo de Storage y la alerta salta al 70%. Lo unico que avisa antes de llenarse, porque el dueno decidio que nada se borra nunca | 2026-09-18 | e4de15a | [260918-a33-alerta-de-storage](./quick/260918-a33-alerta-de-storage/) |
+| 260918-h47 | Fuera el asistente de instalacion, entero: la isla muerta de `/instalar`, los cuatro enlaces del banner que caian en 404 y el link del menu del admin. `BotonActivarAvisos` y toda la deteccion de instalacion se conservan | 2026-09-18 | 793091b | [260918-h47-fuera-el-asistente-de-instalacion](./quick/260918-h47-fuera-el-asistente-de-instalacion/) |
 
 ## Consecuencias de la Fase 1 para fases posteriores
 
@@ -566,7 +574,9 @@ Stopped at: Completado 07-14-PLAN.md. Fase 07 ejecutada entera salvo el checkpoi
 
 **Abiertos:** (1) el checkpoint humano de **07-13**, el recorrido de nueve puntos en un iPhone real; sin el, la Fase 7 no cierra y 07-13 no tiene SUMMARY a proposito. (2) el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real, con sus cinco criterios de fallo en `06-10-SUMMARY.md`.
 
-**Diferidos por decision del desarrollador:** 05-12 (wizard `/instalar` con sus 5 capturas), 05-17 (validacion en dispositivo fisico) y el criterio 4 de la Fase 6 (offline, D-08, registrado en `.planning/BACKLOG.md`).
+**Diferidos por decision del desarrollador:** 05-17 (validacion en dispositivo fisico) y el criterio 4 de la Fase 6 (offline, D-08, registrado en `.planning/BACKLOG.md`).
+
+**ELIMINADO, que no es lo mismo que diferido:** **05-12 (el asistente `/instalar` con sus 5 capturas)**, el 2026-09-18 por el quick `260918-h47`. Dejo de ser un diferido: su codigo se borro entero, su PLAN.md se borro, y la fila salio del BACKLOG con la razon escrita. La instalacion de la PWA es manual y presencial, telefono por telefono. **Lo que SI sobrevive: `BotonActivarAvisos.tsx`, entero y alcanzable desde la app del aseador.** El permiso de push no se puede conceder desde fuera de la app, asi que instalar a mano pone el icono en la pantalla de inicio pero **no** activa los avisos.
 
 **Tres cosas que esta fase encontro y conviene no olvidar:**
 

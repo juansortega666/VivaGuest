@@ -65,8 +65,8 @@
 ### PWA del aseador
 
 - [ ] **PWA-01**: Aseador ve la lista de sus aseos asignados con el detalle de cada uno
-- [ ] **PWA-02**: La PWA es instalable en la pantalla de inicio en Android e iOS
-- [ ] **PWA-03**: Si el aseador no tiene push activo, la PWA muestra un banner persistente con ayuda diferenciada para "nunca lo pedí" y "ya lo negué"
+- [ ] ~~**PWA-02**: La PWA es instalable en la pantalla de inicio en Android e iOS~~ → **RETIRADO COMO REQUISITO DE PRODUCTO el 2026-09-18** (quick `260918-h47`). La CAPACIDAD TÉCNICA no se toca y sigue medida: `app/manifest.ts` declara `standalone` y los dos iconos, y el caso E5 de `e2e/push-instalacion.spec.ts` lo afirma contra `/manifest.webmanifest` servido de verdad. Lo que desaparece es toda superficie de producto que enseñe a instalar. El dueño instala la PWA a mano, teléfono por teléfono, y entrega el aparato ya instalado.
+- [ ] **PWA-03**: Si el aseador no tiene push activo, la PWA muestra un banner persistente. **ALCANCE REDUCIDO el 2026-09-18** (quick `260918-h47`): el banner sigue siendo persistente y sigue distinguiendo "nunca lo pedí" de "ya lo negué" por icono, título y cuerpo, pero **la ayuda diferenciada por plataforma en "ya lo negué" desaparece** y ese estado pasa a no tener ninguna acción. Razón: sus dos ramas, iPhone y Android, existían únicamente para enlazar al asistente de instalación, que se eliminó. Desde dentro de la app no hay ningún clic que desbloquee un permiso ya denegado, así que la única salida real es el administrador, y eso es lo que el banner dice ahora en un solo renglón.
 - [ ] **PWA-04**: Aseador pulsa "Empecé" y queda registrada la fecha/hora, sin que eso bloquee ninguna otra acción
 - [ ] **PWA-05**: Aseador pulsa "no puedo" y el aseo vuelve a Pendiente sin asignar, notificando al admin
 - [ ] **PWA-06**: Aseador pulsa "Terminé" y queda registrada la fecha/hora, notificando al admin
@@ -216,8 +216,8 @@
 | ASEO-08 | Fase 4 | Complete |
 | ASEO-09 | Fase 4 | Complete |
 | PWA-01 | Fase 6 | Pending |
-| PWA-02 | Fase 5 | Pending |
-| PWA-03 | Fase 5 | Pending |
+| PWA-02 | — | Withdrawn (2026-09-18) |
+| PWA-03 | Fase 5 | Reduced (2026-09-18) |
 | PWA-04 | Fase 6 | Pending |
 | PWA-05 | Fase 6 | Pending |
 | PWA-06 | Fase 6 | Pending |

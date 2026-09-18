@@ -240,11 +240,29 @@ completarle a uno `tarifa_huesped`, `pago_aseador`, `responsable_id` y
 | Fase | Estado |
 |---|---|
 | 1 a 4 | Completas |
-| **5 — Push e instalación** | **Completa y VALIDADA EN UN IPHONE REAL.** Los 17 planes, salvo el asistente `/instalar`, que el dueño descartó |
+| **5 — Push e instalación** | **Completa y VALIDADA EN UN IPHONE REAL.** Todos los planes salvo el asistente `/instalar`, **eliminado del código el 2026-09-18** (quick `260918-h47`) |
 | **6 — PWA del aseador** | 10 de 10 planes. **Sin probar en teléfono todavía** |
 | **7 — Financiero** | Research y contexto hechos. **Bloqueada por las cuatro preguntas de arriba** |
 | 8, 9 | Sin empezar |
 
-El asistente `/instalar` y sus cinco capturas están **descartados por decisión
-del dueño**, dicha varias veces. La ruta existe y no da 404. No volver a
-proponerlo.
+El asistente `/instalar` y sus cinco capturas están **ELIMINADOS DEL CÓDIGO**
+desde el 2026-09-18 (quick `260918-h47`), no descartados a la espera. Ya no es
+una idea en pausa: no queda nada que retomar.
+
+**Corrección de un dato falso que llevaba aquí desde antes:** este archivo
+afirmaba que *"la ruta existe y no da 404"*. **Nunca fue cierto.** El directorio
+`app/(cleaner)/instalar/` jamás tuvo una `page.tsx`: contenía dos archivos de
+Server Actions y nada más, así que los cuatro enlaces del banner del aseador
+apuntaban a un 404. El propio ROADMAP decía lo contrario en el estado de la
+Fase 5. Hoy el directorio no existe y no queda un solo enlace: `grep -rn
+"/instalar"` sobre el árbol de código da cero.
+
+La instalación es **manual y presencial**: el dueño la hace teléfono por
+teléfono y entrega el aparato ya instalado. No volver a proponerlo.
+
+**Lo único que sobrevive de todo esto, y no es negociable:** el botón que pide el
+permiso de avisos (`BotonActivarAvisos.tsx`) sigue entero y sigue alcanzable
+desde la app del aseador. El permiso de push no se puede conceder desde fuera de
+la app: iOS y Android exigen que el diálogo salga de un toque dentro de ella.
+Instalar la PWA a mano pone el icono en la pantalla de inicio y **no** activa los
+avisos. Borrar ese botón mataría NOTIF-01 y con él el Core Value.

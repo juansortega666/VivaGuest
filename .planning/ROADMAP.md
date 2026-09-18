@@ -172,16 +172,16 @@ Plans:
 
 ### Phase 5: Notificaciones push e instalación de la PWA
 
-**Status**: **INCOMPLETA — 15/17 planes**, mergeada a `main` el 2026-09-12 sin verificación. Faltan **05-12** (`/instalar`: bloqueado esperando las cinco capturas reales; mientras tanto los cuatro enlaces del banner del aseador caen en 404, PWA-02 sin cumplir) y **05-17** (E2E de la fase, las doce puertas y la validación en teléfono físico). No existe `VERIFICATION.md`: los siete criterios de éxito **no se han verificado formalmente**
+**Status**: **INCOMPLETA — 15/16 planes**, mergeada a `main` el 2026-09-12 sin verificación. **05-12 (`/instalar`, el asistente de instalación) está ELIMINADO desde el 2026-09-18** por decisión del dueño (quick `260918-h47`): la instalación pasa a ser manual y presencial, teléfono por teléfono, y con el asistente se fueron los cuatro enlaces del banner que apuntaban a esa ruta. Por eso el denominador baja de 17 a 16. Falta **05-17** (E2E de la fase, las doce puertas y la validación en teléfono físico). No existe `VERIFICATION.md`: los siete criterios de éxito **no se han verificado formalmente**
 **Goal**: El aseador instala la PWA y recibe en el teléfono cada aseo que se le asigna; el admin recibe cada evento de campo
 **Depends on**: Fase 2
-**Requirements**: NOTIF-01, NOTIF-02, NOTIF-03, NOTIF-04, PWA-02, PWA-03
+**Requirements**: NOTIF-01, NOTIF-02, NOTIF-03, NOTIF-04, PWA-03 (PWA-02 retirado como requisito de producto el 2026-09-18; la capacidad técnica sigue viva y medida por E5)
 **Success Criteria** (qué debe ser VERDAD):
 
   1. La PWA se instala en la pantalla de inicio en Android y en iOS y desde ahí recibe notificaciones push en dispositivos físicos reales
   2. Al asignarse un aseo, el aseador recibe push con los detalles del aseo (apartamento, fecha y hora límite) y al tocarla aterriza en ese aseo, donde revela el código de acceso con la auditoría y la ventana temporal intactas. **Corregido 2026-09-10:** el código de acceso NO viaja dentro del payload de push. Desviación deliberada de la redacción original, justificada en `05-CONTEXT.md` D-06: el código solo sale por `reveal_access_code()`, que exige rastro en `access_code_reads` (T-01-48); meterlo en el payload lo pondría en la pantalla de bloqueo, sin auditoría y posiblemente días antes del aseo
   3. El admin recibe push por daño reportado, faltante reportado, "no puedo" y aseo completado
-  4. Si el aseador no tiene push activo, ve un banner persistente con instrucciones distintas según si nunca dio el permiso o si ya lo negó
+  4. Si el aseador no tiene push activo, ve un banner persistente con instrucciones distintas según si nunca dio el permiso o si ya lo negó. **Matizado 2026-09-18** (quick `260918-h47`): el criterio **se sigue cumpliendo** —los dos estados conservan icono, título y cuerpo distintos, y solo uno tiene acción— pero "ya lo negó" **dejó de ramificar por sistema operativo**. Sus dos ramas existían únicamente para enlazar al asistente de instalación, que se eliminó
   5. Cada envío queda registrado, los fallidos se reintentan, y las suscripciones que el navegador reporta como expiradas o revocadas se eliminan solas
   6. El admin ve qué aseadores no tienen push activo, y al confirmar un aseo para uno de ellos recibe una advertencia antes de asignar (`05-CONTEXT.md` D-03)
   7. Un aseo de fecha anterior a hoy, vivo y con la hora límite vencida, genera alerta. **Añadido 2026-09-10** por decisión explícita del usuario (`05-CONTEXT.md` D-08): hoy no la genera, porque `leerOperacion()` filtra con `.gte('scheduled_date', hoy)` en `lib/data/operacion.ts:243`. Toca el Core Value: un aseo se puede perder en silencio
@@ -202,7 +202,7 @@ Plans:
 - [x] 05-09-PLAN.md — Tokens de `@theme`, registro en `cn()`, `lib/domain/avisos.ts` y la detección de plataforma
 - [x] 05-10-PLAN.md — Banner de avisos (PWA-03), Server Actions de suscripción con allowlist anti-SSRF y guardarraíl de la escala móvil
 - [x] 05-11-PLAN.md — El aviso de prueba: las tres actions del asistente y el paso 4 con sus dos grados (contrato de D-02)
-- [ ] 05-12-PLAN.md — `/instalar`: el asistente de cuatro pasos con capturas reales y los tres modos de entrada
+- ~~05-12-PLAN.md — `/instalar`: el asistente de cuatro pasos con capturas reales y los tres modos de entrada~~ → **ELIMINADO el 2026-09-18** por decisión del dueño (quick `260918-h47`). Nunca se ejecutó y el archivo del plan se borró. La instalación es manual y presencial
 - [x] 05-13-PLAN.md — `/aseos/[id]`: la pantalla de aterrizaje y el código de acceso auditado
 - [x] 05-14-PLAN.md — D-03 en `/aseadores`: columna `AVISOS`, chip de estado y link de instalación
 - [x] 05-15-PLAN.md — D-03 en `/operacion`: advertencia antes de asignar, franja del admin y la inversión del test de copy
@@ -408,7 +408,7 @@ Fases con patrón ya documentado en el research (se puede saltar):
 | 2. Acceso y administración del catálogo | 15/15 | Executed — 2 checkpoints humanos abiertos | 2026-09-02 |
 | 3. Motor de sincronización iCal | 10/10 | Complete (passed_with_gaps) | 2026-09-03 |
 | 4. Dashboard operativo del admin | 14/14 | Complete   | 2026-09-06 |
-| 5. Notificaciones push e instalación de la PWA | 15/17 | Executed — 05-12 (wizard `/instalar`) y 05-17 (validación en dispositivo) diferidos por el desarrollador | 2026-09-11 |
+| 5. Notificaciones push e instalación de la PWA | 15/16 | Executed — 05-12 (asistente `/instalar`) ELIMINADO el 2026-09-18 (quick `260918-h47`); 05-17 (validación en dispositivo) sigue diferido por el desarrollador | 2026-09-11 |
 | 6. PWA del aseador, offline-first | 10/10 | Executed — checkpoint humano en teléfono real abierto (06-10 tarea 3) | 2026-09-12 |
 | 7. Financiero | 12/14 | In Progress|  |
 | 8. Paneles laterales en el admin | 0/14 | Planned — 14 planes en 7 waves | - |
