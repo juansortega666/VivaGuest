@@ -91,3 +91,32 @@ respeten. Ver ahí su forma vigente.
 ### Eliminado del backlog, no diferido
 
 - **Wizard de `/instalar` y sus 5 capturas (plan 05-12)** — sale de la tabla el **2026-09-18** (quick `260918-h47`). **No se difiere a v2 ni se mueve de fase: se elimina como idea.** El dueño instala la PWA a mano, teléfono por teléfono, y entrega el aparato ya instalado; una guía dentro de la app no le sirve a nadie. Su código se borró entero en el mismo quick. Queda escrito aquí y no simplemente borrado para que nadie lo vuelva a proponer creyendo que es un hueco.
+
+---
+
+## Post-MVP: el borrado automático, derogado el 2026-09-18
+
+El dueño decidió que **nada se borra nunca**: ni las fotos a los 30 días ni los
+aseos a los 6 meses. Cuando el espacio apriete lo resuelve pagando Supabase Pro,
+donde caben ~23 años de fotos al ritmo medido (1.2 MB por aseo, ~360 MB al mes).
+
+De los siete requisitos de retención quedó **uno**, RET-07, y se hizo ese mismo
+día en el quick `260918-a33`. Pasa a ser lo más importante de los siete, no lo
+menos: **sin purga, la alerta de espacio es lo único que avisa antes de que una
+aseadora no pueda subir una foto en pleno aseo.**
+
+| Requisito | Estado |
+|---|---|
+| RET-01 borrar aseos, checklists, gastos y daños a los 6 meses | post-MVP |
+| RET-02 avisar al admin 15 días antes | post-MVP, no hay borrado que avisar |
+| RET-05 los agregados de desempeño sobreviven | post-MVP, hoy sobrevive todo |
+| RET-06 borrar las fotos a los 30 días | post-MVP |
+| RET-03 retención legal | **sin función** mientras no exista purga. La columna `legal_hold` se queda |
+| RET-04 borrar los archivos en Storage | **sin función**: sin purga no hay huérfanos |
+| RET-07 alerta al 70% | ✅ hecho, quick `260918-a33` |
+
+**Lo que abarata retomarlo:** la retención ya es configurable. `app_settings`
+tiene `photo_retention_days`, `retention_months`, `retention_notice_days` y
+`expense_photo_retention_days` sembradas. Y `storage_deletion_queue` existe desde
+la Fase 1. El día que haga falta purgar, es escribir el job, no rehacer el
+schema.

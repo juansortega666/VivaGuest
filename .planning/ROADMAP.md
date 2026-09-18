@@ -21,7 +21,7 @@ El equipo son dos personas, así que **las fases corren en secuencia estricta**.
 - [x] **Fase 6: PWA del aseador, offline-first** - El aseador ejecuta el aseo completo con o sin señal y nada del trabajo de campo se pierde
 - [ ] **Fase 7: Financiero** - Rentabilidad por aseo y cierre mensual persistido que sobrevive a la retención
 - [x] **Fase 8: Paneles laterales en el admin** - Consultar una ficha deja de costar la pantalla donde estabas, y el estado de un aseo se mira en vez de preguntarse por WhatsApp
-- [ ] **Fase 9: Retención y borrado automático** - El sistema se limpia solo, avisa antes de llenarse, y no destruye ni evidencia en disputa ni historial de pagos
+- [ ] **Fase 9: El producto probado de punta a punta** - Un checkout de Airbnb llega hasta el pago de la aseadora sin que nadie lo empuje a mano, y los 39 apartamentos reales estan cargados
 
 ## Phase Details
 
@@ -347,40 +347,46 @@ Plans:
 
 **Y un riesgo que el research destapó midiendo, que el conteo de D8-11 no cubría:** el contenido del panel se portalea fuera del contenedor principal de la página, así que una aserción de seguridad acotada por ese contenedor **pasa en verde sin mirar nada**. Se debilita sola, sin que nadie lo decida. El plan 08-02 la inventaría y el 08-11 la retargetea con contra-prueba en rojo.
 
-### Phase 9: Retención y borrado automático
+### Phase 9: El producto probado de punta a punta
 
-**Goal**: El sistema se limpia solo, avisa antes de llenarse, y no destruye ni evidencia en disputa ni historial de pagos
+**Goal**: Un checkout publicado en Airbnb llega hasta el pago de la aseadora sin que nadie lo empuje a mano, y eso queda probado con los 39 apartamentos reales cargados
 **Depends on**: Fase 8
-**Requirements**: RET-01, RET-02, RET-03, RET-04, RET-05, RET-06, RET-07
+**Requirements**: Ninguno nuevo (prueba de punta a punta lo ya entregado)
+**Estrategia**: `.planning/ESTRATEGIA-DE-PRUEBAS.md`, escrita el 2026-09-15 tras el primer mapeo del codebase
 **Success Criteria** (qué debe ser VERDAD):
 
-  1. Las fotos de evidencia con más de 30 días se borran solas, y el registro del aseo con su checklist sigue completo y consultable
-  2. Los aseos, checklists, gastos y daños con más de 6 meses se borran solos, y el admin recibe aviso 15 días antes de cada borrado
-  3. El borrado elimina los archivos en Storage además de las filas, sin dejar objetos huérfanos facturando, verificable comparando el bucket contra la tabla
-  4. Un aseo marcado con retención legal nunca se borra, ni por la purga de fotos ni por la de 6 meses
-  5. Los agregados de desempeño (timestamps de inicio y fin, eventos "no puedo") sobreviven al borrado del detalle
-  6. El admin ve el consumo de Storage y recibe alerta al superar el 70% del cupo, **antes** de que una aseadora no pueda subir una foto (RET-07)
+  1. Existe **un** caso que arranca de un `.ics` de fixture y no termina hasta que el aseo aparece en el pago del periodo, pasando por sincronización, confirmación, asignación, push, checklist, evidencia y margen. Si ese caso pasa, el producto existe
+  2. Los cinco recorridos donde la operación se tuerce están probados de punta a punta: "no puedo", la reserva que se mueve, el feed caído, checkout y checkin el mismo día, y el apartamento informativo sin una sola cifra de dinero
+  3. Los 39 apartamentos reales están cargados con sus feeds reales, y lo que se rompió al cargarlos está arreglado o declarado con dueño
+  4. Ninguna aserción de los recorridos nuevos se dio por buena sin verla en rojo primero
+  5. Las cuatro suites que ya existen siguen en su línea base, sin una aserción debilitada para que un recorrido pase
+
+**Por qué esta fase y no la de retención:** la de retención se disolvió el
+2026-09-18. El dueño decidió que nada se borra nunca y resolvió el espacio
+pagando Supabase Pro, así que de sus siete requisitos quedó uno, RET-07, que se
+hizo ese mismo día en el quick `260918-a33`. RET-01, RET-02, RET-05 y RET-06
+pasan al backlog como post-MVP; RET-03 y RET-04 quedan sin función mientras no
+exista purga.
+
+**Lo que la reemplaza sale de una medición, no de una intuición:** el mapeo del
+codebase encontró 160 casos E2E organizados por pantalla y **ninguno por
+recorrido**, y los 160 siembran el aseo con un `insert` directo en `cleanings`.
+El Core Value del proyecto nunca se ha probado entero.
+
+**Riesgo abierto, y es de producto y no de pruebas:** la cola offline en
+IndexedDB no existe, aunque `PROJECT.md` la declara como constraint desde el día
+uno. El recorrido "se va la señal a mitad del aseo" **no se puede probar** hasta
+que se construya. Está en `.planning/ESTRATEGIA-DE-PRUEBAS.md` con su cita.
 
 **Plans**: TBD
-
-**Tres de los siete ya tienen puesta su mitad de base de datos** y no arrancan de cero:
-
-| Requisito | Lo que ya existe | Lo que falta |
-|---|---|---|
-| RET-03 (retención legal) | columna `legal_hold` desde la migración 04 | la UI para marcarlo y el job que la respete |
-| RET-04 (objetos de Storage) | tabla `storage_deletion_queue` | quien la drene |
-| RET-07 (alerta al 70%) | `app_settings.storage_alert_threshold_pct = 70` y `storage.get_size_by_bucket()` | la lectura y la alerta |
-
-**Por qué va de último:** el job de 6 meses no tiene nada que borrar hasta el mes 7 de operación, así que construirlo antes no se puede validar. Las columnas que sí necesitan existir desde el principio (`legal_hold`, `deleted_at`) están en el alcance de la Fase 1.
-
-**La excepción, y conviene saberla:** RET-07 es el único de los siete que protege **antes** del daño. Si el free tier se llena sin aviso, el síntoma es una aseadora que no puede subir la foto en pleno aseo. Si la Fase 9 se corre mucho, RET-07 se saca aparte.
+**UI hint**: no
 
 ## Secuencia de ejecución
 
 Equipo de dos personas, ejecución secuencial estricta:
 
 ```
-1 Fundación → 2 Catálogo → 3 iCal → 4 Dashboard → 5 Push → 6 PWA → 7 Financiero → 8 Paneles → 9 Retención
+1 Fundación → 2 Catálogo → 3 iCal → 4 Dashboard → 5 Push → 6 PWA → 7 Financiero → 8 Paneles → 9 Producto probado
 ```
 
 **Por qué la 4 antes que la 5 y la 6:** la Fase 3 genera aseos que nadie puede ver hasta que exista el dashboard. Poner el dashboard justo después del motor hace observable el Core Value lo antes posible y permite dogfooding del lado admin mientras se construye la PWA.
@@ -412,7 +418,7 @@ Fases con patrón ya documentado en el research (se puede saltar):
 | 6. PWA del aseador, offline-first | 10/10 | Executed — checkpoint humano en teléfono real abierto (06-10 tarea 3) | 2026-09-12 |
 | 7. Financiero | 12/14 | In Progress|  |
 | 8. Paneles laterales en el admin | 0/14 | Planned — 14 planes en 7 waves | - |
-| 9. Retención y borrado automático | 0/TBD | Not started | - |
+| 9. El producto probado de punta a punta | 0/TBD | Not started | - |
 
 ## Cobertura de requisitos
 
