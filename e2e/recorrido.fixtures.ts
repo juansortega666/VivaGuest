@@ -8,7 +8,7 @@ import type { Database } from '@/lib/database.types';
 import { contarPorClasificacion } from '@/lib/domain/ical-guardas';
 import { normalizarIcs } from '@/lib/domain/ical-normalizar';
 
-import { expect, sumarDias, type Servicio } from './fixtures';
+import { sumarDias, type Servicio } from './fixtures';
 
 /**
  * EL ARNÉS DE LOS RECORRIDOS DE PUNTA A PUNTA (Fase 9).
@@ -148,6 +148,15 @@ const propiedadesSembradas: string[] = [];
 const usuariosSembrados: string[] = [];
 /** Corridas encadenadas por feed. Ver `correrSyncEncadenado`. */
 const corridasPorFeed = new Map<string, number>();
+/**
+ * Los periodos de pago que un recorrido dejó cerrados, por su `periodo_desde`.
+ *
+ * La lista de `/finanzas/pagos` es ACUMULATIVA: un periodo cerrado sobrevive a la
+ * corrida y se pinta como un bloque más en la siguiente. `finanzas.spec.ts`
+ * afirma que hay exactamente dos bloques, así que esto no es higiene: es lo que
+ * impide que este archivo ponga rojo otro.
+ */
+const periodosCerradosPorRecorrido: string[] = [];
 
 async function levantar(): Promise<{ servidor: Server; puerto: number }> {
   const servidor = createServer();
@@ -791,8 +800,31 @@ export async function limpiarRecorrido(servicio: Servicio): Promise<void> {
 
   const propiedades = [...propiedadesSembradas];
   const usuarios = [...usuariosSembrados];
+  const periodos = [...periodosCerradosPorRecorrido];
   propiedadesSembradas.length = 0;
   usuariosSembrados.length = 0;
+  periodosCerradosPorRecorrido.length = 0;
+
+  // 0. El cierre de periodo que dejó el recorrido del dinero, EN ORDEN:
+  //    `cleaner_payouts.periodo_desde` referencia la cabecera con `on delete
+  //    restrict`, así que borrarla primero da 23503. Las líneas del desglose caen
+  //    por cascade desde el pago, y NO tienen clave foránea contra `cleanings`
+  //    (migración 23, a propósito), así que el orden contra los aseos da igual.
+  if (periodos.length > 0) {
+    const pagos = await servicio
+      .from('cleaner_payouts')
+      .delete()
+      .in('periodo_desde', periodos);
+    if (pagos.error) throw new Error(`No se pudieron borrar los pagos: ${pagos.error.message}`);
+
+    const cabeceras = await servicio
+      .from('payout_periods')
+      .delete()
+      .in('periodo_desde', periodos);
+    if (cabeceras.error) {
+      throw new Error(`No se pudieron borrar los periodos: ${cabeceras.error.message}`);
+    }
+  }
 
   if (propiedades.length > 0) {
     // 1. Los aseos, por apartamento y no por la lista de ids que este módulo
@@ -886,38 +918,199 @@ export async function entregarPushAlWorker(
   await cdp.send('ServiceWorker.enable');
   const registrationId = await encontrado;
 
-  await cdp.send('ServiceWorker.deliverPushMessage', {
-    origin: new URL(pagina.url()).origin,
-    registrationId,
-    data: datos,
-  });
+  const leerBandeja = () =>
+    pagina.evaluate(async () => {
+      const registro = await navigator.serviceWorker.ready;
+      return (await registro.getNotifications()).map((n) => ({
+        title: n.title,
+        body: n.body,
+        data: n.data as unknown,
+      }));
+    });
 
-  const resultado: AvisoPintado[] = [];
-  await expect
-    .poll(
-      async () => {
-        const lista = await pagina.evaluate(async () => {
+  // ── LA ENTREGA SE REINTENTA UNA VEZ, Y LA ASERCIÓN NO SE AFLOJA ──────────
+  //
+  // `ServiceWorker.deliverPushMessage` es un disparo sin acuse: el protocolo
+  // responde en cuanto acepta el mensaje, no cuando el worker lo procesa, y una
+  // parte de las entregas se pierde sin dejar rastro. MEDIDO sobre el recorrido
+  // del Core Value: **1 de cada 5 corridas** se quedaba en cero notificaciones
+  // tras 15 s de sondeo. Es la misma intermitencia que `deferred-items.md` de la
+  // Fase 8 tiene declarada para el caso E2 de `push-instalacion.spec.ts`, que usa
+  // este mismo instrumento; aquí se reproduce con el archivo aislado.
+  //
+  // El reintento va sobre LA ENTREGA, nunca sobre la medida: quien llama sigue
+  // exigiendo EXACTAMENTE una notificación. Si la primera entrega no se hubiera
+  // perdido sino que solo fuera lenta, la segunda produciría DOS avisos y el caso
+  // se pondría rojo diciéndolo, en vez de tapar que el modelo de fallo es otro.
+  const ventanas = [15_000, 20_000];
+
+  for (const ventana of ventanas) {
+    await cdp.send('ServiceWorker.deliverPushMessage', {
+      origin: new URL(pagina.url()).origin,
+      registrationId,
+      data: datos,
+    });
+
+    const limite = Date.now() + ventana;
+    while (Date.now() < limite) {
+      const lista = await leerBandeja();
+      if (lista.length > 0) {
+        // La bandeja se limpia aquí y no en un `afterEach`: una notificación
+        // heredada pondría verde la próxima entrega sin haber entregado nada.
+        await pagina.evaluate(async () => {
           const registro = await navigator.serviceWorker.ready;
-          return (await registro.getNotifications()).map((n) => ({
-            title: n.title,
-            body: n.body,
-            data: n.data as unknown,
-          }));
+          for (const n of await registro.getNotifications()) n.close();
         });
-        resultado.splice(0, resultado.length, ...lista);
-        return lista.length;
-      },
-      { timeout: 15_000, message: 'El service worker no mostró ninguna notificación' },
-    )
-    .toBeGreaterThan(0);
-
-  // La bandeja se limpia aquí y no en un `afterEach`: una notificación heredada
-  // pondría verde la próxima entrega sin haber entregado nada.
-  await pagina.evaluate(async () => {
-    const registro = await navigator.serviceWorker.ready;
-    for (const n of await registro.getNotifications()) n.close();
-  });
+        await cdp.detach();
+        return lista;
+      }
+      await pagina.waitForTimeout(250);
+    }
+  }
 
   await cdp.detach();
-  return resultado;
+  throw new Error(
+    'El service worker no mostró ninguna notificación tras DOS entregas por el protocolo de DevTools.\n' +
+      'Dos entregas perdidas seguidas ya no son la intermitencia conocida: mira el handler de `push` del worker.',
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 7. EL CALENDARIO DEL CIERRE
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Un periodo de pago, de cierre a cierre (D7-5). Las dos fechas son reales. */
+export type PeriodoDeCierre = { desde: string; hasta: string };
+
+/**
+ * El periodo vencido que la pantalla de Pagos ofrece cerrar, PREGUNTÁNDOSELO AL
+ * CALENDARIO DE LA BASE.
+ *
+ * No se llama a `public.periodo_pendiente_de_cierre()` aunque sea exactamente lo
+ * que la pantalla consulta: esa función lleva guarda de admin y la comprueba
+ * contra `profiles` en vivo, así que el cliente de servicio —que no es nadie—
+ * choca con `no_autorizado`. Se reconstruye por el mismo camino que usa
+ * `sembrarFinanzas()`: el periodo que contiene hoy, y el que termina el día
+ * anterior a su comienzo. Dos periodos consecutivos son contiguos por definición
+ * de D7-5, así que ese es el vencido más reciente.
+ *
+ * Queda REGISTRADO para que `limpiarRecorrido()` lo borre: la lista de
+ * `/finanzas/pagos` es acumulativa, y un periodo cerrado que sobreviva a la
+ * corrida se pinta como un bloque más en la siguiente. `finanzas.spec.ts` afirma
+ * que hay exactamente dos bloques, así que dejarlo ahí rompería otro archivo con
+ * un síntoma que no se parece en nada a su causa.
+ */
+export async function periodoVencidoSinCerrar(servicio: Servicio): Promise<PeriodoDeCierre> {
+  const pedir = async (dia: string): Promise<PeriodoDeCierre> => {
+    const { data, error } = await servicio.rpc('periodo_de_cierre', { p_dia: dia });
+    if (error) throw new Error(`No se pudo resolver el periodo de ${dia}: ${error.message}`);
+    const fila = (data ?? [])[0];
+    if (!fila) throw new Error(`periodo_de_cierre(${dia}) no devolvió ninguna fila.`);
+    return { desde: fila.periodo_desde, hasta: fila.periodo_hasta };
+  };
+
+  const { data: hoy, error: errorHoy } = await servicio.rpc('today_bog');
+  if (errorHoy || !hoy) throw new Error(`No se pudo leer el día de negocio: ${errorHoy?.message}`);
+
+  const enCurso = await pedir(hoy);
+  const vencido = await pedir(sumarDias(enCurso.desde, -1));
+
+  periodosCerradosPorRecorrido.push(vencido.desde);
+  return vencido;
+}
+
+/** Días de calendario entre dos días de negocio. Negativo si `hasta` es anterior. */
+function diasEntre(desde: string, hasta: string): number {
+  const aMs = (dia: string) => {
+    const [ano, mes, d] = dia.split('-').map(Number);
+    return Date.UTC(ano, mes - 1, d);
+  };
+  return Math.round((aMs(hasta) - aMs(desde)) / 86_400_000);
+}
+
+/**
+ * Mueve el calendario entero de un aseo YA TERMINADO hasta un día destino.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ES EL ÚNICO VIAJE EN EL TIEMPO DE TODA LA FASE, Y ESTÁ AQUÍ PORQUE LA BASE SE
+ * NIEGA A CERRAR UN PERIODO QUE NO HA VENCIDO. CON RAZÓN.
+ *
+ * `public.cerrar_periodo()` rechaza con `periodo_no_vencido` cualquier rango
+ * cuyo día de cierre no haya pasado ESTRICTAMENTE, y la interfaz ni siquiera
+ * ofrece el botón salvo que `periodo_pendiente_de_cierre()` devuelva una fila.
+ * Las dos cosas son correctas y ninguna se toca: cerrar por adelantado pagaría
+ * trabajo que aún no ocurrió, y como un periodo cerrado NO SE RECALCULA NUNCA
+ * (D7-3), ese error quedaría congelado para siempre en el bolsillo de alguien.
+ *
+ * O sea que un aseo terminado HOY pertenece al periodo en curso, y el periodo en
+ * curso no se puede cerrar hasta dentro de semanas. Las alternativas eran tres:
+ * no probar la última junta, probarla llamando al RPC por debajo de la interfaz,
+ * o mover el aseo. Las dos primeras dejan sin probar justo lo que el dueño va a
+ * tocar con el dedo, así que se mueve el aseo.
+ *
+ * ── QUÉ SE MUEVE Y POR QUÉ SE MUEVE TODO JUNTO ────────────────────────────
+ *
+ * `scheduled_date`, `confirmado_at`, `started_at` y `finished_at`, TODOS con el
+ * mismo desplazamiento en días enteros. No se mueve solo `finished_at` —que es
+ * lo único que decide la pertenencia al periodo (D7-8)— porque eso dejaría un
+ * aseo «programado en septiembre y hecho en agosto», que es una fila que el
+ * sistema no sabe producir, y porque `cl_completada_shape` exige
+ * `finished_at >= started_at`. Con el calendario entero corrido, la fila sigue
+ * siendo internamente coherente: es el mismo aseo, otro mes.
+ *
+ * Colombia no tiene horario de verano, así que restar días de 86 400 segundos
+ * conserva la hora local: `public.dia_bog(finished_at)` aterriza exactamente en
+ * el día destino y no en su víspera.
+ *
+ * ── LO QUE ESTO **NO** DEBILITA, Y ES LO QUE HACE QUE SEA ACEPTABLE ────────
+ *
+ *   · Las dos tarifas del aseo NO se mueven ni se recalculan. El trigger
+ *     `tg_cleanings_snapshot()` REIMPONE los valores viejos en todo `UPDATE`
+ *     sobre un aseo en estado terminal, incluso con la clave de servicio
+ *     (BYPASSRLS no es «bypass triggers»). O sea que el snapshot de FIN-01 llega
+ *     al cierre intacto, y este movimiento no lo puede falsear ni queriendo.
+ *   · La regla que decide el periodo se ejercita DE VERDAD: el cierre lee
+ *     `public.dia_bog(finished_at)` y no la fecha programada, y este aseo entra
+ *     en el recibo porque ese instante cae dentro del rango.
+ *   · El cierre lo dispara el ADMIN DESDE SU PANTALLA, con su RPC y sus dos
+ *     guardas. Lo único que cambia es el mes en el que ocurrió el trabajo.
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+export async function adelantarElCalendarioDelAseo(
+  servicio: Servicio,
+  aseoId: string,
+  diaDestino: string,
+): Promise<void> {
+  const { data: antes, error } = await servicio
+    .from('cleanings')
+    .select('scheduled_date, confirmado_at, started_at, finished_at')
+    .eq('id', aseoId)
+    .single();
+
+  if (error || !antes) throw new Error(`No se pudo releer el aseo ${aseoId}: ${error?.message}`);
+
+  if (antes.finished_at === null) {
+    throw new Error(
+      'adelantarElCalendarioDelAseo() solo vale sobre un aseo YA TERMINADO.\n' +
+        'Sin `finished_at` no hay nada que mover y el aseo no entraría en ningún cierre.',
+    );
+  }
+
+  const dias = diasEntre(antes.scheduled_date, diaDestino);
+  const correr = (iso: string | null): string | null =>
+    iso === null ? null : new Date(new Date(iso).getTime() + dias * 86_400_000).toISOString();
+
+  const { error: errorUpdate } = await servicio
+    .from('cleanings')
+    .update({
+      scheduled_date: diaDestino,
+      confirmado_at: correr(antes.confirmado_at),
+      started_at: correr(antes.started_at),
+      finished_at: correr(antes.finished_at),
+    })
+    .eq('id', aseoId);
+
+  if (errorUpdate) {
+    throw new Error(`No se pudo mover el calendario del aseo: ${errorUpdate.message}`);
+  }
 }

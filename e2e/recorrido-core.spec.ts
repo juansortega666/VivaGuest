@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { formatFechaBog } from '@/lib/domain/dates';
+import { formatFechaBog, formatFechaCortaBog, formatFechaLargaBog } from '@/lib/domain/dates';
 import { construirPayload } from '@/lib/push/payload';
 
 import {
@@ -20,6 +20,7 @@ import {
 } from './fixtures';
 import { cargarEnvLocal, clienteDeServicio, USUARIOS_E2E } from './global-setup';
 import {
+  adelantarElCalendarioDelAseo,
   aseosDe,
   aseosVivosDe,
   conectarFeed,
@@ -28,6 +29,7 @@ import {
   entregarPushAlWorker,
   icsDe,
   limpiarRecorrido,
+  periodoVencidoSinCerrar,
   sembrarUnidadDeRecorrido,
 } from './recorrido.fixtures';
 
@@ -79,6 +81,53 @@ import {
  * | 3 | migración 04: los dos índices únicos parciales dejan de cubrir los aseos VIVOS (`where state = 'cancelada'`) | los 3 casos. «un checkout produce UN aseo…», «después de la segunda corrida sigue habiendo UN aseo…» y «y lo crea DE VERDAD: `cleanings_created` en 1…». El duplicado del primer sync lo mete la REPESCA ADITIVA del paso (e.3) de la migración 13, que repite el paso (c): su idempotencia es el índice y nada más |
  * | 4 | `route.ts` bloque 8: el atajo del hash sin su segunda condición | (1ª vuelta) NADA. El sembrador dejaba `last_payload_hash` en nulo, así que el atajo no se alcanzaba nunca. Es lo que obligó a escribir `conectarFeed()`. (2ª vuelta) «el worker tiene que terminar en `ok`…», y con `expect.soft` también «…UNA reserva clasificada», «…UN bloqueo clasificado» y «un checkout produce UN aseo…». `hits` sigue verde: el fetch sí ocurre |
  * | 5 | `lib/data/operacion.ts`: ventana de lectura estrechada a `hoy + 1` | SOLO «el aseo que salió del feed tiene que verse en /operacion…». Las cinco aserciones de base pasaron. Es lo que demuestra que la pantalla y la base no miden lo mismo |
+ *
+ * ── BITÁCORA DE SEÑUELOS (plan 09-04, 2026-09-18) ──────────────────────────
+ *
+ * Siete señuelos, uno por junta y dos de seguridad, todos sobre el RECORRIDO DEL
+ * CORE VALUE. Cada defecto se metió en el PRODUCTO, se corrió, se anotó el
+ * mensaje literal que salió en rojo, se revirtió y se volvió a verde.
+ *
+ * | # | Junta | Qué se rompió | Qué se puso rojo (mensaje literal) |
+ * |---|---|---|---|
+ * | 1 | sync → aseo | `ical-normalizar.ts`: un día menos al `DTEND` | «JUNTA 1 · el aseo va el día del DTEND (2026-09-18), SIN sumarle ni restarle un día…». Esperado `2026-09-18`, recibido `2026-09-17` |
+ * | 2 | confirmación → asignación | migración 09, `confirm_cleaning`: `aseador_id = (select auth.uid())`, o sea a quien confirma | «JUNTA 2 · el aseo queda asignado a la RESPONSABLE FIJA del apartamento (Aseador Uno E2E)…». La aserción de PANTALLA («Queda asignado a …») siguió VERDE, y es correcto: ese texto sale del catálogo, no de lo que la RPC escribe. Es la medición que justifica tener las dos |
+ * | 3 | asignación → push | migración 09: el `insert` del outbox con `and false` | «JUNTA 3 · confirmar deja UN aviso en el outbox…». Esperado 1, recibido 0. Con `expect.soft` se midió el radio: el caso muere con `TypeError: Cannot read properties of undefined (reading 'type')`. **La mitad del dispositivo NO puede atrapar este defecto**, y no por descuido: su payload se construye A PARTIR de la fila, así que sin fila no hay nada que entregar. Por eso la mitad del servidor no es redundante |
+ * | 4 | ejecución → evidencia | `lib/data/recibos.ts`: firmar una ruta que no existe (firma fallida con la foto subida) | SOLO «JUNTA 4 · el admin ve la MINIATURA FIRMADA de la foto que subió la aseadora…». Esperado 1, recibido 0. Las aserciones de la fila, de los bytes y del objeto en el bucket siguieron verdes: miden otra capa |
+ * | 5 | aseo → dinero | migración 26, `rentabilidad_aseos`: `coalesce(pr.tarifa_huesped…)` en vez de `c.` | «JUNTA 5 · lo COBRADO es la tarifa que el aseo congeló al nacer (214609), no la que el apartamento tiene hoy (333137)…». Con `expect.soft`, radio completo: caen SEIS (cobrado, pagado, el margen contra su valor, y las tres negativas de las cifras del apartamento). **La que NO cae es «el margen es lo cobrado menos lo pagado»**, y es correcto: leerlo todo del apartamento es internamente consistente. Esa aserción no puede atrapar este defecto y no se puede confundir con la que sí |
+ * | 6 | seguridad, formato crudo | `DesgloseDeMiPago.tsx`: la tarifa del aseo colgada de la línea como atributo de datos (viaja, no se pinta) | «JUNTA 5 · FUGA: la cifra 214609 viajó al navegador de la aseadora en /mis-pagos/{id}…». **Solo la mitad de RED.** La mitad del DOM NO la ve, porque un atributo no está en el texto de la página: es la demostración de que las dos mitades no son redundantes. Este señuelo fue además el que obligó a cambiar el instrumento DOS veces (ver abajo) |
+ * | 7 | seguridad, formato pintado | `DesgloseDeMiPago.tsx`: el margen pintado al lado del monto | «JUNTA 5 · FUGA: la cifra 152.766 viajó…» y, con `expect.soft`, también «JUNTA 5 · y la cifra 152.766 tampoco está pintada en la pantalla de la aseadora». **Las DOS mitades**, y en el formato con separador, que es el único en el que un árbol renderizado en el servidor deja viajar una cifra |
+ *
+ * ── LOS DOS HALLAZGOS DEL SEÑUELO 6, QUE CAMBIARON EL INSTRUMENTO ──────────
+ *
+ * El señuelo 6 dejó el caso EN VERDE dos veces seguidas antes de poder atraparlo,
+ * y las dos causas son trampas de instrumento que no se descubren solas:
+ *
+ *   1. El control era «el interceptor capturó ALGUNA carga», copiado de
+ *      `mis-pagos.spec.ts`. Quedaba satisfecho con el documento de la LISTA, y el
+ *      bucle corría antes de que la carga del DESGLOSE terminara de leerse.
+ *      Volcado: `CARGA /mis-pagos len 15686 214609? false` con
+ *      `HTML de la pantalla incluye 214609? true`.
+ *   2. Cambiar el control a «se capturó la carga de ESTA dirección» tampoco
+ *      bastó: Next PREFETCHEA el enlace, así que hay dos respuestas contra la
+ *      misma URL y la primera es un tocón cuyo cuerpo el navegador descarta
+ *      (`response.text: Protocol error (Network.getResponseBody): No data found
+ *      for resource with given identifier`).
+ *
+ * El instrumento quedó con las dos correcciones: la fuga se mide navegando POR
+ * DIRECCIÓN (documento completo, cuerpo siempre disponible) y el control es POR
+ * CONTENIDO (alguna carga trae el nombre del apartamento, que solo está en el
+ * desglose). Ninguna aserción se debilitó: las dos correcciones hacen que se mire
+ * MÁS, no menos.
+ *
+ * ── Y UNA INTERMITENCIA MEDIDA, CON SU ARREGLO DE INSTRUMENTO ──────────────
+ *
+ * Con el recorrido ya en verde, `--repeat-each=5` dio **1 rojo de 5** en «El
+ * service worker no mostró ninguna notificación». Es la misma intermitencia que
+ * `deferred-items.md` de la Fase 8 declara para el caso E2 de
+ * `push-instalacion.spec.ts`, reproducida aquí con el archivo aislado.
+ * `entregarPushAlWorker()` reintenta la ENTREGA una vez, nunca la medida; ver su
+ * cabecera. Tras el arreglo: **6 de 6 en verde**.
  */
 
 /**
@@ -421,6 +470,95 @@ const NOMBRE_RESPONSABLE = USUARIOS_E2E.find((u) => u.clave === 'aseador1')!.nom
 const NOMBRE_SUPLENTE = USUARIOS_E2E.find((u) => u.clave === 'aseador2')!.nombre;
 
 /**
+ * Las tarifas que el APARTAMENTO gana DESPUÉS de que el aseo congeló las suyas.
+ *
+ * ── ES FIN-01 Y ES UNA ASERCIÓN, NO UN DETALLE DE SIEMBRA ─────────────────
+ *
+ * `tg_cleanings_snapshot()` copia las dos cifras del apartamento al aseo AL
+ * CREARLO, y a partir de ahí las congela: en todo `UPDATE` sobre un aseo en
+ * estado terminal reimpone los valores viejos, incluso con la clave de servicio.
+ * Lo que la pantalla del dinero tiene que leer es EL SNAPSHOT DEL ASEO.
+ *
+ * Con el apartamento y el aseo llevando la misma cifra, una implementación que
+ * uniera contra `properties` daría exactamente el mismo número y la aserción del
+ * margen no estaría mirando nada. Cambiándolas después de que el aseo nació, las
+ * dos lecturas se separan y el defecto se vuelve visible: corregir una tarifa
+ * hoy no puede mover lo que se cobró y se pagó el mes pasado.
+ *
+ * No comparten prefijo con ninguna cifra del recorrido ni entre sí, para que una
+ * búsqueda de texto no dé positivos por accidente.
+ */
+const TARIFA_NUEVA_DEL_APARTAMENTO = 333_137;
+const PAGO_NUEVO_DEL_APARTAMENTO = 99_401;
+
+/** `'$ 214.609'` o `'214.609'` → `214609`. Sirve para leer una celda de dinero. */
+function pesos(texto: string): number {
+  const digitos = texto.replace(/[^\d]/g, '');
+  if (digitos === '') throw new Error(`No hay ninguna cifra en «${texto}»`);
+  return Number(digitos);
+}
+
+/**
+ * Una cifra EN LAS DOS FORMAS EN QUE PUEDE VIAJAR: el entero crudo de una carga
+ * de datos y el formateado con separador de miles.
+ *
+ * ── BUSCAR UNA SOLA ES EL DEFECTO QUE LA FASE 7 PAGÓ, Y ESTÁ MEDIDO ───────
+ *
+ * Con el árbol del aseador renderizado entero en el servidor, EL ENTERO CRUDO NO
+ * VIAJA NUNCA: el formateo ocurre en el servidor, así que lo que cruza el cable
+ * es `61.843` y jamás `61843`. Una prueba de fuga que buscara solo el entero
+ * crudo no podía dispararse aunque la fuga existiera, y una que buscara solo el
+ * formateado se perdería la carga JSON de un componente de cliente.
+ */
+function enLasDosFormas(n: number): string[] {
+  return [String(n), n.toLocaleString('es-CO')];
+}
+
+/** Lo que una respuesta del servidor le entregó al navegador. */
+type CargaUtil = { url: string; cuerpo: string };
+
+/**
+ * Engancha un oyente que guarda el CUERPO de cada respuesta de este origen.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ES GEMELO DEL `interceptarCargaUtil()` DE `e2e/mis-pagos.spec.ts`, Y LA
+ * DUPLICACIÓN ES DELIBERADA POR LA MISMA RAZÓN QUE `entregarPushAlWorker()`: un
+ * spec que importa otro spec registra sus casos una segunda vez, y este plan
+ * tiene prohibido editar los specs anteriores.
+ * ════════════════════════════════════════════════════════════════════════════
+ *
+ * ── POR QUÉ LA ASERCIÓN NEGATIVA VA CONTRA LA RED Y NO SOLO CONTRA EL DOM ──
+ *
+ * Porque que la pantalla no PINTE un número no significa que el número no haya
+ * VIAJADO. Cuando `mis-pagos.spec.ts` se escribió, el sistema tenía la fuga
+ * abierta y ninguna pantalla la mostraba: una aserción sobre el DOM habría
+ * pasado con la fuga puesta. El dato ya estaba en el teléfono.
+ *
+ * Se miran documento, carga de servidor de React y JSON, que es donde puede ir
+ * una cifra. Se descarta `/_next/static/`: son los bundles, con hashes de build
+ * de dieciséis dígitos que producen coincidencias por puro azar.
+ */
+function interceptarCargaUtil(p: Page): CargaUtil[] {
+  const cargas: CargaUtil[] = [];
+
+  p.on('response', (respuesta) => {
+    if (new URL(respuesta.url()).pathname.startsWith('/_next/static/')) return;
+
+    const tipo = respuesta.headers()['content-type'] ?? '';
+    if (!/text\/html|text\/x-component|application\/json|text\/plain/.test(tipo)) return;
+
+    void respuesta
+      .text()
+      .then((cuerpo) => cargas.push({ url: respuesta.url(), cuerpo }))
+      .catch(() => {
+        /* sin cuerpo disponible: no puede filtrar nada */
+      });
+  });
+
+  return cargas;
+}
+
+/**
  * ════════════════════════════════════════════════════════════════════════════
  * EL CASO MÁS IMPORTANTE DEL REPO. SI ESTE CASO PASA, EL PRODUCTO EXISTE.
  *
@@ -581,6 +719,26 @@ test('EL RECORRIDO DEL CORE VALUE: un checkout del .ics acaba en el pago de la a
     aseosTrasSync[0].aseador_id,
     'JUNTA 1 · y nace SIN dueño: el sync detecta, no asigna. Asignar es lo que hace la junta 2, y si el sync ya lo hiciera, la junta 2 no probaría nada',
   ).toBeNull();
+
+  const tarifasDelAseo = unidad.tarifas!;
+
+  expect(
+    { tarifa: aseosTrasSync[0].tarifa_huesped, pago: aseosTrasSync[0].pago_aseador },
+    'JUNTA 1 · y nace con las DOS CIFRAS CONGELADAS del apartamento: es el snapshot de FIN-01, y es lo que la junta 5 tiene que ver en pantalla',
+  ).toEqual({ tarifa: tarifasDelAseo.tarifaHuesped, pago: tarifasDelAseo.pagoAseador });
+
+  // ── EL APARTAMENTO CAMBIA DE TARIFAS, Y EL ASEO NO ───────────────────────
+  // Ver la cabecera de `TARIFA_NUEVA_DEL_APARTAMENTO`: sin esta divergencia, la
+  // aserción del margen de la junta 5 no distinguiría una lectura del aseo de
+  // una lectura del apartamento, porque las dos darían el mismo número.
+  const { error: errorTarifas } = await servicio
+    .from('properties')
+    .update({
+      tarifa_huesped: TARIFA_NUEVA_DEL_APARTAMENTO,
+      pago_aseador: PAGO_NUEVO_DEL_APARTAMENTO,
+    })
+    .eq('id', unidad.propiedadId);
+  if (errorTarifas) throw new Error(`No se pudieron subir las tarifas: ${errorTarifas.message}`);
 
   // ═════════════════════════════════════════════════════════════════════════
   // JUNTA 2 · DE LA CONFIRMACIÓN A LA ASIGNACIÓN
@@ -1049,4 +1207,305 @@ test('EL RECORRIDO DEL CORE VALUE: un checkout del .ics acaba en el pago de la a
     panel.getByLabel('Foto no disponible'),
     'JUNTA 4 · y NINGUNA casilla de ausencia: una firma fallida pinta la casilla atenuada en vez de desaparecer, y eso es lo que el admin vería si la evidencia no se pudiera abrir',
   ).toHaveCount(0);
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // JUNTA 5 · DEL ASEO AL DINERO, Y DE AHÍ AL PAGO DE LA ASEADORA
+  // ═════════════════════════════════════════════════════════════════════════
+
+  // El aseo se terminó HOY, así que pertenece al periodo EN CURSO, y el periodo
+  // en curso no se puede cerrar: cerrarlo pagaría trabajo que aún no ocurrió.
+  // Este recorrido no puede esperar tres semanas, así que se le corre el
+  // calendario entero al aseo hasta el periodo vencido. La razón larga, y todo
+  // lo que este movimiento NO debilita, está en la cabecera de
+  // `adelantarElCalendarioDelAseo()`.
+  const periodo = await periodoVencidoSinCerrar(servicio);
+  await adelantarElCalendarioDelAseo(servicio, aseoId, periodo.hasta);
+
+  const margenDelAseo = tarifasDelAseo.tarifaHuesped - tarifasDelAseo.pagoAseador;
+
+  // ── (a) EL MARGEN, Y SALE DEL ASEO Y NO DEL APARTAMENTO ──────────────────
+  await paginaAdmin.goto(`/finanzas/aseos?rango=dia&ancla=${periodo.hasta}&filtro=todos`);
+
+  const filaDeDinero = paginaAdmin.getByRole('row').filter({ hasText: unidad.nombre });
+
+  await expect(
+    filaDeDinero,
+    'JUNTA 5 · el aseo que la aseadora terminó aparece en el detalle del dinero: si no está, el trabajo se hizo y no lo cobró ni lo pagó nadie',
+  ).toHaveCount(1);
+
+  const celdas = await filaDeDinero.getByRole('cell').allTextContents();
+  const cobrado = pesos(celdas[4]);
+  const pagado = pesos(celdas[5]);
+  const margen = pesos(celdas[6]);
+
+  expect(
+    cobrado,
+    `JUNTA 5 · lo COBRADO es la tarifa que el aseo congeló al nacer (${tarifasDelAseo.tarifaHuesped}), no la que el apartamento tiene hoy (${TARIFA_NUEVA_DEL_APARTAMENTO}): FIN-01 dice que corregir una tarifa no puede mover el mes pasado`,
+  ).toBe(tarifasDelAseo.tarifaHuesped);
+
+  expect(
+    pagado,
+    `JUNTA 5 · y lo PAGADO es el pago congelado del aseo (${tarifasDelAseo.pagoAseador}), no el vigente del apartamento (${PAGO_NUEVO_DEL_APARTAMENTO})`,
+  ).toBe(tarifasDelAseo.pagoAseador);
+
+  expect(
+    margen,
+    'JUNTA 5 · y el MARGEN es lo cobrado menos lo pagado, fila por fila: un margen que no cuadre con sus propias dos celdas es una cifra que el dueño no puede auditar',
+  ).toBe(cobrado - pagado);
+
+  expect(
+    margen,
+    `JUNTA 5 · y vale ${margenDelAseo}, que es la resta de las cifras DEL ASEO: con las del apartamento daría ${TARIFA_NUEVA_DEL_APARTAMENTO - PAGO_NUEVO_DEL_APARTAMENTO}`,
+  ).toBe(margenDelAseo);
+
+  // La negativa va contra EL DOCUMENTO y después de sus positivas. Acotarla a la
+  // tabla la dejaría sin ver una cifra que se colara en un KPI, en un pie o en
+  // una carga de datos del mismo árbol (trampa 2 de `TESTING.md`).
+  const pantallaDelDinero = (await paginaAdmin.locator('body').textContent()) ?? '';
+
+  for (const cifra of [
+    ...enLasDosFormas(TARIFA_NUEVA_DEL_APARTAMENTO),
+    ...enLasDosFormas(PAGO_NUEVO_DEL_APARTAMENTO),
+    ...enLasDosFormas(TARIFA_NUEVA_DEL_APARTAMENTO - PAGO_NUEVO_DEL_APARTAMENTO),
+  ]) {
+    expect(
+      pantallaDelDinero.includes(cifra),
+      `JUNTA 5 · la cifra ${cifra} es la del APARTAMENTO DE HOY y no puede aparecer en el detalle: si aparece, la pantalla está uniendo contra properties y el mes pasado se mueve cada vez que alguien corrige una tarifa`,
+    ).toBe(false);
+  }
+
+  // ── (b) EL CIERRE DEL PERIODO, DESDE LA PANTALLA DEL ADMIN ───────────────
+  await paginaAdmin.goto('/finanzas/pagos');
+
+  // TRAMPA 3 DE `TESTING.md`: se localiza por `[data-slot=alert]` y no por el rol
+  // `alert`, porque Next monta un anunciador de ruta vacío con ese rol en cada
+  // página y el conteo siempre saldría uno de más.
+  const avisoDelCierre = paginaAdmin
+    .locator('[data-slot=alert]')
+    .filter({ hasText: 'no se cerró' });
+
+  await expect(
+    avisoDelCierre,
+    'JUNTA 5 · la pantalla de Pagos ofrece cerrar el periodo vencido: el botón NO existe en el DOM cuando no hay nada que cerrar, así que su presencia ya es la mitad de la aserción',
+  ).toBeVisible();
+
+  const disparadorDelCierre = avisoDelCierre.getByRole('button', { name: 'Cerrar el periodo' });
+  await esperarControlHidratado(disparadorDelCierre);
+  await disparadorDelCierre.click();
+
+  const dialogoDelCierre = paginaAdmin.getByRole('alertdialog');
+  await expect(
+    dialogoDelCierre,
+    'JUNTA 5 · y pide confirmación antes: un periodo cerrado no se recalcula nunca (D7-3)',
+  ).toBeVisible();
+
+  await dialogoDelCierre.getByRole('button', { name: 'Cerrar el periodo' }).click();
+  await esperarAvisoQueEmpiezaCon(paginaAdmin, 'El periodo quedó cerrado.');
+
+  // ── (c) LO QUE EL CIERRE ESCRIBIÓ ────────────────────────────────────────
+  const { data: pagos, error: errorPagos } = await servicio
+    .from('cleaner_payouts')
+    .select('id, aseador_id, monto_aseos, monto_gastos, monto_total, cantidad_aseos')
+    .eq('periodo_desde', periodo.desde);
+  if (errorPagos) throw new Error(`No se pudieron leer los pagos: ${errorPagos.message}`);
+
+  const pagoDeLaResponsable = (pagos ?? []).find((p) => p.aseador_id === idResponsable);
+
+  expect(
+    pagoDeLaResponsable,
+    `JUNTA 5 · el cierre produce el pago de ${NOMBRE_RESPONSABLE}: sin fila de pago, la persona que hizo el trabajo no cobra, que es el final que esta cadena existe para evitar`,
+  ).toBeDefined();
+
+  expect(
+    pagoDeLaResponsable!.monto_total,
+    `JUNTA 5 · y su total es el pago congelado del aseo (${tarifasDelAseo.pagoAseador}), sin gastos y sin descuentos: el cierre lee el snapshot del aseo, no la tarifa vigente`,
+  ).toBe(tarifasDelAseo.pagoAseador);
+
+  expect(
+    pagoDeLaResponsable!.cantidad_aseos,
+    'JUNTA 5 · por UN aseo, que es el del recorrido',
+  ).toBe(1);
+
+  const { data: lineas, error: errorLineas } = await servicio
+    .from('cleaner_payout_lines')
+    .select('tipo, cleaning_id, property_nombre, monto, fecha_programada, fecha_ejecucion')
+    .eq('payout_id', pagoDeLaResponsable!.id);
+  if (errorLineas) throw new Error(`No se pudo leer el desglose: ${errorLineas.message}`);
+
+  expect(
+    (lineas ?? []).map((l) => l.cleaning_id),
+    'JUNTA 5 · y el desglose del pago contiene EL ASEO DE ESTE RECORRIDO: un total sin desglose no se puede reclamar ni auditar (D7-2)',
+  ).toEqual([aseoId]);
+
+  expect(
+    (lineas ?? [])[0].property_nombre,
+    'JUNTA 5 · con el nombre del apartamento COPIADO como texto, que es lo que hace que la línea siga contando de qué se compone el día que el aseo se purgue (FIN-04)',
+  ).toBe(unidad.nombre);
+
+  // ── (d) Y LAS DOS PANTALLAS QUE LO ENSEÑAN ───────────────────────────────
+  await paginaAdmin.goto('/finanzas/pagos');
+
+  const filaDelPago = paginaAdmin.getByRole('row').filter({ hasText: NOMBRE_RESPONSABLE });
+  await expect(
+    filaDelPago,
+    'JUNTA 5 · el admin ve el pago de la aseadora en el periodo recién cerrado',
+  ).toHaveCount(1);
+
+  await filaDelPago.getByRole('link', { name: NOMBRE_RESPONSABLE }).click();
+
+  const panelDelPago = paginaAdmin.getByRole('dialog');
+  await expect(
+    panelDelPago.getByText(unidad.nombre),
+    'JUNTA 5 · y al abrir el desglose ve el aseo del recorrido dentro, acotado al panel porque el panel se portalea fuera de la página',
+  ).toBeVisible();
+
+  // ── (e) LA ASEADORA, EN SUS PAGOS ────────────────────────────────────────
+  await paginaAseador.goto('/mis-pagos');
+
+  // El periodo se busca por SU RÓTULO, que es lo que la persona lee, y no por el
+  // identificador del pago: un `href` afirmaría que el enlace existe, no que la
+  // aseadora puede reconocer de qué mes le están hablando.
+  const diaDesde = Number(periodo.desde.slice(8));
+  const diaHasta = Number(periodo.hasta.slice(8));
+  const mesDelCierre = formatFechaLargaBog(periodo.hasta).split(' de ')[1];
+
+  const tarjetaDelPeriodo = paginaAseador.getByRole('link').filter({
+    hasText: new RegExp(`Del\\s+${diaDesde}\\s+al\\s+${diaHasta}\\s+de\\s+${mesDelCierre}`, 'i'),
+  });
+
+  await expect(
+    tarjetaDelPeriodo,
+    'JUNTA 5 · la aseadora ve el periodo cerrado en sus pagos, rotulado con sus DOS fechas reales: el periodo va de cierre a cierre y no del 1 al 31 (D7-5)',
+  ).toHaveCount(1);
+
+  await tarjetaDelPeriodo.click();
+  await esperarUrlDeCliente(paginaAseador, /\/mis-pagos\/[0-9a-f-]{36}$/);
+
+  expect(
+    paginaAseador.url(),
+    `JUNTA 5 · y la tarjeta abre SU pago, el que el cierre acaba de escribir`,
+  ).toContain(`/mis-pagos/${pagoDeLaResponsable!.id}`);
+
+  await expect(
+    paginaAseador.getByText('Tus aseos', { exact: true }),
+    'JUNTA 5 · el desglose se abre con el vocabulario del aseador: no se dice «por aseos» ni «liquidación», se dice lo que ella hizo',
+  ).toBeVisible();
+
+  await expect(
+    paginaAseador.getByText(unidad.nombre),
+    'JUNTA 5 · y el aseo del recorrido está dentro del recibo: AQUÍ TERMINA LA CADENA. Del .ics al dinero que alguien cobra',
+  ).toBeVisible();
+
+  await expect(
+    paginaAseador.getByText(
+      `Programado ${formatFechaCortaBog(periodo.hasta)} · Hecho ${formatFechaCortaBog(periodo.hasta)}`,
+    ),
+    'JUNTA 5 · con las DOS fechas del aseo y sin abreviar aunque coincidan (D7-8): sin ellas, un aseo de un mes que aparece en el recibo de otro parece un error y el reclamo llega igual',
+  ).toBeVisible();
+
+  // ── (f) LA CONTRAPARTE DE SEGURIDAD, QUE ES LA OTRA MITAD DE LA GARANTÍA ──
+  //
+  // El margen y la tarifa de huésped salen de columnas que la migración 24 le
+  // quitó a la aseadora del grant: el admin las recupera por funciones definer.
+  // Que la pantalla no las pinte es la TERCERA capa; esta aserción mide la
+  // primera y la segunda a la vez, mirando lo que de verdad cruzó el cable.
+  // ── LAS DOS PANTALLAS SE VUELVEN A RECORRER, Y ESTA VEZ POR DIRECCIÓN ────
+  //
+  // El tramo (e) entró al desglose COMO ENTRA LA ASEADORA, tocando su tarjeta, y
+  // eso es lo que hay que probar de la interfaz. Pero para MEDIR LA FUGA no sirve,
+  // y es un defecto de instrumento medido aquí, con su error literal:
+  //
+  //     response.text: Protocol error (Network.getResponseBody):
+  //     No data found for resource with given identifier
+  //
+  // En una navegación de cliente, Next PREFETCHEA el enlace, y el navegador
+  // DESCARTA el cuerpo de esas respuestas: `response.text()` rechaza. Además, el
+  // cuerpo de la carga buena se puede evacuar al confirmar la navegación, así que
+  // capturarlo o no depende del reloj de la máquina. Un interceptor que a veces
+  // lee y a veces no es un interceptor que a veces no mira, y una aserción
+  // negativa que no mira pasa siempre.
+  //
+  // Con `goto()` la respuesta es un DOCUMENTO completo, su cuerpo está disponible
+  // siempre, y trae exactamente lo mismo que habría traído la carga de cliente. Es
+  // el mismo camino que usa `e2e/mis-pagos.spec.ts` para medir esta frontera.
+  const cargas = interceptarCargaUtil(paginaAseador);
+
+  await paginaAseador.goto('/mis-pagos');
+  await paginaAseador.waitForLoadState('networkidle');
+
+  await paginaAseador.goto(`/mis-pagos/${pagoDeLaResponsable!.id}`);
+  await paginaAseador.waitForLoadState('networkidle');
+
+  await expect(
+    paginaAseador.getByText('Tus aseos', { exact: true }),
+    'JUNTA 5 · y el desglose se abre igual por dirección directa: es el camino que trae el documento entero del pago, que es donde se mide la fuga',
+  ).toBeVisible();
+
+  // ── EL CONTROL DEL ALCANCE, Y LO ESCRIBIÓ UN SEÑUELO QUE NO PUSO NADA ROJO ─
+  //
+  // La primera versión de este tramo exigía solo que el interceptor hubiera
+  // capturado ALGUNA carga, que es lo que hace `mis-pagos.spec.ts`. Con el señuelo
+  // 6 puesto (la tarifa del aseo colgada de la línea del desglose como atributo de
+  // datos, que viaja y no se pinta) **el caso se quedó EN VERDE**. El volcado dijo
+  // por qué, y son dos trampas encadenadas que conviene no descubrir dos veces:
+  //
+  //     CARGA /mis-pagos                        len 15686  214609? false
+  //     HTML de la pantalla incluye 214609?     true
+  //
+  //   1. `response.text()` es asíncrono y el oyente NO bloquea la navegación. El
+  //      sondeo de «alguna carga» ya quedaba satisfecho con el documento de la
+  //      LISTA, así que el bucle corría antes de que la carga del DESGLOSE
+  //      terminara de leerse. La fuga estaba en la pantalla que no se miró.
+  //
+  //   2. Sondear por la URL del desglose TAMPOCO basta, y esto es lo que costó la
+  //      segunda vuelta: Next PREFETCHEA el enlace, así que hay DOS respuestas
+  //      contra esa misma dirección y la primera es un tocón de 260 bytes:
+  //
+  //          /mis-pagos/{id}?_rsc=liegek…   len  260   214609? false   ← prefetch
+  //          /mis-pagos/{id}?_rsc=0eShry…   len 4744   214609? TRUE    ← la de verdad
+  //
+  // Por eso el control es POR CONTENIDO y no por dirección ni por conteo: se exige
+  // que alguna carga traiga el NOMBRE DEL APARTAMENTO, que solo está en el
+  // desglose. Cuando eso es cierto, el interceptor leyó la carga buena.
+  await expect
+    .poll(() => cargas.filter((c) => c.cuerpo.includes(unidad.nombre)).length, {
+      timeout: 15_000,
+      message:
+        'JUNTA 5 · CONTROL DEL ALCANCE: alguna carga tiene que traer el nombre del apartamento, que solo viaja en el DESGLOSE. Sin eso, el interceptor se quedó en la lista o leyó el tocón del prefetch, y la ausencia de las cifras prohibidas no probaría nada sobre la pantalla donde más fácil se esconden',
+    })
+    .toBeGreaterThan(0);
+
+  const prohibidas = [
+    ...enLasDosFormas(tarifasDelAseo.tarifaHuesped),
+    ...enLasDosFormas(margenDelAseo),
+  ];
+  const permitidas = enLasDosFormas(tarifasDelAseo.pagoAseador);
+
+  // EL CONTROL DEL MÉTODO, Y NO ES ADORNO. Un interceptor que no capturó nada
+  // haría pasar la negativa sin haber mirado: probaría que no se miró, no que no
+  // hay fuga. Se exige que alguna carga traiga una cifra que la aseadora SÍ
+  // puede ver.
+  expect(
+    cargas.some(({ cuerpo }) => permitidas.some((cifra) => cuerpo.includes(cifra))),
+    'JUNTA 5 · CONTROL DEL MÉTODO: alguna carga trae el pago que la aseadora SÍ puede ver. Sin esto, la ausencia de las prohibidas no probaría nada',
+  ).toBe(true);
+
+  for (const { url, cuerpo } of cargas) {
+    for (const prohibida of prohibidas) {
+      expect(
+        cuerpo.includes(prohibida),
+        `JUNTA 5 · FUGA: la cifra ${prohibida} viajó al navegador de la aseadora en ${url}. Una pantalla que no la pinta no arregla esto: el dato ya está en el teléfono`,
+      ).toBe(false);
+    }
+  }
+
+  // Y la mitad del DOM, que sigue haciendo falta: una cifra puede entrar
+  // calculada en el cliente a partir de dos que sí viajaron.
+  const pintadoEnElTelefono = (await paginaAseador.locator('body').textContent()) ?? '';
+  for (const prohibida of prohibidas) {
+    expect(
+      pintadoEnElTelefono.includes(prohibida),
+      `JUNTA 5 · y la cifra ${prohibida} tampoco está pintada en la pantalla de la aseadora`,
+    ).toBe(false);
+  }
 });
