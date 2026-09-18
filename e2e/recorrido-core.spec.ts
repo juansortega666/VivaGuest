@@ -13,7 +13,9 @@ import {
 import { cargarEnvLocal, clienteDeServicio } from './global-setup';
 import {
   aseosDe,
+  aseosVivosDe,
   correrSync,
+  correrSyncEncadenado,
   icsDe,
   limpiarRecorrido,
   sembrarUnidadDeRecorrido,
@@ -212,4 +214,110 @@ test('un checkout publicado en el .ics se vuelve un aseo con su fecha, y el admi
     fila.getByText('Sin confirmar', { exact: true }),
     'con su etiqueta de texto y no solo con el color: la fila tiene que decirlo con palabras',
   ).toBeVisible();
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// 2. LA SEGUNDA CORRIDA, QUE ES DONDE SE CUELA UN ASEO DUPLICADO
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Un `.ics` de UNA reserva cuyo checkout cae pasado mañana. Es el cuerpo que
+ * usan los dos casos de esta sección: lo que cambia entre ellos no es el
+ * contenido, es si el `DTSTAMP` se mueve.
+ */
+function icsDeUnaReserva(sufijo: string): string {
+  return icsDe(hoy, [
+    { desde: 1, hasta: 2, uid: `rec-repetida-${sufijo}@airbnb.com`, codigo: 'HMYXB825YD' },
+  ]);
+}
+
+test('el mismo cuerpo servido dos veces corta por el hash y deja el mismo aseo', async ({
+  request,
+}) => {
+  const unidad = await sembrarUnidadDeRecorrido(servicio, { etiqueta: 'Hash' });
+  const cuerpo = icsDeUnaReserva(unidad.sufijo);
+
+  const primera = await correrSync(request, unidad.feedId, cuerpo);
+  expect(
+    primera.cuerpo.outcome,
+    'la primera corrida tiene que llegar al RPC (`ok`): sin ella la segunda no mediría nada',
+  ).toBe('ok');
+
+  const [aseoPrimero] = await aseosDe(servicio, unidad.propiedadId);
+  expect(
+    aseoPrimero,
+    'la primera corrida deja el aseo del checkout: es el sujeto de todo lo que viene',
+  ).toBeDefined();
+
+  // ── LA SEGUNDA, CON EL MISMO TEXTO EXACTO ────────────────────────────────
+  // Airbnb reemite el mismo cuerpo cada ~3 h. El bloque 8 del worker compara el
+  // sha256 del cuerpo con el de la corrida anterior y corta SIN llamar al RPC.
+  const segunda = await correrSync(request, unidad.feedId, cuerpo);
+
+  expect(
+    segunda.cuerpo.outcome,
+    'la segunda corrida sobre el MISMO cuerpo corta por el atajo del hash (`sin_cambios`): si dijera `ok`, el worker estaría pagando el diff entero cada media hora',
+  ).toBe('sin_cambios');
+
+  const despues = await aseosDe(servicio, unidad.propiedadId);
+  expect(
+    despues,
+    'después de la segunda corrida sigue habiendo UN aseo: dos significan que la reserva se volvió a mirar como nueva',
+  ).toHaveLength(1);
+
+  expect(
+    despues[0].id,
+    'y es EL MISMO aseo, por id: si fuera otro, el aseo se habría recreado y el checklist, la evidencia y el dinero de lo que hubiera encima se habrían ido con el viejo',
+  ).toBe(aseoPrimero.id);
+});
+
+test('el mismo contenido con DTSTAMP distinto sí llega al diff, y el diff no duplica el aseo', async ({
+  request,
+}) => {
+  const unidad = await sembrarUnidadDeRecorrido(servicio, { etiqueta: 'Diff' });
+  const cuerpo = icsDeUnaReserva(unidad.sufijo);
+
+  // ── POR QUÉ EL CASO DE ARRIBA NO BASTA, Y ES LA RAZÓN DE ESTE ────────────
+  // Con el mismo `DTSTAMP`, la segunda corrida se queda en el atajo del hash del
+  // worker y NO LLEGA A `sync_feed_apply()`. O sea que aquel caso mide el atajo,
+  // no la idempotencia: un diff que duplicara aseos pasaría verde igual, porque
+  // nunca se habría ejecutado. `correrSyncEncadenado()` mueve el `DTSTAMP`, que
+  // cambia el hash del cuerpo y no entra en la identidad del evento, así que el
+  // RPC sí corre sobre una reserva que YA existía. Es el único de los dos
+  // caminos donde la función de Postgres tiene la oportunidad de equivocarse.
+  const primera = await correrSyncEncadenado(request, unidad.feedId, cuerpo);
+  expect(
+    primera.cuerpo.outcome,
+    'la primera corrida encadenada llega al RPC (`ok`) y crea el aseo',
+  ).toBe('ok');
+
+  expect(
+    primera.corrida?.cleanings_created,
+    'y lo crea DE VERDAD: `cleanings_created` en 1 es lo que distingue "el aseo nació aquí" de "ya estaba"',
+  ).toBe(1);
+
+  const [aseoPrimero] = await aseosDe(servicio, unidad.propiedadId);
+
+  const segunda = await correrSyncEncadenado(request, unidad.feedId, cuerpo);
+
+  expect(
+    segunda.cuerpo.outcome,
+    'la segunda corrida encadenada NO corta por el hash y llega al RPC (`ok`): si dijera `sin_cambios`, este caso no habría probado el diff y sería el de arriba otra vez',
+  ).toBe('ok');
+
+  expect(
+    segunda.corrida?.cleanings_created,
+    'el diff corre sobre una reserva que ya existía y no crea nada: `cleanings_created` tiene que ser 0',
+  ).toBe(0);
+
+  const despues = await aseosVivosDe(servicio, unidad.propiedadId);
+  expect(
+    despues,
+    'y sigue habiendo UN aseo vivo después de que el diff se ejecutara de verdad',
+  ).toHaveLength(1);
+
+  expect(
+    despues[0].id,
+    'con EL MISMO id: la identidad del aseo es (apartamento, fecha) y no la reserva, y eso es lo que hace que el trabajo humano sobreviva al ruido de la fuente',
+  ).toBe(aseoPrimero.id);
 });
