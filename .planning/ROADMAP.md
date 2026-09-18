@@ -20,7 +20,7 @@ El equipo son dos personas, así que **las fases corren en secuencia estricta**.
 - [ ] **Fase 5: Notificaciones push e instalación de la PWA** - El aseador instala la PWA y recibe cada asignación en el teléfono; el admin recibe cada evento de campo
 - [x] **Fase 6: PWA del aseador, offline-first** - El aseador ejecuta el aseo completo con o sin señal y nada del trabajo de campo se pierde
 - [ ] **Fase 7: Financiero** - Rentabilidad por aseo y cierre mensual persistido que sobrevive a la retención
-- [ ] **Fase 8: Paneles laterales en el admin** - Consultar una ficha deja de costar la pantalla donde estabas, y el estado de un aseo se mira en vez de preguntarse por WhatsApp
+- [x] **Fase 8: Paneles laterales en el admin** - Consultar una ficha deja de costar la pantalla donde estabas, y el estado de un aseo se mira en vez de preguntarse por WhatsApp
 - [ ] **Fase 9: Retención y borrado automático** - El sistema se limpia solo, avisa antes de llenarse, y no destruye ni evidencia en disputa ni historial de pagos
 
 ## Phase Details
@@ -296,6 +296,7 @@ Plans:
 
 ### Phase 8: Paneles laterales en el admin
 
+**Status**: Complete 2026-09-18 (`passed_with_gaps`) — 14/14 planes en 7 waves, los 6 criterios verificados con evidencia propia por el verificador de fase. pgTAP 376 → 380, unitarios 1201 → 1244, integración 196 → 205, E2E 134 → 153 pasando. Gap declarado con dueño: la rama con cifras del grupo 4 del panel de aseadora nunca se vio pintada, y el arreglo exige tocar `sembrarFinanzas()` en `e2e/fixtures.ts`, del que dependen tres specs
 **Goal**: Consultar una ficha deja de costar la pantalla donde estabas, y el estado de un aseo se mira en vez de preguntarse por WhatsApp
 **Depends on**: Fases 4 y 7
 **Requirements**: Ninguno nuevo (cambia la forma de consultar lo ya entregado; el detalle de aseo es lectura nueva sobre datos existentes)
@@ -325,20 +326,20 @@ Plans:
 **Plans**: 14 plans, en 7 waves
 
 Plans:
-- [ ] 08-01-PLAN.md — Wave 0: la migración 28 (el detalle de aseo con guarda de admin) y el bloque P de pgTAP, con sus cuatro señuelos
-- [ ] 08-02-PLAN.md — Wave 0: el spike que mide si el filtro y el scroll sobreviven a abrir un panel, y el barrido de aserciones que el portal deja vacías
-- [ ] 08-03-PLAN.md — Wave 0: los dos módulos de dominio que el UI-SPEC daba por existentes y no existen (checkouts y salud del feed)
-- [ ] 08-04-PLAN.md — Wave 1: el armazón de panel y el único token nuevo, con los tres overrides obligatorios de la primitiva
-- [ ] 08-05-PLAN.md — Wave 1: la lectura del panel de aseo, cinco viajes y una latencia, con su test de integración
-- [ ] 08-06-PLAN.md — Wave 2: la ficha de apartamento, que D8-3 mandó crear porque no existía
-- [ ] 08-07-PLAN.md — Wave 2: el panel de aseo, la tira de evidencia y el diálogo de foto
-- [ ] 08-08-PLAN.md — Wave 2: el panel de aseadora, y el borrado de la única página que la fase se lleva
-- [ ] 08-09-PLAN.md — Wave 3: el código de acceso con un gesto, y la credencial del calendario que no puede viajar con él
-- [ ] 08-10-PLAN.md — Wave 3: la vista de calendario del panel, sin tocar la pantalla de conexión
-- [ ] 08-11-PLAN.md — Wave 4: las seis aserciones de D8-11, el retargeteo al diálogo con contra-prueba en rojo, y el quinto panel alineado
-- [ ] 08-12-PLAN.md — Wave 4: los criterios 1, 2 y 3 en `/apartamentos`, y el secreto fuera del documento
-- [ ] 08-13-PLAN.md — Wave 5: el criterio 4 entero, y los criterios 2 y 3 en Operación y Finanzas
-- [ ] 08-14-PLAN.md — Wave 6: la compuerta de la fase, la auditoría de señuelos y la deuda declarada
+- [x] 08-01-PLAN.md — Wave 0: la migración 28 (el detalle de aseo con guarda de admin) y el bloque P de pgTAP, con sus cuatro señuelos
+- [x] 08-02-PLAN.md — Wave 0: el spike que mide si el filtro y el scroll sobreviven a abrir un panel, y el barrido de aserciones que el portal deja vacías
+- [x] 08-03-PLAN.md — Wave 0: los dos módulos de dominio que el UI-SPEC daba por existentes y no existen (checkouts y salud del feed)
+- [x] 08-04-PLAN.md — Wave 1: el armazón de panel y el único token nuevo, con los tres overrides obligatorios de la primitiva
+- [x] 08-05-PLAN.md — Wave 1: la lectura del panel de aseo, cinco viajes y una latencia, con su test de integración
+- [x] 08-06-PLAN.md — Wave 2: la ficha de apartamento, que D8-3 mandó crear porque no existía
+- [x] 08-07-PLAN.md — Wave 2: el panel de aseo, la tira de evidencia y el diálogo de foto
+- [x] 08-08-PLAN.md — Wave 2: el panel de aseadora, y el borrado de la única página que la fase se lleva
+- [x] 08-09-PLAN.md — Wave 3: el código de acceso con un gesto, y la credencial del calendario que no puede viajar con él
+- [x] 08-10-PLAN.md — Wave 3: la vista de calendario del panel, sin tocar la pantalla de conexión
+- [x] 08-11-PLAN.md — Wave 4: las seis aserciones de D8-11, el retargeteo al diálogo con contra-prueba en rojo, y el quinto panel alineado
+- [x] 08-12-PLAN.md — Wave 4: los criterios 1, 2 y 3 en `/apartamentos`, y el secreto fuera del documento
+- [x] 08-13-PLAN.md — Wave 5: el criterio 4 entero, y los criterios 2 y 3 en Operación y Finanzas
+- [x] 08-14-PLAN.md — Wave 6: la compuerta de la fase, la auditoría de señuelos y la deuda declarada
 
 **UI hint**: yes
 
