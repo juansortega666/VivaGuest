@@ -1,6 +1,6 @@
 'use client';
 
-import { Copy, MoreHorizontal, Power } from 'lucide-react';
+import { MoreHorizontal, Power } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -9,7 +9,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
@@ -22,24 +21,20 @@ import { DialogoDesactivarAseador } from './DialogoDesactivarAseador';
  * El plan 02-07 dejó el disparador montado y vacío para no mover el ancho de las
  * otras cinco columnas al añadirlo después. Aquí se cablea.
  *
- * ── `COPIAR EL LINK DE INSTALACIÓN`, Y LO QUE DELIBERADAMENTE NO HACE ───────
- * El ítem copia `https://{dominio}/instalar` al portapapeles. El toast está unas
- * líneas más abajo, literal, y su última frase es la parte que hay que defender:
- * remite al canal que el admin YA usa con esa persona.
+ * ── EL ÍTEM DE COPIAR EL LINK SE ELIMINÓ EL 2026-09-18 (quick `260918-h47`) ──
+ * Copiaba al portapapeles la URL del asistente de instalación, que se eliminó
+ * entero. El admin instala la PWA a mano, teléfono por teléfono, y entrega el
+ * aparato ya instalado: no hay link que mandar ni pantalla a la que llevar.
  *
- * Es exactamente lo que alguien va a querer "mejorar" añadiendo un botón de
- * enviar: EL PRODUCTO NO TIENE CANAL DE MENSAJERÍA Y NO LO VA A INVENTAR ACÁ. No
- * hay WhatsApp, ni SMS, ni correo saliente. Prometer "enviar el link" cuando no
- * hay a dónde enviarlo sería una acción que miente, y el admin lo descubriría
- * cuando el aseador siguiera sin avisos una semana después.
+ * Con ese ítem fuera, la rama del aseador activo se quedó con UNA sola opción y
+ * el `DropdownMenuSeparator` se fue con él. No es un descuido: el plan 02-07 lo
+ * dejó advertido por escrito —un separador como primer hijo pinta una raya
+ * suelta contra el borde del popup— y lo condicionó a *cuando exista algo de lo
+ * que separarlo*. Dejó de existir.
  *
- * El dominio sale de `window.location.origin` y NO de una variable de entorno
- * nueva: es la misma app, el navegador ya sabe desde qué origen se sirvió, y una
- * variable más es una variable más que se puede quedar desactualizada entre
- * local, preview y producción.
- *
- * El ítem NO aparece para un aseador dado de baja, con la misma condición que
- * los demás: no puede entrar, así que instalarse la app no le sirve de nada.
+ * El disparador de tres puntos SÍ se queda, aunque cada rama tenga hoy una sola
+ * opción: la columna ya está dimensionada alrededor de él y quitarlo movería el
+ * ancho de las otras cinco.
  *
  * ── LAS DOS ACCIONES NO SON SIMÉTRICAS, Y ESA ES LA DECISIÓN ────────────────
  *  - `Desactivar` abre un `AlertDialog` con las consecuencias reales: revoca el
@@ -65,25 +60,6 @@ export function MenuAseador({ aseador }: { aseador: AseadorDelMenu }) {
 
   const [dialogoAbierto, setDialogoAbierto] = useState(false);
   const [reactivando, setReactivando] = useState(false);
-
-  async function copiarLinkDeInstalacion() {
-    // El origen del navegador, no una variable de entorno: es la misma app.
-    const link = `${window.location.origin}/instalar`;
-
-    try {
-      // `navigator.clipboard` no existe en contexto no seguro (http que no sea
-      // localhost). Si falla, NO se dice que se copió: darle por copiado algo que
-      // no está en el portapapeles es peor que no ofrecer el ítem.
-      await navigator.clipboard.writeText(link);
-      toast.success(`Link copiado. Mándaselo por donde ya te hablas con ${aseador.full_name}.`);
-    } catch {
-      // §18: qué pasó y qué hacer, las dos cosas. Sin disculpas, sin signos de
-      // admiración y sin fórmulas vacías de excusa, que no dicen ninguna de las dos.
-      toast.error(
-        `El navegador no dejó escribir en el portapapeles. Abre ${link} y copia el link de la barra de direcciones.`,
-      );
-    }
-  }
 
   async function reactivar() {
     setReactivando(true);
@@ -123,26 +99,10 @@ export function MenuAseador({ aseador }: { aseador: AseadorDelMenu }) {
 
         <DropdownMenuContent align="end">
           {aseador.is_active ? (
-            <>
-              <DropdownMenuItem onClick={copiarLinkDeInstalacion}>
-                <Copy aria-hidden="true" />
-                Copiar el link de instalación
-              </DropdownMenuItem>
-
-              {/*
-                §7.3 pide un separador ENCIMA del ítem destructivo, para despegarlo
-                de los ítems normales que lo preceden. El plan 02-07 lo dejó
-                pendiente con la razón escrita —un separador como primer hijo pinta
-                una raya suelta contra el borde del popup— y con la condición para
-                ponerlo: *cuando exista algo de lo que separarlo*. Ya existe.
-              */}
-              <DropdownMenuSeparator />
-
-              <DropdownMenuItem variant="destructive" onClick={() => setDialogoAbierto(true)}>
-                <Power aria-hidden="true" />
-                Desactivar
-              </DropdownMenuItem>
-            </>
+            <DropdownMenuItem variant="destructive" onClick={() => setDialogoAbierto(true)}>
+              <Power aria-hidden="true" />
+              Desactivar
+            </DropdownMenuItem>
           ) : (
             <DropdownMenuItem onClick={reactivar} disabled={reactivando}>
               <Power aria-hidden="true" />

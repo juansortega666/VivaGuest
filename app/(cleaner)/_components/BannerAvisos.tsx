@@ -1,7 +1,6 @@
 'use client';
 
 import { Bell, BellOff, CircleAlert, Smartphone, TriangleAlert } from 'lucide-react';
-import Link from 'next/link';
 import { useCallback, useState } from 'react';
 
 import { registrarSuscripcion } from '@/app/(cleaner)/_actions';
@@ -38,19 +37,29 @@ import { BotonActivarAvisos } from './BotonActivarAvisos';
  *
  * 2. **Los dos estados que PWA-03 exige diferenciar comparten color** (§4.3), y
  *    se separan por los tres canales que si cargan significado: distinto ICONO
- *    (`Bell` contra `BellOff`), distinto TITULO, distinto CUERPO —el de
- *    `negado` explica COMO SE DESBLOQUEA, y es distinto por plataforma— y
- *    distinta ACCION PRIMARIA (una dispara el navegador, la otra solo navega).
+ *    (`Bell` contra `BellOff`), distinto TITULO y distinto CUERPO. Uno tiene
+ *    ademas ACCION y el otro no, que es el cuarto canal.
  *
  * ── LO QUE EL BANNER DE PERMISO BLOQUEADO NO HACE, Y POR QUE (§7.4) ─────────
  *
  * · NO vuelve a pedir el permiso. Con el permiso ya bloqueado, esa llamada
  *   devuelve `denied` de inmediato y sin dialogo, y un boton que no produce nada
- *   visible se lee como app rota. La unica llamada de todo el proyecto vive
- *   dentro del `onClick` de `BotonActivarAvisos`, y hay un criterio de
+ *   visible se lee como app rota. La unica llamada de todo el arbol del aseador
+ *   vive dentro del `onClick` de `BotonActivarAvisos`, y hay un criterio de
  *   aceptacion por grep que cuenta cero en ESTE archivo.
  * · NO dice "haz clic aquí para activar": no hay ningun clic que active nada
  *   desde dentro de la app.
+ * · **YA NO DIFERENCIA POR SISTEMA OPERATIVO** (2026-09-18, quick `260918-h47`).
+ *   Tenia dos ramas, iPhone y Android, y existian UNICAMENTE para enlazar al
+ *   asistente de instalacion, que se elimino. Sin el, las dos decian lo mismo
+ *   por caminos distintos: desde dentro de la app no hay ningun clic que
+ *   desbloquee un permiso ya denegado, en ninguno de los dos sistemas. En iPhone
+ *   la denegacion es irreversible sin reinstalar, y quien reinstala es el
+ *   administrador; en Android la ruta por los ajustes del sistema nunca fue la
+ *   que resolvio el caso en campo. La salida real es la misma para los dos y es
+ *   una persona, asi que hoy es UN SOLO renglon sin plataforma y sin accion.
+ *   Mantener dos cuerpos distintos seria conservar la ayuda diferenciada del
+ *   asistente despues de borrar el asistente.
  *
  * ── MIENTRAS EL ESTADO NO SE SEPA, NO SE RENDERIZA NADA (§15.2) ────────────
  *
@@ -64,19 +73,14 @@ import { BotonActivarAvisos } from './BotonActivarAvisos';
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const CUERPO_SIN_INSTALAR =
-  'Desde el navegador no te llegan los avisos de aseo. Instalarla toma un minuto y después la abres desde el icono.';
+  'Desde el navegador no te llegan los avisos de aseo. Avísale a tu administrador para que te la instale en el teléfono.';
 
 const CUERPO_NUNCA_PEDIDO =
   'Te avisamos apenas te asignen un aseo. Sin esto no te enteras.';
 
-const CUERPO_NEGADO_IPHONE =
-  'En iPhone la única forma de volver a activarlos es borrar el icono de VivaGuest de la pantalla de inicio y volver a instalarlo. No pierdes nada: tus aseos siguen en el sistema.';
-
-const APOYO_NEGADO_IPHONE =
-  'Mientras tanto, avísale a tu administrador para que te escriba cuando tengas un aseo.';
-
-const CUERPO_NEGADO_ANDROID =
-  'Ábrelos desde los ajustes del teléfono: Ajustes → Aplicaciones → VivaGuest → Notificaciones, y actívalas.';
+/** Uno solo, sin plataforma. Ver la cabecera: las dos ramas se fundieron. */
+const CUERPO_NEGADO =
+  'Los avisos están bloqueados en este teléfono y desde aquí no se pueden desbloquear. Avísale a tu administrador para que lo deje listo otra vez.';
 
 const CUERPO_ROTO =
   'Este teléfono ya no está recibiendo los aseos. Tócalo para volver a conectarlo.';
@@ -95,7 +99,7 @@ const CUERPO_NO_SOPORTADO_IOS_VIEJO =
 const CUERPO_NO_SOPORTADO_GENERICO = 'Habla con tu administrador.';
 
 function cuerpoNavegadorEmbebido(navegador: string): string {
-  return `Estás viendo VivaGuest dentro de otra aplicación. Toca el menú de arriba y elige "Abrir en ${navegador}" para poder instalarla.`;
+  return `Estás viendo VivaGuest dentro de otra aplicación. Toca el menú de arriba y elige "Abrir en ${navegador}".`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -252,22 +256,9 @@ function Vista({
           {/* `--foreground` y NO `--muted-foreground` (§7.1): este texto es la
               instruccion, no un apoyo. */}
           <p className="text-body-movil text-foreground">{contenido.cuerpo}</p>
-
-          {contenido.apoyo !== undefined && (
-            <p className="text-micro-movil text-muted-foreground">{contenido.apoyo}</p>
-          )}
         </div>
 
-        {accion?.tipo === 'enlace' && (
-          <Button
-            render={<Link href={accion.href} />}
-            className="min-h-toque-comodo w-full text-body-movil"
-          >
-            {accion.etiqueta}
-          </Button>
-        )}
-
-        {accion?.tipo === 'activar' && (
+        {accion !== undefined && (
           <>
             <BotonActivarAvisos
               clavePublica={clavePublica}
@@ -309,16 +300,24 @@ function Vista({
 // EL CUERPO Y LA ACCION DE CADA ESTADO
 // ═══════════════════════════════════════════════════════════════════════════════
 
-type Accion =
-  | { tipo: 'enlace'; etiqueta: string; href: string }
-  | {
-      tipo: 'activar';
-      etiqueta: string;
-      reconectar: boolean;
-      modo: Exclude<Intento, 'ninguno'>;
-    };
+/**
+ * UNA SOLA FORMA, Y SIN DISCRIMINANTE (2026-09-18, quick `260918-h47`).
+ *
+ * Era una union de dos: esta, que dispara el boton, y una de enlace que
+ * navegaba al asistente de instalacion. Al eliminarse el asistente, la forma de
+ * enlace se quedo sin un solo caso que la produjera. Se borro entera, y con ella
+ * el campo `tipo`: un discriminante sobre un unico miembro afirma que existe
+ * otra forma, y ya no existe. Misma regla con la que 07-06 borro sus tres `.d.ts`
+ * al implementarlos: el andamio que sobrevive a su motivo queda invisible y
+ * muerto.
+ */
+type Accion = {
+  etiqueta: string;
+  reconectar: boolean;
+  modo: Exclude<Intento, 'ninguno'>;
+};
 
-type Contenido = { cuerpo: string; apoyo?: string; accion?: Accion };
+type Contenido = { cuerpo: string; accion?: Accion };
 
 /**
  * Los cinco casos visibles de §7.2 a §7.6.
@@ -345,16 +344,18 @@ function contenidoDelBanner(
       throw new Error('contenidoDelBanner: `activo` no renderiza banner (§5.1, S5)');
 
     case 'sin_instalar':
-      return {
-        cuerpo: CUERPO_SIN_INSTALAR,
-        accion: { tipo: 'enlace', etiqueta: 'Ver cómo se instala', href: '/instalar' },
-      };
+      // SIN ACCION. El estado es real —se llega por un link en una pestana del
+      // navegador— y silenciarlo dejaria al aseador sin saber por que no recibe
+      // nada. Pero no hay boton que sirva: este estado se deriva precisamente de
+      // que la maquinaria de avisos no existe en esa pestana, asi que pedir el
+      // permiso desde aqui es imposible. Queda el renglon que nombra la salida
+      // real, que es el administrador.
+      return { cuerpo: CUERPO_SIN_INSTALAR };
 
     case 'nunca_pedido':
       return {
         cuerpo: CUERPO_NUNCA_PEDIDO,
         accion: {
-          tipo: 'activar',
           etiqueta: 'Activar los avisos',
           reconectar: false,
           modo: 'activacion',
@@ -362,25 +363,14 @@ function contenidoDelBanner(
       };
 
     case 'negado':
-      // La primaria SOLO NAVEGA. No dispara nada del navegador (§7.4).
-      return plataforma === 'iphone'
-        ? {
-            cuerpo: CUERPO_NEGADO_IPHONE,
-            // No es relleno: los avisos son el UNICO canal y no hay respaldo.
-            // Un aseador bloqueado necesita saber que hay una salida humana.
-            apoyo: APOYO_NEGADO_IPHONE,
-            accion: { tipo: 'enlace', etiqueta: 'Ver los pasos', href: '/instalar?volver=1' },
-          }
-        : {
-            cuerpo: CUERPO_NEGADO_ANDROID,
-            accion: { tipo: 'enlace', etiqueta: 'Ver los pasos', href: '/instalar?permiso=1' },
-          };
+      // UN SOLO RETORNO, SIN MIRAR LA PLATAFORMA Y SIN ACCION. Ver la cabecera:
+      // las dos ramas existian solo para enlazar al asistente.
+      return { cuerpo: CUERPO_NEGADO };
 
     case 'roto':
       return {
         cuerpo: intentoFallido === 'ninguno' ? CUERPO_ROTO : CUERPO_ROTO_TRAS_FALLO,
         accion: {
-          tipo: 'activar',
           etiqueta: 'Reconectar los avisos',
           reconectar: true,
           modo: 'reconexion',
@@ -388,19 +378,14 @@ function contenidoDelBanner(
       };
 
     case 'no_soportado': {
-      // EL SUB-CASO MAS PROBABLE DE LOS TRES, y el unico con algo que hacer: el
-      // link del onboarding se manda por WhatsApp, asi que la app se abre dentro
-      // de otra aplicacion mas veces que en ningun otro sitio.
+      // EL SUB-CASO MAS PROBABLE DE LOS TRES: el link del onboarding se manda
+      // por WhatsApp, asi que la app se abre dentro de otra aplicacion mas veces
+      // que en ningun otro sitio. Su instruccion cabe en un renglon y se resuelve
+      // sin salir de donde esta, asi que el cuerpo se conserva. SIN ACCION: el
+      // menu que hay que tocar es el de la otra aplicacion, no el nuestro.
       if (embebido) {
         const navegador = plataforma === 'android' ? 'Chrome' : 'Safari';
-        return {
-          cuerpo: cuerpoNavegadorEmbebido(navegador),
-          accion: {
-            tipo: 'enlace',
-            etiqueta: `Cómo abrirlo en ${navegador}`,
-            href: '/instalar?navegador=1',
-          },
-        };
+        return { cuerpo: cuerpoNavegadorEmbebido(navegador) };
       }
 
       // Instalada, iPhone y sin la maquinaria de avisos: es iOS anterior a 16.4,
