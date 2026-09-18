@@ -144,3 +144,82 @@ para afirmar que el orden es cronológico y no por tipo.
 **Quién debería cerrarlo:** 08-13, que es el plan que toca casos E2E. Y
 `08-14` tiene que saberlo para no contar este rojo como regresión de la fase:
 la misma suite, corrida después de las 04:01, da 134 en verde.
+
+---
+
+## Los dos huecos de contrato que 08-10 mandó a «08-12», y que este 08-12 no puede cerrar
+
+**Encontrado por 08-12, leyendo sus dependencias. No es un descubrimiento nuevo:
+es una redirección de destinatario.**
+
+El SUMMARY de 08-10 deja dos decisiones de contrato *«para el barrido visual de
+08-12»*, y el SUMMARY de 08-11 se dirige a *«08-12 (el barrido visual)»*. **El
+plan 08-12 que se ejecutó no es un barrido visual:** es el plan de aserciones de
+los criterios 1, 2 y 3, y su `files_modified` es exactamente un archivo,
+`e2e/apartamentos-lista.spec.ts`, con una prohibición explícita de que el diff
+contenga otro. Los dos huecos son cambios de **producto**, así que quedan aquí.
+
+### a) Dos botones `Conectar calendario` en la misma pantalla
+
+El estado vacío del panel de calendario pinta su acción (§11.2) y el pie del
+panel se pinta **sin condición** (§8.2), así que con un apartamento sin feed el
+admin ve el mismo botón dos veces. 08-10 lo midió en el DOM y no lo arregló, con
+razón: no se pueden conciliar en ejecución, porque el pie se decide **antes** de
+que llegue el dato y con lo que hay en ese momento no se distingue *«no hay fila
+de feed»* de *«la fila está apagada»*, que van a cuerpos distintos.
+
+**Recomendación heredada, y este plan la suscribe:** el que se queda es **el
+pie**, porque es el único que existe también cuando el panel sí tiene contenido.
+Quitarlo del estado vacío es una modificación de §11.2.
+
+### b) `1 fallos seguidos` es agramatical, y es un estado alcanzable
+
+El umbral del feed es **uno**, así que `{N} fallos seguidos` con N igual a uno se
+pinta de verdad. El precedente de cómo se resuelve ya está en el repo, en este
+mismo archivo de la fase: `rotuloDeDistancia()` de `PanelCalendario.tsx` le dio
+clave propia a `mañana` justamente porque *«`dentro de 1 días` es agramatical»*.
+La forma correcta es la misma: una rama para el singular (`1 fallo seguido`),
+resuelta donde vive el copy.
+
+**Las dos son modificaciones del contrato de copywriting y de §8.2/§11.2, no de
+la ejecución.** Quien las cierre tiene que tocar `PanelCalendario.tsx` y
+`08-UI-SPEC.md`, y ninguno de los dos está en el alcance de 08-12.
+
+**Quién debería cerrarlas:** 08-13, que es el plan que puede reabrir el contrato,
+o un plan de barrido visual si la fase todavía añade uno.
+
+---
+
+## El `tipo_cerradura` no se ve en el camino inicial del estado «sin código»
+
+**Declarado por 08-09 (decisión 5) como hueco para «08-12 y 08-13». 08-12 lo
+deja abierto, y con un argumento.**
+
+§7.3 dice que la fila `Sin código` muestra el `tipo_cerradura`. Hoy solo se ve
+cuando la acción llegó a responder (o sea cuando el código desapareció entre que
+el panel se pintó y el admin pulsó). En el camino inicial no se ve, porque el
+contrato de props de `CodigoDeAccesoAdmin` es **identificador más booleano**.
+
+**La decisión de 08-12, escrita para que nadie la vuelva a tomar desde cero:**
+
+1. **Cerrarlo NO viola el criterio 5, y el criterio de aceptación de 08-09 no
+   dice lo que parece decir.** Lo que ese criterio protege es que **el valor del
+   código** no cruce al árbol del cliente, porque lo que se pasa como prop
+   **queda en el documento aunque no se pinte** (y este plan lo acaba de medir en
+   rojo: con el código pasado como prop y nunca renderizado, la aserción
+   T-08-57 se pone roja). `tipo_cerradura` **no es un secreto**: es una unión
+   cerrada de dos valores (`inteligente` · `llave_fisica`) fijada por un CHECK de
+   la base, y conocerla no acerca a nadie a abrir una puerta.
+2. **Aun así cuesta un viaje.** La lista de apartamentos no lee la tabla de
+   secretos y no puede; hoy el panel ya paga `hayCodigoDeAcceso()`, así que la
+   forma barata es **cambiar el booleano por la unión**: que esa función
+   devuelva `{ hayCodigo, tipoCerradura }` en vez de `boolean`. Cero consultas
+   nuevas, y el objeto entero de credenciales sigue sin ser nunca una variable en
+   el ámbito de un componente que se renderiza, que es lo que 08-09 protegía.
+3. **No se hace aquí** porque toca `_actions.ts`, `PanelApartamento.tsx` y
+   `CodigoDeAccesoAdmin.tsx`, y el diff de 08-12 es de un solo archivo de pruebas.
+
+**Quién debería cerrarlo:** 08-13. Y cuando lo cierre, el caso del secreto de
+`apartamentos-lista.spec.ts` ya está escrito para atraparlo si se pasa de la
+raya: afirma contra el documento entero, y el señuelo que lo pone rojo está
+reproducido en el SUMMARY de 08-12.
