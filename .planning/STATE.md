@@ -8,7 +8,7 @@ status: complete
 stopped_at: Fase 08 CERRADA (passed_with_gaps), 14/14 planes. La Fase 07 sigue abierta en su unico checkpoint humano (07-13, el recorrido de nueve puntos en un iPhone real)
 last_updated: "2026-09-18T06:00:00.000Z"
 last_activity: 2026-09-18
-last_activity_desc: "Fase 08 ejecutada entera: los cuatro paneles en pie, el criterio 1 medido en el DOM, y el verde falso del portal impreso como evidencia"
+last_activity_desc: "Fase 08 cerrada y quick de RET-07 ejecutado. El dueno decidio que nada se borra nunca, asi que la alerta de Storage pasa a ser lo unico que avisa antes de llenarse"
 progress:
   total_phases: 9
   completed_phases: 6
@@ -494,6 +494,7 @@ Ninguno.
 |---|-------------|------|--------|-----------|
 | 260907-703 | `AlertDialog` y `Tooltip` median 4 y 32 px: tokens `--container-*` con nombre propio en las dos primitivas | 2026-09-07 | dbf8a98 | [260907-703-max-w-primitivas-rotas](./quick/260907-703-max-w-primitivas-rotas/) |
 | 260908-7w0 | `Dialog` y `Sheet` dejaban de nacer con caja de 8px; `ci:arch` ahora atrapa las clases de ancho con nombre de talla | 2026-09-08 | 628720d | [260908-7w0-purgar-los-max-w-con-nombre-de-talla-de-](./quick/260908-7w0-purgar-los-max-w-con-nombre-de-talla-de-/) |
+| 260918-a33 | RET-07: el admin ve el consumo de Storage y la alerta salta al 70%. Lo unico que avisa antes de llenarse, porque el dueno decidio que nada se borra nunca | 2026-09-18 | e4de15a | [260918-a33-alerta-de-storage](./quick/260918-a33-alerta-de-storage/) |
 
 ## Consecuencias de la Fase 1 para fases posteriores
 
