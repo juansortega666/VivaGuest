@@ -105,6 +105,70 @@ function pesos(texto: string): number {
 }
 
 /**
+ * LAS CIFRAS DE HUÉSPED, EN LAS DOS FORMAS EN QUE PUEDEN VIAJAR.
+ *
+ * El entero crudo de una carga de datos y el formateado con separador de miles.
+ * Buscar solo una de las dos es exactamente el defecto que la Fase 7 pagó: con
+ * el árbol renderizado en el servidor, el entero crudo NO VIAJA, así que una
+ * búsqueda que solo lo mirara a él nunca podría dispararse.
+ *
+ * Van las tarifas Y los márgenes: una pantalla que no mande la tarifa pero sí la
+ * resta rompe la frontera igual, porque el margen se despeja con lo que la
+ * persona sí puede ver.
+ */
+const CIFRAS_DE_HUESPED: string[] = [
+  CIFRAS_FINANCIERAS.tarifaA,
+  CIFRAS_FINANCIERAS.tarifaB,
+  CIFRAS_FINANCIERAS.margenA,
+  CIFRAS_FINANCIERAS.margenB,
+].flatMap((n) => [String(n), n.toLocaleString('es-CO')]);
+
+interface CargaUtil {
+  url: string;
+  cuerpo: string;
+}
+
+/**
+ * Engancha un oyente que guarda el CUERPO de cada respuesta de este origen.
+ *
+ * Se miran el HTML del render del servidor, la carga que el enrutador pide al
+ * navegar sin recargar, y cualquier JSON. Se descarta `/_next/static/`: son los
+ * bundles, con hashes de build que producen coincidencias por puro azar, y un
+ * bundle no lleva datos de una persona concreta.
+ *
+ * `response.text()` puede rechazar cuando el navegador ya descartó el cuerpo.
+ * Se traga el error a propósito: una respuesta sin cuerpo no puede filtrar nada.
+ *
+ * Es el mismo interceptor de `e2e/mis-pagos.spec.ts`, copiado y no importado
+ * porque cada spec de este repo es autosuficiente.
+ */
+function interceptarCargaUtil(p: Page): CargaUtil[] {
+  const cargas: CargaUtil[] = [];
+
+  p.on('response', (respuesta) => {
+    const url = new URL(respuesta.url());
+    if (url.pathname.startsWith('/_next/static/')) return;
+
+    const tipo = respuesta.headers()['content-type'] ?? '';
+    if (!/text\/html|text\/x-component|application\/json|text\/plain/.test(tipo)) return;
+
+    void respuesta
+      .text()
+      .then((cuerpo) => cargas.push({ url: respuesta.url(), cuerpo }))
+      .catch(() => {
+        /* sin cuerpo disponible: no puede filtrar nada */
+      });
+  });
+
+  return cargas;
+}
+
+/** Cuáles de las cifras de huésped aparecen en alguna de las cargas capturadas. */
+function cifrasDeHuespedEncontradas(cargas: CargaUtil[]): string[] {
+  return CIFRAS_DE_HUESPED.filter((cifra) => cargas.some(({ cuerpo }) => cuerpo.includes(cifra)));
+}
+
+/**
  * El valor de un KPI, a partir de su etiqueta.
  *
  * ── POR QUÉ SE SUBE POR EL ÁRBOL EN VEZ DE PEDIR UN ROL ─────────────────────
@@ -1037,6 +1101,84 @@ test.describe('Finanzas, con dos periodos cerrados y uno en curso', () => {
       );
     }
   });
+
+  /**
+   * ── LA OTRA CAPA, Y NO ES LA DEL CASO DE ARRIBA ────────────────────────────
+   *
+   * El de arriba afirma que las rutas REBOTAN. Este afirma que **ninguna cifra
+   * de huésped viajó al navegador de esa sesión**, que es una cosa distinta: un
+   * rebote que llegara después de haber servido el documento dejaría el dato en
+   * el teléfono igual.
+   *
+   * ── Y LA TRAMPA QUE LA FASE 7 PAGÓ ────────────────────────────────────────
+   *
+   * El control de método de `mis-pagos.spec.ts` **no podía dispararse nunca**:
+   * buscaba las cifras permitidas solo en el formato crudo, y el entero crudo no
+   * viaja porque el formateo ocurre en el servidor. La prueba de la fuga habría
+   * pasado en verde con la fuga abierta. Por eso acá se busca **en los dos
+   * formatos** y el control es la MISMA búsqueda con sesión de admin: si con
+   * admin no encuentra nada, la ausencia con la aseadora no prueba nada.
+   *
+   * ── LO QUE NO SE DUPLICA ──────────────────────────────────────────────────
+   *
+   * El bloque P de `supabase/tests/11_financiero.test.sql` ya afirma el permiso
+   * denegado dentro de Postgres, con roles reales. Acá se afirma la otra capa.
+   */
+  test('CRITERIO 5: ninguna cifra del panel de aseadora llega al navegador de una aseadora, buscada en los dos formatos', async ({
+    paginaAdmin,
+    paginaAseador,
+  }) => {
+    const direccionDelPanel = `/finanzas?rango=dia&ancla=${diaLimpio}&aseadora=${esc.aseadoraUna.id}`;
+
+    // ── EL CONTROL DEL MÉTODO ────────────────────────────────────────────
+    const cargasDelAdmin = interceptarCargaUtil(paginaAdmin);
+    await paginaAdmin.goto(direccionDelPanel);
+    await expect(paginaAdmin.getByRole('dialog')).toBeVisible();
+    await paginaAdmin.waitForLoadState('networkidle');
+    await expect.poll(() => cargasDelAdmin.length, { timeout: 5_000 }).toBeGreaterThan(0);
+
+    expect(
+      cifrasDeHuespedEncontradas(cargasDelAdmin),
+      'CONTROL DEL MÉTODO: con la sesión de admin, esta misma búsqueda SÍ encuentra las cifras de huésped. ' +
+        'Sin esto, la ausencia de abajo no significaría nada.',
+    ).not.toHaveLength(0);
+
+    // ── Y LA SESIÓN DE ASEADORA, SOBRE LA MISMA DIRECCIÓN ────────────────
+    const cargasDeLaAseadora = interceptarCargaUtil(paginaAseador);
+    await paginaAseador.goto(direccionDelPanel);
+
+    // El patrón admite cola: el rebote arrastra los parámetros de la dirección
+    // de la que vino. Es inocuo y no se arregla desde acá.
+    await expect(paginaAseador, 'la dirección del panel rebota a la raíz del aseador').toHaveURL(
+      /\/mis-aseos(\?|$)/,
+    );
+    await paginaAseador.waitForLoadState('networkidle');
+    await expect.poll(() => cargasDeLaAseadora.length, { timeout: 5_000 }).toBeGreaterThan(0);
+
+    for (const { url, cuerpo } of cargasDeLaAseadora) {
+      for (const prohibida of CIFRAS_DE_HUESPED) {
+        expect(
+          cuerpo.includes(prohibida),
+          `FUGA: la cifra ${prohibida} viajó al navegador de la aseadora en ${url}. ` +
+            'Una pantalla que no la pinta no arregla esto: el dato ya está en el teléfono.',
+        ).toBe(false);
+      }
+    }
+
+    // Y la mitad del DOM: una cifra puede entrar calculada en el cliente a
+    // partir de dos que sí viajaron.
+    const pintado = ((await paginaAseador.locator('body').textContent()) ?? '').replace(
+      /[.\s ]/g,
+      '',
+    );
+    for (const prohibida of CIFRAS_DE_HUESPED) {
+      expect(
+        pintado,
+        `FUGA: la cifra ${prohibida} está pintada en la pantalla de la aseadora`,
+      ).not.toContain(prohibida.replace(/[.\s ]/g, ''));
+    }
+  });
+
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

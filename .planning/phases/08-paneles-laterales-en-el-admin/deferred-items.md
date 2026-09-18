@@ -223,3 +223,48 @@ contrato de props de `CodigoDeAccesoAdmin` es **identificador más booleano**.
 `apartamentos-lista.spec.ts` ya está escrito para atraparlo si se pasa de la
 raya: afirma contra el documento entero, y el señuelo que lo pone rojo está
 reproducido en el SUMMARY de 08-12.
+
+---
+
+## `operacion.spec.ts:390`, el toast de cancelación que se pierde en la corrida completa
+
+**Medido por 08-13, y NO es de 08-13.** 08-07 ya lo había visto una vez
+(`operacion.spec.ts:373` entonces, misma prueba, mismo toast) y lo dejó como
+*«apareció una vez y no se reprodujo»*. Hoy aparece mucho más que una vez.
+
+**Lo que falla:** `esperarToast(paginaAdmin, 'El aseo quedó cancelado.')` agota
+sus 15 s. La instantánea del fallo enseña que **la cadena entera funcionó**: la
+fila ya dice `Cancelado` y la RPC escribió. Lo único que falta es el toast, que
+se renderiza en el cliente y cuyo temporizador `esperarToast()` documenta como
+sensible al puntero y al foco de la ventana.
+
+**Las tres mediciones de 08-13, en este orden:**
+
+```
+npx playwright test e2e/operacion.spec.ts --grep "cancelar un aseo" --repeat-each=3
+  → 3 passed
+
+npx playwright test e2e/operacion.spec.ts --grep-invert "CRITERIO"   (corrida 1)
+  → 9 passed
+npx playwright test e2e/operacion.spec.ts --grep-invert "CRITERIO"   (corrida 2)
+  → 1 failed · 8 passed        ← :390
+
+npx playwright test   (la suite completa)
+  → 152 passed · 1 skipped · 1 failed   ← :390
+```
+
+**La segunda es la que cierra el caso: `--grep-invert "CRITERIO"` corre EL
+ARCHIVO SIN NINGUNO DE LOS CASOS NUEVOS de esta fase, y el rojo sale igual.** No
+lo causa nada de 08-13.
+
+**El arreglo correcto, y no es aflojar la aserción:** `esperarToast()` ya aparta
+el puntero antes de mirar; lo que no hace es esperar a que la pila de toasts
+DRENE los del test anterior. El caso de cancelar va después del flujo encadenado,
+que deja cinco toasts, y la librería deja de renderizar nuevos con más de tres
+apilados, que es justo lo que la cabecera de `esperarToast()` describe como
+síntoma. La salida barata es que el `beforeEach` limpie la pila de toasts, igual
+que ya limpia los aseos y las alertas.
+
+**Quién debería cerrarlo:** un plan que pueda tocar el arnés de
+`e2e/operacion.spec.ts` sin estar escribiendo casos encima. No 08-14, que es una
+puerta y no debería estar arreglando instrumentos.

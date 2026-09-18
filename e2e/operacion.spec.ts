@@ -721,8 +721,8 @@ test('pulsar una alerta de un aseo de mañana ABRE el bloque Mañana y lleva a s
  *
  * `SheetContent` se portalea a `document.body`, así que el panel NO vive dentro
  * del contenedor de página. El plan 08-11 lo midió con un señuelo puesto a mano:
- * con `locator('main')`, dos aserciones de seguridad **pasaron en verde con la
- * palabra prohibida dentro del panel**. Ampliarlas a la pantalla entera tampoco
+ * acotadas por el contenedor de página, dos aserciones de seguridad **pasaron en
+ * verde con la palabra prohibida dentro del panel**. Ampliarlas a la pantalla entera tampoco
  * vale: vuelven a ser verdaderas por accidente, mirando la tabla de detrás, que
  * pinta el mismo nombre de apartamento. Se lee con `getByRole('dialog')`.
  *
@@ -1398,4 +1398,177 @@ test('CRITERIO 3: cerrar el panel de aseo conserva el filtro de alertas', async 
     paginaAdmin.url(),
     'CRITERIO 3 · y devuelve la dirección con el filtro de alertas INTACTO',
   ).toMatch(/\/operacion\?alertas=atendidas$/);
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// 11. CRITERIO 5: NINGUNA CIFRA DEL PANEL LLEGA A UNA SESIÓN DE ASEADORA
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * LA TRAMPA QUE LA FASE 7 PAGÓ, Y QUE AQUÍ NO SE PUEDE REPETIR.
+ *
+ * El control de método del spec del aseador **no podía dispararse nunca**:
+ * buscaba las cifras permitidas solo en el formato crudo, y con el árbol del
+ * aseador renderizado entero en el servidor el entero crudo NO VIAJA (lo que
+ * cruza es `41.117`, jamás `41117`). O sea que la prueba de la fuga habría
+ * pasado en verde **incluso con la fuga abierta**, porque lo que fallaba era el
+ * instrumento y no el producto. Está medido en la cabecera de `PERMITIDAS`, en
+ * `e2e/mis-pagos.spec.ts`.
+ *
+ * De ahí salen las dos reglas de esta sección:
+ *
+ *   1. **Se busca en los DOS formatos**, el crudo y el formateado con separador
+ *      de miles. Una pantalla que no pinte la cifra pero la mande en la carga de
+ *      hidratación rompe la frontera igual: el dato ya está en el teléfono.
+ *   2. **Hay un control de método que se dispara de verdad**: la MISMA búsqueda,
+ *      sobre las MISMAS superficies, con una sesión de admin, tiene que
+ *      ENCONTRAR las cifras. Sin él, un interceptor que no capturó nada —porque
+ *      cambió el tipo de contenido, porque el oyente se enganchó tarde— haría
+ *      pasar la mitad negativa sin haber mirado absolutamente nada.
+ *
+ * ── LO QUE ESTE CASO NO DUPLICA, Y ES DELIBERADO ────────────────────────
+ *
+ * El bloque P de `supabase/tests/11_financiero.test.sql` ya afirma que una
+ * aseadora que llama a `detalle_de_aseo` recibe permiso denegado, y lo afirma
+ * DENTRO de Postgres, con roles reales. Este caso no repite eso: afirma la otra
+ * capa, la de que ninguna cifra llega al navegador de esa sesión. Atar las dos
+ * capas al mismo literal no compraría ninguna garantía.
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+
+/**
+ * Las tres cifras del grupo `DINERO` del panel, en las dos formas en que pueden
+ * viajar: el entero crudo de una carga de datos y el formateado con separador de
+ * miles por si alguien lo pinta en algún sitio.
+ *
+ * Van las TRES y no solo la tarifa y el margen. En `mis-pagos.spec.ts` el pago
+ * es una cifra permitida porque ahí es el dinero PROPIO de quien mira; acá la
+ * sesión es la de otra persona y sobre el aseo de un tercero, así que las tres
+ * son ajenas.
+ */
+const CIFRAS_PROHIBIDAS_EN_EL_TELEFONO: string[] = [
+  CIFRAS_DEL_ASEO.tarifa,
+  CIFRAS_DEL_ASEO.pago,
+  CIFRAS_DEL_ASEO.margen,
+].flatMap((n) => [String(n), n.toLocaleString('es-CO')]);
+
+interface CargaUtil {
+  url: string;
+  cuerpo: string;
+}
+
+/**
+ * Engancha un oyente que guarda el CUERPO de cada respuesta de este origen.
+ *
+ * Se miran el HTML del render del servidor, la carga que el enrutador pide al
+ * navegar sin recargar, y cualquier JSON. Ahí es donde puede ir una cifra.
+ *
+ * Se descarta `/_next/static/`: son los bundles y las fuentes, con hashes de
+ * build de dieciséis dígitos hexadecimales que producen coincidencias por puro
+ * azar. Un bundle no lleva datos de un aseo concreto, así que excluirlos no abre
+ * ningún hueco.
+ *
+ * `response.text()` puede rechazar cuando el navegador ya descartó el cuerpo (un
+ * redirect, un 304). Se traga el error a propósito: una respuesta sin cuerpo no
+ * puede filtrar nada. Es el mismo interceptor de `e2e/mis-pagos.spec.ts`, y va
+ * copiado y no importado porque cada spec de este repo es autosuficiente.
+ */
+function interceptarCargaUtil(p: Page): CargaUtil[] {
+  const cargas: CargaUtil[] = [];
+
+  p.on('response', (respuesta) => {
+    const url = new URL(respuesta.url());
+    if (url.pathname.startsWith('/_next/static/')) return;
+
+    const tipo = respuesta.headers()['content-type'] ?? '';
+    if (!/text\/html|text\/x-component|application\/json|text\/plain/.test(tipo)) return;
+
+    void respuesta
+      .text()
+      .then((cuerpo) => cargas.push({ url: respuesta.url(), cuerpo }))
+      .catch(() => {
+        /* sin cuerpo disponible: no puede filtrar nada */
+      });
+  });
+
+  return cargas;
+}
+
+/** Cuáles de las cifras prohibidas aparecen en alguna de las cargas capturadas. */
+function cifrasEncontradas(cargas: CargaUtil[]): string[] {
+  return CIFRAS_PROHIBIDAS_EN_EL_TELEFONO.filter((cifra) =>
+    cargas.some(({ cuerpo }) => cuerpo.includes(cifra)),
+  );
+}
+
+test('CRITERIO 5: ninguna cifra del panel de aseo llega al navegador de una aseadora, buscada en los dos formatos', async ({
+  paginaAdmin,
+  paginaAseador,
+}) => {
+  const { gestionada, aseadoraA, fechas } = escenario;
+
+  const [idAseo] = await sembrarAseos(servicio, [
+    { propiedad: gestionada.id, fecha: fechas.hoy, aseador: aseadoraA.id, estado: 'en_curso' },
+  ]);
+  await fijarElDineroDelAseo(idAseo);
+
+  // ── EL CONTROL DEL MÉTODO, Y ES LA MITAD QUE LA FASE 7 NO TENÍA ─────────
+  // La misma búsqueda, sobre la misma dirección y sobre la misma clase de
+  // respuestas, con una sesión que SÍ puede ver el panel. Si esto no encuentra
+  // nada, la mitad negativa de abajo no prueba que no haya fuga: prueba que no
+  // se miró.
+  const cargasDelAdmin = interceptarCargaUtil(paginaAdmin);
+  await paginaAdmin.goto(`/operacion?aseo=${idAseo}`);
+  await expect(paginaAdmin.getByRole('dialog')).toBeVisible();
+  await paginaAdmin.waitForLoadState('networkidle');
+  await expect.poll(() => cargasDelAdmin.length, { timeout: 5_000 }).toBeGreaterThan(0);
+
+  expect(
+    cifrasEncontradas(cargasDelAdmin),
+    'CONTROL DEL MÉTODO: con la sesión de admin, esta misma búsqueda SÍ encuentra las cifras del panel. ' +
+      'Sin esto, la ausencia de abajo no significaría nada.',
+  ).not.toHaveLength(0);
+
+  // ── Y AHORA LA SESIÓN DE ASEADORA, SOBRE LA MISMA DIRECCIÓN ─────────────
+  const cargasDeLaAseadora = interceptarCargaUtil(paginaAseador);
+  await paginaAseador.goto(`/operacion?aseo=${idAseo}`);
+
+  // El rebote del layout de admin. Lo cubre en parte el ruteo; va acá porque es
+  // la precondición de lo que de verdad se mide, no porque sea el punto.
+  //
+  // El patrón admite cola, y no es laxitud: **el rebote ARRASTRA el parámetro**
+  // y deja `/mis-aseos?aseo={uuid}`. Medido. Es inocuo, porque la ruta del
+  // aseador no lee ese parámetro, y no se "arregla" desde acá: exigir
+  // `/mis-aseos` a secas convertiría este caso en una aserción sobre cómo
+  // redirige el middleware, que es otra cosa y tiene su propio spec.
+  await expect(paginaAseador, 'la dirección del panel rebota a la raíz del aseador').toHaveURL(
+    /\/mis-aseos(\?|$)/,
+  );
+  await paginaAseador.waitForLoadState('networkidle');
+  await expect.poll(() => cargasDeLaAseadora.length, { timeout: 5_000 }).toBeGreaterThan(0);
+
+  for (const { url, cuerpo } of cargasDeLaAseadora) {
+    for (const prohibida of CIFRAS_PROHIBIDAS_EN_EL_TELEFONO) {
+      expect(
+        cuerpo.includes(prohibida),
+        `FUGA: la cifra ${prohibida} del panel de aseo viajó al navegador de la aseadora en ${url}. ` +
+          'Una pantalla que no la pinta no arregla esto: el dato ya está en el teléfono.',
+      ).toBe(false);
+    }
+  }
+
+  // Y la mitad del DOM, que sigue haciendo falta: una cifra puede entrar
+  // calculada en el cliente a partir de dos que sí viajaron. Se quitan puntos y
+  // espacios de los dos lados para que el formateo no sirva de escondite.
+  const pintado = ((await paginaAseador.locator('body').textContent()) ?? '').replace(
+    /[.\s ]/g,
+    '',
+  );
+  for (const prohibida of CIFRAS_PROHIBIDAS_EN_EL_TELEFONO) {
+    expect(
+      pintado,
+      `FUGA: la cifra ${prohibida} está pintada en la pantalla de la aseadora`,
+    ).not.toContain(prohibida.replace(/[.\s ]/g, ''));
+  }
 });
