@@ -166,13 +166,70 @@ function SenalesInline({ fila, ahoraMs }: { fila: FilaDeOperacion; ahoraMs: numb
   );
 }
 
-/** El ancla al detalle del apartamento. `estirada` aplica el `::after` de §7.2. */
+/**
+ * El ancla de la celda APARTAMENTO. `estirada` aplica el `::after` de §7.2.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * EL CAMBIO DE LA FASE 8 ES DE DESTINO, NO DE TECNICA (08-UI-SPEC §5.3).
+ *
+ * Sigue viviendo en esta celda, sigue siendo un `<a>` real alcanzable por
+ * teclado, sigue estirando su area con el mismo pseudoelemento y sigue pintando
+ * el foco de fila con el mismo selector. **La fila NO se convierte en un `<div>`
+ * con papel de boton**, que es lo que saca el enlace del recorrido de teclado.
+ *
+ * Lo que cambia es a donde lleva: antes, al formulario de edicion del
+ * apartamento; ahora, al panel del propio aseo, encima del mismo dia.
+ *
+ * ── LOS DOS DESTINOS, Y POR QUE SON DOS ─────────────────────────────────
+ *
+ *   · Fila GESTIONADA: `?aseo={id}` sobre esta misma pantalla. Un aseo
+ *     gestionado tiene checklist, evidencia, reportes y dinero que enseñar.
+ *   · Fila INERTE (gestion externa): `/apartamentos?apartamento={id}`, la ficha
+ *     de lectura. **No gana panel y no gana area de clic** (§5.3 punto 6): por
+ *     `cl_unmanaged_is_inert` no tiene tarifa, ni pago, ni margen, ni aseador, ni
+ *     checklist, ni evidencia, asi que su panel seria un panel de ausencias.
+ *
+ * ── LA ETIQUETA ACCESIBLE, Y POR QUE SOLO LA LLEVA LA GESTIONADA ────────
+ *
+ * §5.3 punto 2 dice que el nombre "deja de ser enlace al apartamento", y punto 1
+ * dice que el ancla se queda. Leidos literales no pueden ser los dos verdad: si
+ * el nombre fuera texto plano con el ancla todavia ahi, **ese ancla se quedaria
+ * sin nombre accesible**, que es un control sin nombre y lo prohibe §13.
+ *
+ * La lectura que se toma, que es la unica de las dos que no produce un defecto
+ * de accesibilidad: el ancla **sigue envolviendo el texto del nombre** (por eso
+ * conserva nombre accesible y el foco de fila), **cambia de destino**, y deja de
+ * llevar al apartamento, que es lo que el punto 2 queria decir. Como el destino
+ * ya no es lo que el texto dice, lleva una etiqueta que lo aclara.
+ *
+ * La fila inerte NO la lleva, y tampoco es un descuido: ahi el destino SI es lo
+ * que el texto dice, y una etiqueta redundante solo taparia el nombre real.
+ *
+ * ── EL PARAMETRO NO SE ESCRIBE LITERAL, Y ESO ESTA MEDIDO ───────────────
+ *
+ * El `href` se compone desde los parametros vivos de la pantalla. Un
+ * `href="/operacion?aseo={id}"` literal **borro el `?alertas=atendidas` AL
+ * ABRIR** en la medicion de `08-02-MEDICION.md` §4.3, antes de que el cierre
+ * tuviera nada que conservar. Es la INSTRUCCION 5 del VEREDICTO.
+ *
+ * Y `scroll={false}` NO ES OPCIONAL: un `<Link>` de Next salta al tope por
+ * defecto, y eso no depende de empujar o reemplazar, depende de esta prop. Sin
+ * ella, abrir manda la tabla del dia al tope y cerrar ya no puede recuperar el
+ * sitio, que es la mitad del criterio 1 del ROADMAP (§5.2).
+ *
+ * Va con EMPUJE, o sea sin `replace`, para que el boton atras cierre el panel en
+ * vez de sacar de la seccion (criterio 3).
+ * ════════════════════════════════════════════════════════════════════════════
+ */
 function EnlaceAlApartamento({
   fila,
   estirada,
+  parametrosVivos,
 }: {
   fila: FilaDeOperacion;
   estirada: boolean;
+  /** Los parametros que la pantalla ya gobierna. Ver la cabecera. */
+  parametrosVivos: string;
 }) {
   const nombre = fila.property?.nombre;
 
@@ -181,12 +238,28 @@ function EnlaceAlApartamento({
   // control sin nombre accesible.
   if (!nombre) return <SinDato motivo="sin definir" />;
 
+  const clases = `transicion rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
+    estirada ? 'after:absolute after:inset-0' : ''
+  }`;
+
+  if (!estirada) {
+    return (
+      <Link href={`/apartamentos?apartamento=${fila.property_id}`} className={clases}>
+        {nombre}
+      </Link>
+    );
+  }
+
   return (
     <Link
-      href={`/apartamentos/${fila.property_id}`}
-      className={`transicion rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
-        estirada ? 'after:absolute after:inset-0' : ''
-      }`}
+      href={
+        parametrosVivos === ''
+          ? `/operacion?aseo=${fila.id}`
+          : `/operacion?${parametrosVivos}&aseo=${fila.id}`
+      }
+      scroll={false}
+      aria-label={`Ver el aseo de ${nombre}`}
+      className={clases}
     >
       {nombre}
     </Link>
@@ -217,6 +290,14 @@ export function FilaAseo({
       // Lo que esto NO hace todavia: expandir el bloque del dia si estaba
       // colapsado. Ver `deferred-items.md`.
       id={`aseo-${fila.id}`}
+      // LA FILA QUE TIENE EL PANEL ABIERTO LO DICE MIENTRAS LO TIENE (§13.1).
+      //
+      // Va SOLO por este canal y no tambien por el fondo, y es una decision
+      // acotada, no un olvido: el contrato de §5.3 cierra por nombre lo que este
+      // plan puede tocar de la fila, y la CLASE de la fila esta en esa lista.
+      // Marcarla tambien en color exige tocarla, asi que la mitad visual queda
+      // anotada en `deferred-items.md` para el barrido de 08-12.
+      aria-current={fila.id === acciones.aseoAbiertoId ? true : undefined}
       // `relative` para que el `::after` del ancla tenga esta fila como bloque
       // contenedor y cubra toda su anchura.
       //
@@ -257,7 +338,11 @@ export function FilaAseo({
       */}
       <TableCell className="min-w-col-nombre px-md text-body font-semibold">
         <span className="flex items-center gap-xs">
-          <EnlaceAlApartamento fila={fila} estirada={!inerte} />
+          <EnlaceAlApartamento
+            fila={fila}
+            estirada={!inerte}
+            parametrosVivos={acciones.parametrosVivos}
+          />
 
           {!inerte && (
             <>

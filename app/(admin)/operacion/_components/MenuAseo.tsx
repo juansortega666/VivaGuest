@@ -126,6 +126,34 @@ export interface ContextoDeAcciones {
    * `Hourglass` de la fila y la alerta del panel no pueden discrepar.
    */
   ahoraMs: number;
+  /**
+   * LOS PARÁMETROS VIVOS DE LA PANTALLA, YA SERIALIZADOS, SIN EL DEL PANEL.
+   *
+   * Lo pide `FilaAseo` para componer el enlace que abre el panel de aseo. **No
+   * se escribe una consulta literal `?aseo={id}`**, y eso está medido: en
+   * `08-02-MEDICION.md` §4.3 una consulta literal borró el `?alertas=atendidas`
+   * AL ABRIR, antes de que el cierre tuviera nada que conservar. Es la
+   * INSTRUCCIÓN 5 del VEREDICTO.
+   *
+   * Cadena vacía cuando la pantalla no gobierna ningún parámetro en ese momento,
+   * que es el caso común.
+   *
+   * ── POR QUÉ VIAJA EN ESTE OBJETO Y NO COMO PROP SUELTA ─────────────────
+   *
+   * Porque es lo que el propio comentario de la página invitó a hacer: este
+   * objeto existe "para que añadir un cuarto dato mañana no vuelva a tocar los
+   * tres" archivos por los que baja (`BloqueDia`, `TablaDia`, `FilaAseo`). Hoy es
+   * mañana. **`MenuAseo` no lo consume**: vive acá porque acá vive el tipo.
+   */
+  parametrosVivos: string;
+  /**
+   * El aseo cuyo panel está abierto, o nulo.
+   *
+   * §13.1: la fila que abre el panel lo dice mientras el panel está abierto, y
+   * el color solo no basta porque un admin daltónico o un lector de pantalla no
+   * sabrían cuál es. Lo consume `FilaAseo`.
+   */
+  aseoAbiertoId: string | null;
 }
 
 export function MenuAseo({
@@ -252,8 +280,23 @@ export function MenuAseo({
           )}
 
           {/* Siempre, en cualquier fila gestionada: es el único ítem que le queda
-              al menú sobre `Terminado` y sobre `Cancelado`. */}
-          <DropdownMenuItem render={<Link href={`/apartamentos/${fila.property_id}`} />}>
+              al menú sobre `Terminado` y sobre `Cancelado`.
+
+              ── EL CAMBIO DE LA FASE 8 ES DE DESTINO, Y NADA MÁS (§5.3 punto 3) ──
+              Antes llevaba al formulario de edición; ahora abre la FICHA DE
+              LECTURA sobre la lista de apartamentos, que es lo que D8-3 mandó
+              crear. Ir al apartamento sigue estando a un clic, y este es uno de
+              sus dos sitios: el otro es el título del panel de aseo.
+
+              Es el ÚNICO cambio de este archivo. En particular **no se añade ni
+              detención de propagación ni prevención del comportamiento por
+              defecto**: el `relative z-10` de la celda del menú ya impide que el
+              clic en el `⋯` caiga en el área estirada del ancla, y está probado
+              en producción desde la Fase 4. Añadir cualquiera de los dos sería
+              tapar un problema que no existe. */}
+          <DropdownMenuItem
+            render={<Link href={`/apartamentos?apartamento=${fila.property_id}`} />}
+          >
             <Building2 aria-hidden="true" />
             Ver apartamento
           </DropdownMenuItem>
