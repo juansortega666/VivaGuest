@@ -5,8 +5,14 @@
  * POR QUE ESTO VIVE EN UN MODULO PROPIO Y NO DENTRO DE QUIEN LO USA.
  *
  * Hasta el plan 05-06 habia UN solo emisor de avisos —el drenaje— y la funcion
- * vivia dentro de su ruta. Desde el plan 05-11 hay DOS: el drenaje y el aviso de
- * prueba del asistente de instalacion, que sale desde una Server Action.
+ * vivia dentro de su ruta. El plan 05-11 anadio un segundo emisor y por eso se
+ * extrajo aqui.
+ *
+ * DESDE EL 2026-09-18 (quick `260918-h47`) VUELVE A HABER UN SOLO EMISOR: el
+ * segundo era el aviso de prueba del asistente de instalacion, que se elimino
+ * entero. El modulo se queda igual y no se vuelve a meter dentro del drenaje: la
+ * razon por la que salio —una decision de seguridad no se copia en dos sitios—
+ * no caduca, y el dia que aparezca otro emisor tiene donde apoyarse.
  *
  * Duplicar esta resolucion en los dos sitios es exactamente la forma en que dos
  * copias de una decision de seguridad se desincronizan: alguien endurece una y
@@ -16,9 +22,9 @@
  *
  * ── LO QUE SE DECIDE AQUI, Y POR QUE IMPORTA ────────────────────────────────
  *
- * `notifications.url` y el destino del aviso de prueba son RUTAS RELATIVAS
- * (`/aseos/{id}`, `/instalar?prueba={token}`). Alguien tiene que decidir contra
- * que origen se resuelven, y la decision tiene consecuencias visibles:
+ * `notifications.url` es una RUTA RELATIVA (`/aseos/{id}`). Alguien tiene que
+ * decidir contra que origen se resuelve, y la decision tiene consecuencias
+ * visibles:
  *
  *   UN ORIGEN EQUIVOCADO MANDA A TODAS LAS ASEADORAS A OTRO DESPLIEGUE DESDE SU
  *   PANTALLA DE BLOQUEO, sin barra de direcciones que delate el salto.

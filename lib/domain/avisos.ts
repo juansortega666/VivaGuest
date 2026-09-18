@@ -298,6 +298,29 @@ function derivarClaveDeAseador(
 
   if (e.suscripciones_vivas === 0) return 'sin_avisos';
 
+  // ── `activos` QUEDO INALCANZABLE EL 2026-09-18, Y ESTA ESCRITO A PROPOSITO ──
+  //
+  // El quick `260918-h47` elimino el asistente de instalacion, y con el la unica
+  // superficie de TypeScript que llamaba a las tres funciones de la migracion 16
+  // —`registrar_prueba_de_aviso`, `confirmar_prueba_por_toque` y
+  // `confirmar_prueba_a_mano`— que son lo unico en todo el sistema que escribe
+  // `verificacion_grado`, la columna de la que sale `verificado_por_toque`.
+  //
+  //   (a) EL TECHO DE HOY ES `Sin probar` para cualquier aseador con telefono
+  //       registrado. Ningun camino vivo puede llevarlo a `Activos`.
+  //   (b) NO ES UN DEFECTO, y este es el punto que hay que leer antes de
+  //       "arreglarlo": el significado literal de `Sin probar` es *hay a donde
+  //       enviar, pero nadie comprobo que llegue*, y a partir de hoy eso es
+  //       exactamente cierto para todos. La etiqueta no miente.
+  //   (c) LA SENAL QUE EL PRODUCTO NECESITA DE VERDAD ES `sin_avisos`, que es
+  //       quien se quedo mudo. No depende de la prueba para nada, se deriva de
+  //       `suscripciones_vivas = 0`, y sigue siendo exacta.
+  //   (d) LA CAPACIDAD ESTA DORMIDA EN LA BASE, NO DESTRUIDA. La migracion 16 no
+  //       se toco: las tres funciones, el token de un solo uso, su indice unico y
+  //       el CHECK siguen ahi. Se recupera escribiendo superficie nueva que las
+  //       llame, SIN ninguna migracion.
+  //
+  // La rama se conserva por eso: borrarla obligaria a una migracion para volver.
   return e.verificado_por_toque ? 'activos' : 'sin_probar';
 }
 
