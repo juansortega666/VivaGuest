@@ -28,6 +28,7 @@ import {
   filtrarApartamentos,
   resumenDelCatalogo,
 } from '@/lib/domain/properties';
+import { cn } from '@/lib/utils';
 
 import { EstadoVacio } from '../../_components/EstadoVacio';
 import { BannerMontaje } from './BannerMontaje';
@@ -109,9 +110,25 @@ function CeldaResponsable({ fila }: { fila: ApartamentoDeLista }) {
 export function TablaApartamentos({
   filas,
   clusters,
+  parametrosVivos,
+  abiertoId,
 }: {
   filas: ApartamentoDeLista[];
   clusters: string[];
+  /**
+   * Los parametros de la direccion que la pantalla ya gobierna, serializados en
+   * el servidor y SIN el del panel.
+   *
+   * Llegan como prop y no se leen aqui porque el enlace que ABRE tiene que
+   * conservarlos: `08-02-MEDICION.md` §4.3 midio que un `href` con consulta
+   * literal borro el `?alertas=atendidas` del anfitrion AL ABRIR, antes de que
+   * el cierre tuviera nada que conservar. Hoy `/apartamentos` no gobierna
+   * ninguno y esta cadena viene vacia; el dia que gobierne uno, el enlace ya lo
+   * respeta sin tocar este archivo.
+   */
+  parametrosVivos: string;
+  /** El apartamento cuyo panel esta abierto, para marcar su fila. */
+  abiertoId: string | null;
 }) {
   const idBuscador = useId();
   const idPendientes = useId();
@@ -277,10 +294,16 @@ export function TablaApartamentos({
               {visibles.map((fila) => {
                 const { clave } = estadoDeApartamento(fila);
                 const esInformativa = clave === 'informativa';
+                const esAbierta = fila.id === abiertoId;
 
                 return (
                   <TableRow
                     key={fila.id}
+                    // LA FILA QUE TIENE EL PANEL ABIERTO LO DICE POR DOS CANALES.
+                    // El fondo es el mismo de su propio hover (§4.3), y solo con
+                    // eso un admin daltonico o un lector de pantalla no sabrian
+                    // cual esta abierta: `aria-current` es la otra mitad (§13.1).
+                    aria-current={esAbierta ? true : undefined}
                     // `relative` para que el `::after` del ancla del nombre tenga
                     // esta fila como bloque contenedor y cubra toda su anchura.
                     //
@@ -288,7 +311,10 @@ export function TablaApartamentos({
                     // va a `--canvas`, no al `--muted/50` de shadcn. Y el foco de
                     // fila se pinta desde el link real con `has-[a:focus-visible]`,
                     // no con un `role="button"` falso sobre la fila.
-                    className="transicion relative h-fila border-b border-border bg-background hover:bg-canvas has-[a:focus-visible]:bg-canvas"
+                    className={cn(
+                      'transicion relative h-fila border-b border-border bg-background hover:bg-canvas has-[a:focus-visible]:bg-canvas',
+                      esAbierta && 'bg-canvas',
+                    )}
                   >
                     <TableCell className="w-col-estado-apto bg-inherit px-md max-xl:sticky max-xl:left-0">
                       <EstadoApartamento fila={fila} />
@@ -300,9 +326,32 @@ export function TablaApartamentos({
                         `::after` estira su area de clic sobre toda la fila sin
                         sacar del recorrido de teclado un `<a>` de verdad, que es
                         lo que pasa cuando se pone `onClick` en el `<tr>`.
+
+                        ── EL CAMBIO DE LA FASE 8 ES DE DESTINO, NO DE TECNICA ──
+                        Antes apuntaba a `/apartamentos/{id}`, o sea al formulario
+                        de edicion. Ahora abre la ficha de lectura encima de esta
+                        misma lista (D8-3). El pseudoelemento que estira el area de
+                        clic, el apilamiento de la celda del menu y el selector de
+                        foco de fila NO se tocan.
+
+                        `scroll={false}` NACE CON ESTE ENLACE Y NO ES OPCIONAL: un
+                        `<Link>` de Next salta al tope por defecto, y eso no
+                        depende de empujar o reemplazar, depende de esta prop. Sin
+                        ella, abrir manda la lista al tope y cerrar ya no puede
+                        recuperar el sitio, que es la mitad del criterio 1 del
+                        ROADMAP (§5.2).
+
+                        Y va con EMPUJE, o sea sin `replace`, para que el boton
+                        atras cierre el panel en vez de sacar de la seccion
+                        (criterio 3).
                       */}
                       <Link
-                        href={`/apartamentos/${fila.id}`}
+                        href={
+                          parametrosVivos === ''
+                            ? `/apartamentos?apartamento=${fila.id}`
+                            : `/apartamentos?${parametrosVivos}&apartamento=${fila.id}`
+                        }
+                        scroll={false}
                         className="transicion rounded-sm after:absolute after:inset-0 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                       >
                         {fila.nombre}
