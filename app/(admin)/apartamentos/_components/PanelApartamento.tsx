@@ -9,11 +9,13 @@ import type { ProximoAseo } from '@/lib/data/panel-apartamento';
 import { formatFechaLargaBog, formatHoraLimite, nombreDeDiaBog } from '@/lib/domain/dates';
 import { formatCOP } from '@/lib/domain/money';
 
+import { hayCodigoDeAcceso } from '../_actions';
 import { EsqueletoDePanel } from '../../_components/EsqueletoDePanel';
 import { FilaDeDato } from '../../_components/FilaDeDato';
 import { GrupoDePanel } from '../../_components/GrupoDePanel';
 import { PanelLectura } from '../../_components/PanelLectura';
 import { EstadoAseo } from '../../operacion/_components/EstadoAseo';
+import { CodigoDeAccesoAdmin } from './CodigoDeAccesoAdmin';
 import { EstadoApartamento } from './EstadoApartamento';
 
 /**
@@ -60,13 +62,19 @@ import { EstadoApartamento } from './EstadoApartamento';
  *
  * ── EL CÓDIGO DE ACCESO NO VIAJA AL NAVEGADOR EN ESTA CARGA ─────────────
  *
- * La fila está creada con su etiqueta y su valor enmascarado, y **el valor de
- * verdad lo trae el plan 08-09**, solo cuando alguien lo pide con un gesto. La
- * razón es de §7.3 y no es de criterio: la dirección de este panel es
+ * La fila la pinta `CodigoDeAccesoAdmin`, y lo único que este archivo le pasa es
+ * el identificador y un booleano de si hay algo detrás. **El valor solo llega
+ * por una acción, con su guarda, y solo cuando alguien lo pide con un gesto.**
+ * La razón es de §7.3 y no es de criterio: la dirección de este panel es
  * compartible por diseño (criterio 2 del ROADMAP), así que un código renderizado
  * al abrir se entrega a quien sea que abra el chat donde se pegó el enlace. Hay
  * precedente literal sobre esta misma tabla en
  * `apartamentos/[id]/calendario/page.tsx`, con su caso E2E (T-02-74).
+ *
+ * **Y el booleano no es un rodeo:** la lista de apartamentos no lee la tabla de
+ * secretos, ni puede —no tiene grant para `authenticated`—, así que sin él no
+ * hay forma de decidir si esa fila lleva botón o lleva ausencia. Lo que cruza es
+ * si hay algo, nunca qué hay.
  *
  * ── LO QUE ESTE ARCHIVO NO HACE, Y VA POR NOMBRE ────────────────────────
  *
@@ -187,7 +195,18 @@ async function CuerpoDelPanel({
   fila: ApartamentoDeLista;
   proximoAseo: Promise<ProximoAseo | null>;
 }) {
-  const aseo = await proximoAseo;
+  /**
+   * LAS DOS ESPERAS VAN JUNTAS, Y NO UNA DETRÁS DE OTRA. Este cuerpo ya está
+   * detrás de la barrera de suspensión, así que encadenarlas sumaría los dos
+   * viajes en el tiempo que el esqueleto está a la vista sin ganar nada.
+   *
+   * Lo segundo que se espera es UN BOOLEANO, y ese es todo el punto: la lista de
+   * apartamentos no lee la tabla de secretos, ni puede, así que sin esto no hay
+   * forma de saber si la fila del código lleva botón o lleva ausencia. Lo que
+   * cruza es si hay algo detrás, nunca qué hay: el valor solo llega por la
+   * acción, y solo cuando alguien lo pide.
+   */
+  const [aseo, hayCodigo] = await Promise.all([proximoAseo, hayCodigoDeAcceso(fila.id)]);
   const gestionada = fila.gestion_vivaguest;
 
   return (
@@ -196,21 +215,19 @@ async function CuerpoDelPanel({
         <FilaDeDato {...filaDeDireccion(fila)} />
 
         {/*
-          LA FILA ESTÁ LISTA Y VACÍA A PROPÓSITO. El plan 08-09 sustituye este
-          valor por el componente que revela el código con un gesto (§7.3). Lo
-          que se pinta hoy es un literal de seis puntos: no es el código
-          enmascarado, es una máscara que no sabe nada del código, así que ni el
-          documento ni la carga de React lo llevan.
+          LA FILA DEL CÓDIGO, Y LO ÚNICO QUE CRUZA SON DOS COSAS QUE NO SON EL
+          CÓDIGO: el identificador del apartamento y si hay algo detrás (§7.3).
+
+          De la tabla de secretos no sale NADA hacia este árbol. El valor lo trae
+          una acción, con su guarda, y solo cuando alguien pulsa. La razón no es
+          de criterio: la dirección de este panel es compartible por diseño
+          (criterio 2 del ROADMAP), y un código renderizado al abrir se entrega a
+          quien sea que abra el chat donde se pegó el enlace. Y esconderlo
+          detrás de un `useState` no serviría, porque lo que se pasa como prop a
+          un componente de cliente viaja en la carga de React y queda en el
+          documento aunque no se pinte.
         */}
-        <FilaDeDato
-          etiqueta="Código de acceso"
-          valor={
-            <span className="text-muted-foreground">
-              <span aria-hidden="true">••••••</span>
-              <span className="sr-only">oculto</span>
-            </span>
-          }
-        />
+        <CodigoDeAccesoAdmin apartamentoId={fila.id} hayCodigo={hayCodigo} />
 
         {/* 24 horas y sin AM/PM, del formateador que ya existe. */}
         <FilaDeDato etiqueta="Hora límite" valor={formatHoraLimite(fila.hora_limite)} cifra />
