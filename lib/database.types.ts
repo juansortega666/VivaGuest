@@ -1588,6 +1588,15 @@ export type Database = {
         Args: { p_token: string }
         Returns: undefined
       }
+      consumo_de_storage: {
+        Args: never
+        Returns: {
+          cruce_at: string
+          cupo_bytes: number
+          umbral_pct: number
+          usado_bytes: number
+        }[]
+      }
       costo_por_aseadora: {
         Args: { p_desde: string; p_hasta: string }
         Returns: {
