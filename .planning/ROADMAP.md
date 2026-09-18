@@ -378,7 +378,17 @@ IndexedDB no existe, aunque `PROJECT.md` la declara como constraint desde el dí
 uno. El recorrido "se va la señal a mitad del aseo" **no se puede probar** hasta
 que se construya. Está en `.planning/ESTRATEGIA-DE-PRUEBAS.md` con su cita.
 
-**Plans**: TBD
+**Plans**: 7 plans, en 4 waves
+
+Plans:
+- [ ] 09-01-PLAN.md — Wave 1: el arnés del recorrido (proveedor `.ics` local, sembrador y worker por HTTP) y el tramo del `.ics` al aseo visible en `/operacion`
+- [ ] 09-02-PLAN.md — Wave 1: los dos rojos del instrumento que ya traen su arreglo escrito, para que el criterio 5 sea medible
+- [ ] 09-03-PLAN.md — Wave 1: la carga de los 39 apartamentos reales, con su auditor de catálogo y su checkpoint del dueño
+- [ ] 09-04-PLAN.md — Wave 2: el recorrido del Core Value entero, del `.ics` al pago de la aseadora, en un solo caso
+- [ ] 09-05-PLAN.md — Wave 3: los tres recorridos torcidos del calendario (la reserva que se mueve, el feed caído, el turnover urgente)
+- [ ] 09-06-PLAN.md — Wave 3: los dos recorridos torcidos del campo (el "no puedo" y el apartamento informativo)
+- [ ] 09-07-PLAN.md — Wave 4: la compuerta, con el cruce de señuelos y la auditoría de que ninguna aserción se debilitó
+
 **UI hint**: no
 
 ## Secuencia de ejecución
@@ -418,7 +428,7 @@ Fases con patrón ya documentado en el research (se puede saltar):
 | 6. PWA del aseador, offline-first | 10/10 | Executed — checkpoint humano en teléfono real abierto (06-10 tarea 3) | 2026-09-12 |
 | 7. Financiero | 12/14 | In Progress|  |
 | 8. Paneles laterales en el admin | 0/14 | Planned — 14 planes en 7 waves | - |
-| 9. El producto probado de punta a punta | 0/TBD | Not started | - |
+| 9. El producto probado de punta a punta | 0/7 | Planned — 7 planes en 4 waves | - |
 
 ## Cobertura de requisitos
 
