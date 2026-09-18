@@ -1,10 +1,16 @@
 import type { Page } from '@playwright/test';
 
 import { formatFechaBog } from '@/lib/domain/dates';
+import { construirPayload } from '@/lib/push/payload';
 
 import {
+  BYTES_DEL_RECIBO,
+  contextoPersistente,
   diaDeNegocio,
+  emularInstalada,
   esperarControlHidratado,
+  esperarUrlDeCliente,
+  esperarWorkerListo,
   expect,
   idPorEmail,
   leerCredenciales,
@@ -19,6 +25,7 @@ import {
   conectarFeed,
   correrSync,
   correrSyncEncadenado,
+  entregarPushAlWorker,
   icsDe,
   limpiarRecorrido,
   sembrarUnidadDeRecorrido,
@@ -73,6 +80,17 @@ import {
  * | 4 | `route.ts` bloque 8: el atajo del hash sin su segunda condición | (1ª vuelta) NADA. El sembrador dejaba `last_payload_hash` en nulo, así que el atajo no se alcanzaba nunca. Es lo que obligó a escribir `conectarFeed()`. (2ª vuelta) «el worker tiene que terminar en `ok`…», y con `expect.soft` también «…UNA reserva clasificada», «…UN bloqueo clasificado» y «un checkout produce UN aseo…». `hits` sigue verde: el fetch sí ocurre |
  * | 5 | `lib/data/operacion.ts`: ventana de lectura estrechada a `hoy + 1` | SOLO «el aseo que salió del feed tiene que verse en /operacion…». Las cinco aserciones de base pasaron. Es lo que demuestra que la pantalla y la base no miden lo mismo |
  */
+
+/**
+ * Escapa lo que va a entrar en una expresión regular.
+ *
+ * Los nombres de los apartamentos de este arnés llevan espacios y podrían llevar
+ * paréntesis o puntos; sin escapar, el nombre deja de ser texto literal y el
+ * localizador empieza a buscar otra cosa.
+ */
+function escaparParaRegex(texto: string): string {
+  return texto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 /** La cabecera colapsable de un bloque de día, por su rótulo. */
 function cabeceraDeBloque(p: Page, rotulo: string) {
@@ -470,6 +488,9 @@ const NOMBRE_SUPLENTE = USUARIOS_E2E.find((u) => u.clave === 'aseador2')!.nombre
  */
 test('EL RECORRIDO DEL CORE VALUE: un checkout del .ics acaba en el pago de la aseadora, sin que nadie escriba una fila de aseo', async ({
   paginaAdmin,
+  paginaAseador,
+  browser,
+  baseURL,
   request,
 }) => {
   // El recorrido cruza cinco juntas, tres sesiones y dos navegadores. No cabe en
@@ -692,4 +713,340 @@ test('EL RECORRIDO DEL CORE VALUE: un checkout del .ics acaba en el pago de la a
     conFoto.map((t) => t.room_label),
     'JUNTA 2 · y las que exigen foto son las del cuarto que la exige, no las del general: el snapshot copió `requiere_foto` de la tarea y no lo inventó',
   ).toEqual(['Habitación 1', 'Habitación 1', 'Habitación 1']);
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // JUNTA 3 · DE LA ASIGNACIÓN AL AVISO, EN SUS DOS MITADES
+  //
+  // ── LO QUE ESTE TRAMO NO PRUEBA, Y NO SE ESCONDE ────────────────────────
+  //
+  // EL SALTO DE `web-push` A FCM NO SE PRUEBA AQUÍ, y no se debilita nada para
+  // probarlo. Tres razones, las tres medidas:
+  //
+  //   1. `HOSTS_DE_PUSH` de `lib/domain/suscripcion.schema.ts` NO admite
+  //      loopback a propósito, y su propio comentario lo dice: «aquí no hay la
+  //      concesión de loopback que `ical-url.schema.ts` sí tiene». Ampliarla
+  //      sería abrir una SSRF por comodidad de test.
+  //   2. La única forma honesta de ejercitarlo es el servicio falso por TLS de
+  //      `lib/test/push.ts`, que instala su autoridad de confianza EN EL PROCESO
+  //      QUE HACE LA PETICIÓN. En E2E esa petición la hace el proceso del
+  //      servidor de Next, que no tiene ese agente, y la alternativa sería
+  //      apagar la verificación de TLS, que el arnés prohíbe por nombre (T-05-29).
+  //   3. YA ESTÁ CUBIERTO: `lib/domain/push-drenaje.integration.test.ts` mide ese
+  //      salto entero, con cuerpos cifrados de verdad y respuestas hostiles a
+  //      demanda. Repetirlo aquí no compra garantía; lo que costaría es bajar
+  //      una defensa.
+  //
+  // Quien lea este verde tiene que saber qué NO dice, y por eso está aquí y no
+  // solo en un SUMMARY.
+  //
+  // ── Y UN AVISO DE ENTORNO ──────────────────────────────────────────────
+  //
+  // Si el Vault local tiene `app_base_url` y `cron_shared_secret` (los siembra
+  // `scripts/dev/sync-local.sh`), el trigger de la migración 17 despacha un
+  // DRENAJE DE VERDAD al confirmar, contra el `app_base_url` que haya escrito.
+  // Este caso no depende de eso ni se rompe por eso, pero explica un intento de
+  // envío que aparece sin que nadie lo pida.
+  // ═════════════════════════════════════════════════════════════════════════
+
+  // ── MITAD DEL SERVIDOR: CONFIRMAR PRODUJO EL AVISO ───────────────────────
+  const { data: avisos, error: errorAvisos } = await servicio
+    .from('notifications')
+    .select('id, type, title, body, url, recipient_id, cleaning_id')
+    .eq('cleaning_id', aseoId);
+  if (errorAvisos) throw new Error(`No se pudieron leer los avisos: ${errorAvisos.message}`);
+
+  expect(
+    avisos ?? [],
+    'JUNTA 3 · confirmar deja UN aviso en el outbox: cero significa que el aseo quedó asignado y la aseadora no se va a enterar, que es el modo de fallo que este producto existe para eliminar',
+  ).toHaveLength(1);
+
+  const aviso = (avisos ?? [])[0];
+
+  expect(
+    aviso.type,
+    'JUNTA 3 · el aviso es de tipo `asignacion`: el tipo es lo que decide la urgencia del envío y el copy del teléfono',
+  ).toBe('asignacion');
+
+  expect(
+    aviso.recipient_id,
+    `JUNTA 3 · y va dirigido a la RESPONSABLE FIJA (${NOMBRE_RESPONSABLE}), que es a quien se le acaba de asignar el aseo: un aviso al admin o a la suplente deja el teléfono correcto en silencio`,
+  ).toBe(idResponsable);
+
+  expect(
+    aviso.cleaning_id,
+    'JUNTA 3 · y cuelga del MISMO aseo del recorrido: un aviso sin aseo no se puede deduplicar ni abrir',
+  ).toBe(aseoId);
+
+  expect(
+    aviso.url,
+    'JUNTA 3 · y su destino apunta a ESE aseo: es el enlace que el dedo de la aseadora va a tocar, y una ruta genérica la deja buscando cuál de los cinco es',
+  ).toBe(`/aseos/${aseoId}`);
+
+  // ── MITAD DEL DISPOSITIVO: EL TELÉFONO LO PINTA ──────────────────────────
+  // El contexto persistente, el canal `chrome` y la emulación de instalada son
+  // las tres cosas que la Fase 5 midió como obligatorias. Ver la cabecera de
+  // `contextoPersistente()` y la trampa 7 de `TESTING.md`.
+  const { contexto, pagina: telefono } = await contextoPersistente(browser, 'aseador1', baseURL!);
+
+  try {
+    await emularInstalada(telefono);
+    await telefono.goto('/mis-aseos');
+    await esperarWorkerListo(telefono);
+
+    const origen = new URL(telefono.url()).origin;
+
+    // EL PAYLOAD LO CONSTRUYE LA FUNCIÓN DE PRODUCCIÓN, A PARTIR DE LA FILA QUE
+    // EL PRODUCTO ACABA DE ESCRIBIR. Un objeto escrito a mano mediría el handler
+    // contra una forma inventada, que es lo que `push-instalacion.spec.ts`
+    // prohíbe por escrito: la junta que se prueba es «lo que la base guardó llega
+    // al teléfono», y eso solo lo dice un payload que salió de la base.
+    const payload = construirPayload(
+      {
+        id: aviso.id,
+        type: aviso.type,
+        title: aviso.title,
+        body: aviso.body,
+        url: aviso.url,
+      },
+      { soportaDeclarativo: false, origen },
+    );
+
+    const pintados = await entregarPushAlWorker(telefono, payload);
+
+    expect(
+      pintados,
+      'JUNTA 3 · el service worker pinta UNA notificación: cero significa que el aviso llegó al dispositivo y murió dentro del handler, que en iOS cuesta la suscripción entera',
+    ).toHaveLength(1);
+
+    expect(
+      pintados[0].title,
+      'JUNTA 3 · con el título que escribió la RPC, verbatim: el copy no se recompone en el camino',
+    ).toBe(aviso.title);
+
+    expect(
+      pintados[0].body,
+      'JUNTA 3 · y con su cuerpo, que es el que nombra el apartamento y la hora límite',
+    ).toBe(aviso.body);
+
+    expect(
+      pintados[0].data,
+      'JUNTA 3 · y su destino es el del ASEO DE ESTE RECORRIDO, resuelto contra el origen: es lo que hace que tocar el aviso abra este aseo y no la lista',
+    ).toMatchObject({ url: `${origen}/aseos/${aseoId}` });
+  } finally {
+    await contexto.close();
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // JUNTA 4 · DE LA EJECUCIÓN A LA EVIDENCIA
+  //
+  // ESTE TRAMO SUBE BYTES DE VERDAD AL BUCKET, Y NO ES NEGOCIABLE. El plan 08-13
+  // midió que NINGÚN escenario de prueba del repo había subido un solo byte, y
+  // por eso un error de servidor vivió tres planes sin que nadie lo viera: con
+  // las siete fotos del andamio sin objeto en el almacenamiento, las siete caían
+  // en firma fallida y la rama de la miniatura FIRMADA no se ejecutaba nunca.
+  // `deQueEsLaFoto()` se llamaba desde el servidor estando exportada de un módulo
+  // `'use client'`, y el panel de cualquier aseo con evidencia real reventaba.
+  //
+  // Las tres aserciones de abajo son las tres capas de esa lección: la fila, el
+  // objeto en el bucket, y la miniatura firmada en la pantalla del admin.
+  // ═════════════════════════════════════════════════════════════════════════
+
+  await paginaAseador.goto('/mis-aseos');
+
+  const tarjeta = paginaAseador
+    .getByRole('button', { name: new RegExp(escaparParaRegex(unidad.nombre)) })
+    .first();
+  await esperarControlHidratado(tarjeta);
+  await tarjeta.click();
+  await paginaAseador.getByRole('button', { name: 'Comenzar aseo' }).click();
+
+  // TRAMPA 8 DE `TESTING.md`: la navegación es de cliente, así que la URL se
+  // sondea DESDE Node. `page.waitForURL` inyecta su bucle dentro del documento y
+  // se traba con el propio commit de la transición de React que está esperando.
+  await esperarUrlDeCliente(paginaAseador, new RegExp(`/aseos/${aseoId}$`));
+
+  expect(
+    paginaAseador.url(),
+    'JUNTA 4 · la aseadora entra al aseo DESDE SU PROPIA LISTA: llegar por dirección directa probaría la pantalla, no la junta',
+  ).toContain(`/aseos/${aseoId}`);
+
+  // ── (a) EL CHECKLIST, CUARTO POR CUARTO Y TAREA POR TAREA ────────────────
+  //
+  // El acordeón RECOGE un cuarto en cuanto queda completo, y NO abre el
+  // siguiente: `marcar()` de `ChecklistPorCuarto.tsx` solo quita el cuarto
+  // terminado de la lista de abiertos. Al montar, el único abierto es el primer
+  // cuarto incompleto. O sea que un bucle que solo mirara casillas visibles
+  // marcaría el primer cuarto y se quedaría sin nada que tocar, con la mitad del
+  // checklist sin marcar y el aseo entrando al asistente por la hoja de «te
+  // faltan tareas». Medido en la primera corrida de este caso: 3 de 6.
+  //
+  // Los cuartos salen del checklist que la junta 2 acaba de leer, así que este
+  // bucle no sabe cuántos hay ni cómo se llaman: lo dice la base.
+  const cuartos = [...new Set((tareas ?? []).map((t) => t.room_label))];
+
+  for (const cuarto of cuartos) {
+    // El nombre accesible de la cabecera es `{cuarto}, {n} de {total} tareas`,
+    // así que se ancla al principio y no se compara entero: el contador cambia
+    // con cada toque.
+    const cabecera = paginaAseador
+      .getByRole('button', { name: new RegExp(`^${escaparParaRegex(cuarto)},`) })
+      .first();
+    await esperarControlHidratado(cabecera);
+    if ((await cabecera.getAttribute('aria-expanded')) === 'false') await cabecera.click();
+
+    // Se vuelve a buscar en cada vuelta: marcar la última tarea del cuarto lo
+    // recoge, y la lista de casillas visibles cambia debajo del bucle.
+    for (let vuelta = 0; vuelta < 10; vuelta += 1) {
+      const pendientes = paginaAseador.locator(
+        'label:has(input[type=checkbox]:not(:checked)):visible',
+      );
+      if ((await pendientes.count()) === 0) break;
+      await pendientes.first().click();
+    }
+  }
+
+  // El marcado es OPTIMISTA a propósito (§11.2 del contrato del aseador): la
+  // casilla cambia antes de que el servidor responda. Afirmar de golpe mediría
+  // una carrera; se sondea lo único que importa, que es que la marca ACABA en la
+  // base.
+  await expect
+    .poll(
+      async () => {
+        const r = await servicio
+          .from('cleaning_checklist_items')
+          .select('id')
+          .eq('cleaning_id', aseoId)
+          .not('done_at', 'is', null);
+        return r.data?.length ?? 0;
+      },
+      {
+        timeout: 30_000,
+        message:
+          'JUNTA 4 · las seis tareas del checklist quedan marcadas EN LA BASE, no solo en la casilla: una marca optimista que nunca llega al servidor deja al admin viendo un aseo sin hacer',
+      },
+    )
+    .toBe(6);
+
+  // ── (b) LA EVIDENCIA, CON BYTES DE VERDAD ────────────────────────────────
+  // Con el checklist completo, `Terminar aseo` entra directo al asistente y no
+  // pasa por la hoja de «te faltan tareas».
+  await paginaAseador.getByRole('button', { name: 'Terminar aseo' }).click();
+  await esperarUrlDeCliente(paginaAseador, new RegExp(`/aseos/${aseoId}/evidencia$`));
+
+  await expect(
+    paginaAseador.getByRole('heading', { name: 'Habitación 1' }),
+    'JUNTA 4 · el asistente tiene UN paso, el del cuarto cuyas tareas exigen foto: si no tuviera ninguno, no habría nada que fotografiar y esta junta quedaría sin sujeto',
+  ).toBeVisible();
+
+  await paginaAseador.setInputFiles('input[type="file"]', {
+    name: 'habitacion.jpg',
+    mimeType: 'image/jpeg',
+    // El JPEG real de `e2e/fixtures.ts`, exportado por el plan 08-13 justo para
+    // esto. Tiene que ser DECODIFICABLE y no solo tener la cabecera correcta: el
+    // bucket limita los tipos y, si el navegador no lo puede pintar, el manejador
+    // de error de la etiqueta sustituye la foto por el estado de ausencia.
+    buffer: BYTES_DEL_RECIBO,
+  });
+
+  const continuar = paginaAseador.getByRole('button', { name: 'Continuar' });
+  await expect(
+    continuar,
+    'JUNTA 4 · el botón de avanzar se habilita cuando la foto TERMINÓ de subir: es la señal de la propia pantalla de que hubo subida y no solo selección de archivo',
+  ).toBeEnabled({ timeout: 30_000 });
+  await continuar.click();
+
+  await expect(
+    paginaAseador.getByRole('heading', { name: '¿Pasó algo?' }),
+    'JUNTA 4 · tras el último cuarto viene el paso del reporte, que es opcional y desde el que se cierra el aseo',
+  ).toBeVisible();
+
+  await paginaAseador.getByRole('button', { name: 'Terminar el aseo' }).click();
+
+  await expect(
+    paginaAseador.getByRole('heading', { name: 'Listo.' }),
+    'JUNTA 4 · y la aseadora ve el cierre: es la única pantalla que puede decir «listo» con fundamento, porque solo se llega a ella con el aseo ya guardado',
+  ).toBeVisible({ timeout: 30_000 });
+
+  await expect(
+    paginaAseador.getByText(`Terminaste el aseo de ${unidad.nombre}.`),
+    'JUNTA 4 · y el cierre nombra EL APARTAMENTO del recorrido, no uno genérico',
+  ).toBeVisible();
+
+  // ── (c) LO QUE QUEDÓ ESCRITO ─────────────────────────────────────────────
+  const [aseoTerminado] = await aseosDe(servicio, unidad.propiedadId);
+
+  expect(
+    aseoTerminado.state,
+    'JUNTA 4 · el aseo queda `completada` en la base: la pantalla de cierre dice lo que cree, esto dice lo que hay',
+  ).toBe('completada');
+
+  expect(
+    aseoTerminado.finished_at,
+    'JUNTA 4 · con su instante de fin, que es lo que decide a qué periodo de pago pertenece (D7-8) y por lo tanto en qué recibo entra',
+  ).not.toBeNull();
+
+  const { data: fotos, error: errorFotos } = await servicio
+    .from('cleaning_photos')
+    .select('id, kind, storage_bucket, storage_path, bytes')
+    .eq('cleaning_id', aseoId);
+  if (errorFotos) throw new Error(`No se pudieron leer las fotos: ${errorFotos.message}`);
+
+  expect(
+    fotos ?? [],
+    'JUNTA 4 · la foto del cuarto deja UNA fila de evidencia: cero significa que la pantalla dio el visto bueno y no registró nada',
+  ).toHaveLength(1);
+
+  const foto = (fotos ?? [])[0];
+
+  expect(
+    foto.bytes,
+    'JUNTA 4 · con BYTES DE VERDAD, mayores que cero: un registro con cero bytes es una promesa de evidencia sin evidencia',
+  ).toBeGreaterThan(0);
+
+  expect(
+    foto.storage_path,
+    'JUNTA 4 · y con su ruta dentro del bucket, que es por donde el admin la va a pedir firmada',
+  ).toBeTruthy();
+
+  // ── (d) Y EL OBJETO EXISTE EN EL ALMACENAMIENTO ──────────────────────────
+  // La fila puede estar perfecta y el objeto no existir: son dos sistemas. Es
+  // exactamente el estado en el que vivían las siete fotos del andamio de la
+  // Fase 8, y el que hacía inalcanzable la rama de la miniatura firmada.
+  const descarga = await servicio.storage.from(foto.storage_bucket).download(foto.storage_path);
+
+  expect(
+    descarga.error,
+    `JUNTA 4 · el objeto existe DE VERDAD en el bucket \`${foto.storage_bucket}\`: una fila sin objeto detrás es una fila que el panel del admin no puede firmar`,
+  ).toBeNull();
+
+  expect(
+    descarga.data?.size ?? 0,
+    'JUNTA 4 · y pesa lo que la fila dice que pesa: si no coincidiera, el registro y el objeto serían de dos subidas distintas',
+  ).toBe(foto.bytes);
+
+  // ── (e) Y EL ADMIN VE LA MINIATURA FIRMADA ───────────────────────────────
+  // ESTA ES LA QUE PAGA LA LECCIÓN DE 08-13. Es la única rama del panel que
+  // ejecuta `deQueEsLaFoto()` desde el servidor, y la que reventaba con
+  // «Attempted to call deQueEsLaFoto() from the server but deQueEsLaFoto is on
+  // the client». Sin bytes de verdad no se ejecuta nunca.
+  await paginaAdmin.goto(`/operacion?aseo=${aseoId}`);
+
+  // TRAMPA 1 DE `TESTING.md`: el panel se portalea a `document.body`, así que
+  // TODO lo que se afirme de él va acotado al diálogo. Acotarlo por el contenedor
+  // de página lo dejaría midiendo un contenedor vacío.
+  const panel = paginaAdmin.getByRole('dialog');
+  await expect(panel, 'JUNTA 4 · el panel del aseo abre por dirección directa').toBeVisible();
+
+  await expect(
+    panel.getByRole('button', { name: 'Ver la foto de Habitación 1' }),
+    'JUNTA 4 · el admin ve la MINIATURA FIRMADA de la foto que subió la aseadora, con su nombre accesible: este botón solo existe en la rama de la firma que funcionó, que es la que ningún escenario de prueba había ejercido antes del plan 08-13',
+  ).toHaveCount(1);
+
+  // La negativa va después de su positiva y acotada al mismo diálogo: una casilla
+  // de ausencia significa que la firma falló, y con la tira entera en ausencia la
+  // aserción de arriba sería la única que se cae y nadie sabría por qué.
+  await expect(
+    panel.getByLabel('Foto no disponible'),
+    'JUNTA 4 · y NINGUNA casilla de ausencia: una firma fallida pinta la casilla atenuada en vez de desaparecer, y eso es lo que el admin vería si la evidencia no se pudiera abrir',
+  ).toHaveCount(0);
 });

@@ -2,13 +2,13 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import type { APIRequestContext } from '@playwright/test';
+import type { APIRequestContext, Page } from '@playwright/test';
 
 import type { Database } from '@/lib/database.types';
 import { contarPorClasificacion } from '@/lib/domain/ical-guardas';
 import { normalizarIcs } from '@/lib/domain/ical-normalizar';
 
-import { sumarDias, type Servicio } from './fixtures';
+import { expect, sumarDias, type Servicio } from './fixtures';
 
 /**
  * EL ARNÉS DE LOS RECORRIDOS DE PUNTA A PUNTA (Fase 9).
@@ -815,4 +815,109 @@ export async function limpiarRecorrido(servicio: Servicio): Promise<void> {
   for (const id of usuarios) {
     await servicio.auth.admin.deleteUser(id);
   }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 6. LA ENTREGA DE UN PUSH AL SERVICE WORKER
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Lo que el service worker acabó pintando en la bandeja del navegador. */
+export type AvisoPintado = { title: string; body: string; data: unknown };
+
+/**
+ * Entrega un push al service worker por el protocolo de DevTools y devuelve lo
+ * que se pintó.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ESTE INSTRUMENTO ES GEMELO DEL `entregarPush()` DE
+ * `e2e/push-instalacion.spec.ts`, Y LA DUPLICACIÓN ES DELIBERADA.
+ *
+ * No se puede importar del otro archivo: un spec que importa otro spec registra
+ * los casos del importado UNA SEGUNDA VEZ, así que la suite contaría los seis
+ * casos de push dos veces y `forbidOnly` dejaría de significar nada. Y no se
+ * puede MOVER allá aquí, porque el plan 09-04 tiene prohibido tocar los specs
+ * anteriores: el diff de este plan no puede incluir ninguna aserción existente.
+ *
+ * Vive en este módulo —que no es un spec— para que el día que alguien sí pueda
+ * unificarlos, el sitio al que mover el otro ya exista.
+ * ════════════════════════════════════════════════════════════════════════════
+ *
+ * ── LAS DOS COSAS QUE HACEN QUE ESTO FUNCIONE, LAS DOS MEDIDAS EN LA FASE 5 ─
+ *
+ *   1. CONTEXTO PERSISTENTE (`contextoPersistente`): todo `browser.newContext()`
+ *      es incógnito, y Chrome no implementa la API de push en incógnito.
+ *   2. CANAL `chrome` y no el Chromium empaquetado, que no lleva las claves de
+ *      API de Google (trampa 7 de `TESTING.md`).
+ *
+ * ── Y LA OBSERVACIÓN VA CONTRA EL REGISTRO, NO CONTRA UN ESPÍA ─────────────
+ *
+ * Se lee `registration.getNotifications()` DESDE la página en vez de parchear
+ * `showNotification`. Un espía inyectado mide que se llamó a una función; esto
+ * mide que la notificación EXISTE en el registro del navegador, que es la
+ * propiedad de la que depende que Safari no revoque la suscripción.
+ *
+ * Se sondea con `expect.poll` y NO con `waitForFunction`: el predicado es
+ * asíncrono, y `waitForFunction` da por buena la promesa en sí —que siempre es
+ * un valor verdadero— y devuelve en el primer intento. Medido en la Fase 5: el
+ * caso pasaba a verde sin haber leído una sola notificación.
+ */
+export async function entregarPushAlWorker(
+  pagina: Page,
+  datos: string,
+): Promise<AvisoPintado[]> {
+  const cdp = await pagina.context().newCDPSession(pagina);
+
+  // El identificador de registro se obtiene suscribiéndose al evento que el
+  // navegador emite AL HABILITAR el dominio con los registros que ya existen: la
+  // página tiene que haber registrado su worker antes de llegar aquí.
+  const encontrado = new Promise<string>((resolver, rechazar) => {
+    const temporizador = setTimeout(
+      () => rechazar(new Error('El navegador no reportó ningún registro de service worker en 15s')),
+      15_000,
+    );
+    cdp.on('ServiceWorker.workerRegistrationUpdated', (evento) => {
+      const vivo = evento.registrations.find((r) => !r.isDeleted);
+      if (!vivo) return;
+      clearTimeout(temporizador);
+      resolver(vivo.registrationId);
+    });
+  });
+
+  await cdp.send('ServiceWorker.enable');
+  const registrationId = await encontrado;
+
+  await cdp.send('ServiceWorker.deliverPushMessage', {
+    origin: new URL(pagina.url()).origin,
+    registrationId,
+    data: datos,
+  });
+
+  const resultado: AvisoPintado[] = [];
+  await expect
+    .poll(
+      async () => {
+        const lista = await pagina.evaluate(async () => {
+          const registro = await navigator.serviceWorker.ready;
+          return (await registro.getNotifications()).map((n) => ({
+            title: n.title,
+            body: n.body,
+            data: n.data as unknown,
+          }));
+        });
+        resultado.splice(0, resultado.length, ...lista);
+        return lista.length;
+      },
+      { timeout: 15_000, message: 'El service worker no mostró ninguna notificación' },
+    )
+    .toBeGreaterThan(0);
+
+  // La bandeja se limpia aquí y no en un `afterEach`: una notificación heredada
+  // pondría verde la próxima entrega sin haber entregado nada.
+  await pagina.evaluate(async () => {
+    const registro = await navigator.serviceWorker.ready;
+    for (const n of await registro.getNotifications()) n.close();
+  });
+
+  await cdp.detach();
+  return resultado;
 }
