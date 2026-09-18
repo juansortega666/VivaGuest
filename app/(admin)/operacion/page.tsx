@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
 import { NoAutorizado, exigirAdmin } from '@/lib/auth/guards';
+import { leerConsumoDeStorage } from '@/lib/data/almacenamiento';
 import { listarApartamentos } from '@/lib/data/apartamentos';
 import {
   SIN_AVISOS_REGISTRADOS,
@@ -38,6 +39,7 @@ import { BloqueDia } from './_components/BloqueDia';
 import { DialogoCrearAseo } from './_components/DialogoCrearAseo';
 import { LeyendaDeAseos } from './_components/EstadoAseo';
 import { FranjaCarga } from './_components/FranjaCarga';
+import { MedidorDeAlmacenamiento } from './_components/MedidorDeAlmacenamiento';
 import type { ContextoDeAcciones } from './_components/MenuAseo';
 import { PanelAlertas } from './_components/PanelAlertas';
 import { PanelAseo } from './_components/PanelAseo';
@@ -346,6 +348,7 @@ export default async function OperacionPage({
     avisos,
     endpointDelAdmin,
     aseoAbierto,
+    consumo,
   ] = await Promise.all([
       leerOperacion(supabase, ahoraMs),
       leerAseadoresActivos(supabase),
@@ -367,6 +370,18 @@ export default async function OperacionPage({
       // cabecera de la pagina para por que la existencia se decide acá y no
       // contra `operacion.filas`.
       lecturaDelPanel,
+      // RET-07. La decima, y la UNICA con `.catch` propio.
+      //
+      // EL `.catch` VA PEGADO A ESTA PROMESA, NO ENVOLVIENDO EL `Promise.all`.
+      // Si envolviera al conjunto, un fallo de esta lectura de nueve tumbaria
+      // las otras nueve y la pantalla entera se caeria por el medidor de la
+      // cabecera, que es exactamente lo que no puede pasar.
+      //
+      // Y el `null` NO ES CERO y no se pinta como cero: el medidor dice "no se
+      // pudo medir" y `alertasComputadas()` no emite alerta. Afirmar que hay
+      // espacio de sobra sin haberlo medido es la mentira que este requisito
+      // existe para evitar.
+      leerConsumoDeStorage(supabase).catch(() => null),
     ]);
 
   const bloques = agruparPorDia(operacion.filas, operacion.hoy);
@@ -498,11 +513,19 @@ export default async function OperacionPage({
    * y dos verdades sobre el mismo dato se desincronizan en el primer cambio. El
    * componente solo filtra por tipo, que es una operacion que conserva el orden.
    *
-   * En el modo `Ver atendidas` NO se computan las tres derivadas, y no es un
-   * olvido: urgente, hora limite vencida y calendario caido no tienen `read_at`,
-   * asi que no se pueden atender y no pueden estar en la lista de atendidas. Se
-   * pasa `[]` de forma explicita para que la ausencia sea una decision escrita y
-   * no un efecto lateral.
+   * En el modo `Ver atendidas` NO se computan las cuatro derivadas, y no es un
+   * olvido: urgente, hora limite vencida, calendario caido y almacenamiento no
+   * tienen `read_at`, asi que no se pueden atender y no pueden estar en la lista
+   * de atendidas. Se pasa `[]` de forma explicita para que la ausencia sea una
+   * decision escrita y no un efecto lateral.
+   *
+   * ── Y ESTO NO APAGA EL MEDIDOR DE LA CABECERA (RET-07) ───────────────────
+   *
+   * El `[]` de aqui vacia la LISTA del panel, no el NUMERO de la cabecera. El
+   * consumo de Storage se sigue leyendo y se sigue pintando en `Ver atendidas`,
+   * porque cuanto espacio queda no depende de que filtro tenga puesto el panel.
+   * Queda escrito aca, que es donde se decide, o el dia que alguien lea este
+   * `verAtendidas` va a creer que el medidor es un olvido.
    */
   const computadas = verAtendidas
     ? []
@@ -511,6 +534,7 @@ export default async function OperacionPage({
         maxUltimoExito: ultimoExito,
         ahoraMs,
         hoy: operacion.hoy,
+        consumo,
       });
 
   const nombresDeApartamento = Object.fromEntries(apartamentos.map((a) => [a.id, a.nombre]));
@@ -539,6 +563,14 @@ export default async function OperacionPage({
         <h1 className="text-display text-foreground">Operación</h1>
 
         <div className="flex items-center gap-md">
+          {/*
+            RET-07. El numero se ve SIEMPRE, tambien en `Ver atendidas`: cuanto
+            espacio queda no depende del filtro del panel. Va antes de la marca de
+            sincronizacion porque las dos son estado del sistema y esta es la mas
+            lenta de cambiar: la de al lado se mueve cada minuto.
+          */}
+          <MedidorDeAlmacenamiento consumo={consumo} />
+
           {/*
             La marca de ultima actualizacion (§13.1) y el canal de tiempo real que
             la alimenta. Recibe `leidoEnMs`, que es EL instante de la lectura de
