@@ -5,6 +5,7 @@ import { formatCOP } from '@/lib/domain/money';
 
 import {
   CIFRAS_FINANCIERAS,
+  esperarUrlDeCliente,
   expect,
   limpiarFinanzas,
   pulsarHastaNavegar,
@@ -703,6 +704,120 @@ test.describe('Finanzas, con dos periodos cerrados y uno en curso', () => {
       /ubicaci[oó]n|coordenad|GPS|en l[ií]nea|última vez activa/i,
     );
     await expect(panel.getByRole('img', { name: /mapa/i })).toHaveCount(0);
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 7 bis. LOS CRITERIOS 2 Y 3 SOBRE EL PANEL DE ASEADORA
+  // ═════════════════════════════════════════════════════════════════════════
+
+  /**
+   * ── POR QUÉ ESTE CASO EXISTE, Y ES EL GEMELO DEL ASEO FUERA DE LA VENTANA ──
+   *
+   * El Resumen de `/finanzas` **no lee su conjunto entero**: `costoPorAseadora()`
+   * devuelve solo a las personas CON ACTIVIDAD EN EL RANGO FILTRADO. Con el
+   * filtro puesto en un día, una aseadora que no trabajó ese día no sale de esa
+   * lista, y su identificador sigue siendo perfectamente válido.
+   *
+   * Si la existencia del panel se validara contra esa lista, el enlace de esa
+   * persona abriría la pantalla **sin panel y sin decir por qué**. Por eso el
+   * anfitrión valida contra `leerAseadoraDeLaFicha()`, que no depende del rango.
+   * Si alguien cambia eso al atajo barato, este caso se pone rojo.
+   */
+  test('CRITERIO 2: una aseadora SIN actividad en el rango filtrado abre su panel igual', async ({
+    paginaAdmin,
+  }) => {
+    // `diaLimpio` es el día del aseo alineado, que es de la aseadora Una. La Dos
+    // trabajó al día siguiente, así que con el filtro en ESTE día no tiene nada.
+    await paginaAdmin.goto(`/finanzas?rango=dia&ancla=${diaLimpio}`);
+
+    // ── EL CONTROL, SIN EL CUAL EL CASO NO PROBARÍA NADA ──────────────────
+    // Si la Dos estuviera en la lista, el panel abriría con el atajo barato y
+    // esta prueba pasaría en verde sin haber ejercido lo que existe para
+    // ejercer. Y el control positivo al lado: la Una SÍ está, así que lo que se
+    // mide es la ausencia de una persona y no una pantalla vacía.
+    await expect(
+      paginaAdmin.getByRole('link').filter({ hasText: esc.aseadoraUna.nombre }),
+      'CONTROL POSITIVO: la aseadora que sí trabajó ese día está en el Resumen',
+    ).not.toHaveCount(0);
+    await expect(
+      paginaAdmin.getByRole('link').filter({ hasText: esc.aseadoraDos.nombre }),
+      'CONTROL: la aseadora sin actividad en el rango NO está en la lista del Resumen',
+    ).toHaveCount(0);
+
+    // Y ahora su enlace, entrando POR DIRECCIÓN DIRECTA y con el filtro puesto.
+    await paginaAdmin.goto(
+      `/finanzas?rango=dia&ancla=${diaLimpio}&aseadora=${esc.aseadoraDos.id}`,
+    );
+
+    const panel = paginaAdmin.getByRole('dialog');
+    await expect(
+      panel,
+      'CRITERIO 2 · un enlace a alguien sin actividad en el rango abre su panel',
+    ).toBeVisible();
+    await expect(
+      panel.getByText(esc.aseadoraDos.nombre),
+      'CRITERIO 2 · y el panel es el de la persona que la dirección dice',
+    ).toBeVisible();
+
+    // El filtro no se toca al entrar: abrir un panel no le puede cambiar el
+    // periodo al admin por debajo (Pitfall 2).
+    await expect(paginaAdmin).toHaveURL(new RegExp(`rango=dia&ancla=${diaLimpio}`));
+  });
+
+  test('CRITERIO 3: el botón atrás cierra el panel de aseadora y la dirección sigue en Finanzas', async ({
+    paginaAdmin,
+  }) => {
+    await paginaAdmin.goto(`/finanzas?rango=dia&ancla=${diaLimpio}`);
+
+    await pulsarHastaNavegar(
+      paginaAdmin,
+      paginaAdmin.getByRole('link').filter({ hasText: esc.aseadoraUna.nombre }).first(),
+      /aseadora=[0-9a-f-]{36}/,
+    );
+    await expect(paginaAdmin.getByRole('dialog')).toBeVisible();
+
+    await paginaAdmin.goBack();
+
+    // Las dos mitades. Sin la segunda, una implementación que abriera con
+    // REEMPLAZO pasaría la primera sin despeinarse: el diálogo desaparecería
+    // porque el botón atrás sacó de la sección entera, que es el `about:blank`
+    // que el plan 08-11 midió en el panel de pago.
+    await expect(
+      paginaAdmin.getByRole('dialog'),
+      'CRITERIO 3 · el botón atrás cierra el panel de aseadora',
+    ).toHaveCount(0);
+    await expect(
+      paginaAdmin,
+      'CRITERIO 3 · y la dirección sigue en Finanzas, con su periodo',
+    ).toHaveURL(new RegExp(`/finanzas\\?rango=dia&ancla=${diaLimpio}$`));
+  });
+
+  test('CRITERIO 3: cerrar el panel de aseadora conserva el rango y el ancla', async ({
+    paginaAdmin,
+  }) => {
+    // ── ESTO ES EL PITFALL 2 CONVERTIDO EN ASERCIÓN, POR SU OTRA MITAD ────
+    // La aserción de ancla que el plan 08-11 conservó protege el ABRIR. Esta
+    // protege el CERRAR: una ruta de cierre constante (`/finanzas` a secas)
+    // devolvería al admin a un periodo que él no eligió, y el Resumen entero
+    // cambiaría de cifras debajo de un gesto que solo pedía cerrar un panel.
+    await paginaAdmin.goto(
+      `/finanzas?rango=dia&ancla=${diaLimpio}&aseadora=${esc.aseadoraUna.id}`,
+    );
+
+    const panel = paginaAdmin.getByRole('dialog');
+    await expect(panel).toBeVisible();
+
+    await panel.getByRole('button', { name: 'Cerrar', exact: true }).click();
+    await esperarUrlDeCliente(paginaAdmin, /\/finanzas\?rango=dia&ancla=/);
+
+    await expect(
+      paginaAdmin.getByRole('dialog'),
+      'CRITERIO 3 · el control de cierre cierra el panel',
+    ).toHaveCount(0);
+    expect(
+      paginaAdmin.url(),
+      'CRITERIO 3 · y devuelve la dirección con el rango y el ancla INTACTOS',
+    ).toMatch(new RegExp(`/finanzas\\?rango=dia&ancla=${diaLimpio}$`));
   });
 
   // ═════════════════════════════════════════════════════════════════════════

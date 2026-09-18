@@ -1,10 +1,11 @@
 import type { Locator, Page } from '@playwright/test';
 
-import { formatFechaBog } from '@/lib/domain/dates';
+import { formatFechaBog, formatFechaLargaBog } from '@/lib/domain/dates';
 import { formatCOP } from '@/lib/domain/money';
 
 import {
   BYTES_DEL_RECIBO,
+  esperarUrlDeCliente,
   expect,
   fijarSaludDeSync,
   idPorEmail,
@@ -1239,4 +1240,162 @@ test('CRITERIO 4: la fila de gestión externa no abre panel, y su nombre sigue l
   expect(paginaAdmin.url(), 'el nombre lleva a la ficha de SU apartamento').toContain(
     `apartamento=${externa.id}`,
   );
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// 10. LOS CRITERIOS 2 Y 3 SOBRE EL PANEL DE ASEO
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * EL CASO DEL ASEO FUERA DE LA VENTANA ES EL MÁS IMPORTANTE DE ESTA SECCIÓN, Y
+ * ES EL ÚNICO ANFITRIÓN DE LA FASE DONDE SE PUEDE ESCRIBIR.
+ *
+ * `/operacion` no lee su conjunto entero: `leerOperacion()` lee una ventana de
+ * **hoy menos 7 a hoy más 6 días** (`VENTANA_ATRAS_DIAS` y `HORIZONTE_DIAS`, en
+ * `lib/data/operacion.ts`). **Un aseo de hace tres semanas es válido, existe, se
+ * puede ver, y NO está en esa lista.**
+ *
+ * `/apartamentos` y `/finanzas/pagos` resuelven su parámetro contra lo que la
+ * página ya leyó, y allá funciona porque leen las 39 filas. Copiar ese atajo acá
+ * haría que un enlace perfectamente válido pegado en un chat **abriera la
+ * pantalla sin panel y sin decir por qué**, que es exactamente el caso que más
+ * se parece a un enlace viejo, y choca de frente con el criterio 2.
+ *
+ * Por eso la página valida contra la función definer. Si alguien cambia esa
+ * validación a "contra lo que la pantalla ya leyó", este caso se pone rojo, que
+ * es justo lo que tiene que pasar.
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+
+/** Cuántos días atrás se siembra el aseo viejo. Muy fuera de los siete de la ventana. */
+const DIAS_FUERA_DE_LA_VENTANA = 21;
+
+test('CRITERIO 2: un enlace a un aseo FUERA de la ventana de hoy−7 a hoy+6 abre su panel igual', async ({
+  paginaAdmin,
+}) => {
+  const { gestionada, aseadoraA, fechas } = escenario;
+
+  const fechaVieja = diaSumado(fechas.hoy, -DIAS_FUERA_DE_LA_VENTANA);
+  const [idAseo] = await sembrarAseos(servicio, [
+    {
+      propiedad: gestionada.id,
+      fecha: fechaVieja,
+      aseador: aseadoraA.id,
+      estado: 'completada',
+    },
+  ]);
+
+  // ── EL CONTROL, SIN EL CUAL EL CASO NO PROBARÍA NADA ────────────────────
+  // Si el aseo estuviera en la lista, el panel abriría con el atajo barato y
+  // este caso pasaría en verde sin haber ejercido lo que existe para ejercer.
+  await paginaAdmin.goto('/operacion');
+  await expect(
+    paginaAdmin.getByRole('link', { name: `Ver el aseo de ${gestionada.nombre}` }),
+    'CONTROL: el aseo de hace tres semanas NO está en la lista que la pantalla lee',
+  ).toHaveCount(0);
+
+  // Y ahora el enlace pegado en un chat, entrando POR DIRECCIÓN DIRECTA.
+  await paginaAdmin.goto(`/operacion?aseo=${idAseo}`);
+
+  const panel = paginaAdmin.getByRole('dialog');
+  await expect(
+    panel,
+    'CRITERIO 2 · un enlace válido a un aseo fuera de la ventana abre su panel',
+  ).toBeVisible();
+
+  // Y enseña ESE aseo, no otro. Sin esta mitad, un panel que abriera con el
+  // primer aseo que encontrara pasaría la aserción de arriba sin despeinarse.
+  await expect(
+    panel.getByRole('link', { name: gestionada.nombre }),
+    'CRITERIO 2 · y el panel es el del apartamento que la dirección dice',
+  ).toBeVisible();
+  await expect(
+    panel.getByText(formatFechaLargaBog(fechaVieja)),
+    'CRITERIO 2 · y el de la fecha que la dirección dice, que es la de hace tres semanas',
+  ).toBeVisible();
+
+  // El parámetro se queda intacto: limpiarlo reescribiría el enlace que alguien
+  // pegó en un chat (§11.4).
+  await expect(paginaAdmin).toHaveURL(new RegExp(`aseo=${idAseo}$`));
+});
+
+test('CRITERIO 3: el botón atrás cierra el panel de aseo y la dirección sigue en Operación', async ({
+  paginaAdmin,
+}) => {
+  const { gestionada, aseadoraA, fechas } = escenario;
+
+  await sembrarAseos(servicio, [
+    { propiedad: gestionada.id, fecha: fechas.hoy, aseador: aseadoraA.id, confirmado: true },
+  ]);
+
+  await paginaAdmin.goto('/operacion');
+  await pulsarHastaNavegar(
+    paginaAdmin,
+    paginaAdmin.getByRole('link', { name: `Ver el aseo de ${gestionada.nombre}` }),
+    /\?aseo=[0-9a-f-]{36}$/,
+  );
+  await expect(paginaAdmin.getByRole('dialog')).toBeVisible();
+
+  await paginaAdmin.goBack();
+
+  // ── LAS DOS MITADES, Y LA SEGUNDA ES LA QUE IMPORTA ─────────────────────
+  // Sin ella, una implementación que abriera el panel con REEMPLAZO pasaría la
+  // primera sin despeinarse: el diálogo desaparecería porque el botón atrás
+  // sacó de la sección entera. Es el `about:blank` que midió el plan 08-11 en el
+  // quinto panel.
+  await expect(
+    paginaAdmin.getByRole('dialog'),
+    'CRITERIO 3 · el botón atrás cierra el panel',
+  ).toHaveCount(0);
+  await expect(
+    paginaAdmin,
+    'CRITERIO 3 · y la dirección sigue en Operación, no salió de la sección',
+  ).toHaveURL(/\/operacion$/);
+});
+
+test('CRITERIO 3: cerrar el panel de aseo conserva el filtro de alertas', async ({
+  paginaAdmin,
+}) => {
+  const { gestionada, aseadoraA, fechas } = escenario;
+
+  await sembrarAseos(servicio, [
+    { propiedad: gestionada.id, fecha: fechas.hoy, aseador: aseadoraA.id, confirmado: true },
+  ]);
+
+  // ── ESTO ES EL PITFALL 2 CONVERTIDO EN ASERCIÓN ─────────────────────────
+  // La aserción de ancla que el plan 08-11 conservó en finanzas protege el
+  // ABRIR; esta protege el CERRAR, que es la otra mitad y hoy no la cubre nadie.
+  // Una ruta de cierre constante (`/operacion` a secas) borraría el filtro, y el
+  // admin que estaba mirando las alertas atendidas y cierra un panel no
+  // entendería por qué la pantalla cambió debajo.
+  await paginaAdmin.goto('/operacion?alertas=atendidas');
+
+  await pulsarHastaNavegar(
+    paginaAdmin,
+    paginaAdmin.getByRole('link', { name: `Ver el aseo de ${gestionada.nombre}` }),
+    /\?alertas=atendidas&aseo=[0-9a-f-]{36}$/,
+  );
+  expect(
+    paginaAdmin.url(),
+    'el enlace de apertura se compone desde los parámetros vivos, así que el filtro viaja',
+  ).toContain('alertas=atendidas');
+
+  const panel = paginaAdmin.getByRole('dialog');
+  await expect(panel).toBeVisible();
+
+  // El aspa de la primitiva, que es el único control de cierre: este panel no
+  // tiene pie, así que no hay dos botones llamados `Cerrar` como en el `Sheet`
+  // de confirmación.
+  await panel.getByRole('button', { name: 'Cerrar', exact: true }).click();
+  await esperarUrlDeCliente(paginaAdmin, /\/operacion\?alertas=atendidas$/);
+
+  await expect(
+    paginaAdmin.getByRole('dialog'),
+    'CRITERIO 3 · el control de cierre cierra el panel',
+  ).toHaveCount(0);
+  expect(
+    paginaAdmin.url(),
+    'CRITERIO 3 · y devuelve la dirección con el filtro de alertas INTACTO',
+  ).toMatch(/\/operacion\?alertas=atendidas$/);
 });
