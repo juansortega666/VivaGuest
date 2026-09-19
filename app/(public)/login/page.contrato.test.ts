@@ -37,12 +37,17 @@ const FUENTE = readFileSync(new URL('./page.tsx', import.meta.url), 'utf8');
  * El mismo filtro de lineas de comentario del guardarrail 6 de
  * `scripts/ci/check-service-role.sh` (`COMENTARIO_RE`), mas `{/*` por el JSX.
  *
- * NO es cosmetico: el comentario de `page.tsx` que explica el defecto nombra
- * `new Date()` y `getFullYear`, asi que sin el filtro la prueba se pondria roja
- * contra el archivo CORRECTO, por su propia documentacion. Y al contrario: el
- * filtro descarta lineas que EMPIEZAN por comentario, no comentarios al final de
- * una linea de codigo, asi que un nombre prohibido escrito detras de codigo si se
- * caza.
+ * NO es cosmetico, y esta MEDIDO: el comentario de `page.tsx` que documenta la
+ * prohibicion nombra literalmente `new Date().getFullYear()`, asi que sobre el
+ * archivo crudo `includes('getFullYear')` y `/new\s+Date\s*\(/` dan las dos
+ * `true`. Sin el filtro, dos de las aserciones de abajo serian ROJO PERMANENTE
+ * contra el archivo CORRECTO, por su propia documentacion. Con el filtro dan las
+ * dos `false`.
+ *
+ * Y al contrario: el filtro descarta lineas que EMPIEZAN por comentario, no
+ * comentarios al final de una linea de codigo. Asi que un nombre prohibido escrito
+ * detras de codigo SI se caza — y por eso no se escriben nombres prohibidos en
+ * comentarios de linea con codigo delante.
  */
 const CODIGO = FUENTE.split('\n')
   .filter((linea) => !/^\s*(\{\/\*|\/\/|\/\*|\*)/.test(linea))

@@ -44,6 +44,16 @@ export const revalidate = 3600;
  * Y el reloj se lee AQUI y en ningun otro sitio de la pantalla, con `hoyBog()`
  * (§8.2). `PieDeLogin` recibe el ano por prop y es funcion pura de su prop, asi
  * que es verificable sin intervenir el tiempo.
+ *
+ * PROHIBIDO `new Date().getFullYear()` para el ano del pie. El proceso corre en
+ * UTC en Vercel y en CI: el 31 de diciembre a las 19:00 de Bogota, UTC ya esta en
+ * el ano siguiente y el pie adelantaria el ano durante cinco horas, de noche, una
+ * vez al ano. `hoyBog()` ya lleva esa advertencia escrita en su propio comentario
+ * y ya tiene su caso de la ventana de UTC en `lib/domain/dates.test.ts`.
+ *
+ * Y ese `new Date().getFullYear()` de ahi arriba es, ademas, lo que hace que el
+ * filtro de lineas de comentario de `page.contrato.test.ts` sea necesario: sobre
+ * el archivo crudo la prohibicion se dispararia contra su propia documentacion.
  */
 export default function LoginPage() {
   return (
