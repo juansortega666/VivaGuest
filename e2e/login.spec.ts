@@ -326,3 +326,75 @@ test.describe('El placeholder con movimiento reducido', () => {
     expect(pintura.spinner).not.toBe('0s');
   });
 });
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * LOS DOS NUMEROS QUE EL DUENO ESCOGIO: el 45% y el corte en 1024px.
+ *
+ * El 1024 no es un numero redondo elegido a gusto: es ARITMETICA
+ * (`10-UI-SPEC.md` §2.2). El formulario mide 400px (`max-w-login`, D10-7) y su
+ * columna lleva `lg:p-xl`, 24px por lado, asi que la columna necesita 448px.
+ *
+ *     448 / 0.45 = 995.6px de viewport
+ *
+ * **Por debajo de 996px el 45% empezaria a comerse el padding del formulario.**
+ * El corte de D10-6 queda 28.4px por encima de ese piso, con 6.4px de holgura
+ * sobre el padding a cada lado: a 1024 el aire a la izquierda de la Card son
+ * 24 + 6.4 = **30.4px**. Esa cifra es la que hace visible el modo de fallo, y es
+ * la razon de medirla en el viewport mas apretado y no en el mas comodo.
+ *
+ * La frontera se prueba por los DOS lados. Un caso de un pixel parece mania y no
+ * lo es: es lo que distingue "el panel desaparece en el telefono" de "el panel
+ * desaparece cuando a la media query le apetece".
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+test.describe('El arranque del split y la holgura vertical', () => {
+  test('a 1024 el panel ya se ve y la Card conserva sus 400px', async ({ page }) => {
+    // 1024 es `lg:` exacto: `--breakpoint-lg` no esta redeclarado en
+    // `globals.css`, asi que `lg:` son los 64rem de fabrica.
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await page.goto('/login');
+
+    await expect(page.locator('[data-slot="panel-publicidad"]')).toBeVisible();
+
+    const cajaPrincipal = await page.getByRole('main').boundingBox();
+    const cajaLogin = await page.locator('[data-slot="card"]').boundingBox();
+    if (!cajaPrincipal || !cajaLogin) throw new Error('No se pudo medir el login a 1024.');
+
+    // 400 y no menos: si el 45% hubiera empezado a comerse el padding, la Card
+    // se encogeria, y ese es exactamente el modo de fallo que el piso de 995.6px
+    // predice.
+    expect(Math.round(cajaLogin.width)).toBe(400);
+
+    // 24 de `lg:p-xl` + 6.4 de holgura = 30.4. Con tolerancia de 2px porque el
+    // 45% de 1024 es 460.8 y el navegador reparte subpixeles.
+    expect(cajaLogin.x - cajaPrincipal.x).toBeCloseTo(30.4, 0);
+  });
+
+  test('a 1023, un pixel por debajo del corte, el panel no existe', async ({ page }) => {
+    await page.setViewportSize({ width: 1023, height: 768 });
+    await page.goto('/login');
+
+    await expect(page.locator('[data-slot="panel-publicidad"]')).toBeHidden();
+
+    const cajaLogin = await page.locator('[data-slot="card"]').boundingBox();
+    if (!cajaLogin) throw new Error('No se pudo medir la Card a 1023.');
+    expect(Math.round(cajaLogin.width)).toBe(400);
+  });
+
+  test('a 1024x768 el login no queda debajo del pliegue', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await page.goto('/login');
+
+    // El bloque del login mide 321px medidos contra las primitivas instaladas
+    // (§2.3) y la region mas apretada le deja 152px de aire a cada lado. Lo que
+    // esta asercion atrapa es el modo de fallo que de verdad duele en una
+    // pantalla de acceso: que el boton `Entrar` quede debajo del pliegue.
+    const recorrido = await page.evaluate(() => ({
+      alto: document.documentElement.scrollHeight,
+      visible: document.documentElement.clientHeight,
+    }));
+
+    expect(recorrido.alto).toBeLessThanOrEqual(recorrido.visible);
+  });
+});
