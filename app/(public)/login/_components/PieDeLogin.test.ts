@@ -133,7 +133,7 @@ describe('PieDeLogin: los dos botones estan deshabilitados de verdad', () => {
     // Es el senuelo 2 de la Task 3.
     const markup = render('2026');
 
-    expect(markup.match(DISABLED_NATIVO)).toHaveLength(2);
+    expect(markup.match(DISABLED_NATIVO) ?? []).toHaveLength(2);
     expect(markup).not.toContain('aria-disabled');
   });
 
@@ -152,7 +152,7 @@ describe('PieDeLogin: los dos botones estan deshabilitados de verdad', () => {
     // del deshabilitado ya la trae la clase base de la primitiva.
     const markup = render('2026');
 
-    expect(markup.match(/size-7/g)).toHaveLength(2);
+    expect(markup.match(/size-7/g) ?? []).toHaveLength(2);
     expect(markup).toContain('disabled:opacity-50');
     expect(markup).not.toContain('bg-primary');
   });
@@ -162,9 +162,9 @@ describe('PieDeLogin: los dos botones estan deshabilitados de verdad', () => {
     // pantalla leeria el nombre dos veces.
     const markup = render('2026');
 
-    expect(markup.match(/<svg/g)).toHaveLength(2);
-    expect(markup.match(/aria-hidden="true"/g)).toHaveLength(2);
-    expect(markup.match(/focusable="false"/g)).toHaveLength(2);
+    expect(markup.match(/<svg/g) ?? []).toHaveLength(2);
+    expect(markup.match(/aria-hidden="true"/g) ?? []).toHaveLength(2);
+    expect(markup.match(/focusable="false"/g) ?? []).toHaveLength(2);
     expect(markup).not.toContain('<title');
   });
 

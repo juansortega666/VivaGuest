@@ -106,6 +106,6 @@ describe('los dos glifos de marca', () => {
     );
 
     expect(markup).toContain('aria-hidden="true"');
-    expect(markup.match(/aria-hidden/g)).toHaveLength(1);
+    expect(markup.match(/aria-hidden/g) ?? []).toHaveLength(1);
   });
 });
