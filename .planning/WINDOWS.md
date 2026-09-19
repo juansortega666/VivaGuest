@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 3
+open_count: 2
 waived_count: 0
-fixed_count: 0
+fixed_count: 1
 total_count: 3
-last_updated: 2026-09-19T06:14:52.174Z
+last_updated: 2026-09-19T06:45:25.215Z
 ---
 
 # Broken Windows Ledger
@@ -17,7 +17,7 @@ last_updated: 2026-09-19T06:14:52.174Z
 |----|-------|------|------|------|-------------|--------|--------|-------------|-------------|
 | 1 | 09 | deviation | app/(admin)/operacion/_components/DialogoCancelarAseo.tsx | 134 | El toast de exito se pierde ~32% de las veces: toast.success() y acto seguido router.refresh() en el mismo tick; medido con MutationObserver, cero inserciones en 15 s | open |  | 2026-09-18T20:59:42.244Z |  |
 | 2 | 09 | unrun-verify | e2e/push-instalacion.spec.ts | 215 | Rojo intermitente sin causa aislada: dos mediciones que se contradicen en las dos direcciones | open |  | 2026-09-18T20:59:42.393Z |  |
-| 3 | 10 | unrun-verify | e2e/login.spec.ts |  | npm run db:reset + suite E2E completa no se corrio en 10-01: el ejecutor paralelo de 10-02 tenia corridas en vuelo sobre la misma base local | open |  | 2026-09-19T06:14:52.174Z |  |
+| 3 | 10 | unrun-verify | e2e/login.spec.ts |  | npm run db:reset + suite E2E completa no se corrio en 10-01: el ejecutor paralelo de 10-02 tenia corridas en vuelo sobre la misma base local | fixed |  | 2026-09-19T06:14:52.174Z | 2026-09-19T06:45:25.215Z |
 
 ````json
 [
@@ -54,10 +54,10 @@ last_updated: 2026-09-19T06:14:52.174Z
     "file": "e2e/login.spec.ts",
     "line": null,
     "description": "npm run db:reset + suite E2E completa no se corrio en 10-01: el ejecutor paralelo de 10-02 tenia corridas en vuelo sobre la misma base local",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-19T06:14:52.174Z",
-    "resolved_at": null,
+    "resolved_at": "2026-09-19T06:45:25.215Z",
     "milestone": "v1.0"
   }
 ]

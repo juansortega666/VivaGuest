@@ -760,7 +760,7 @@ Consideraciones de estado aplicables resueltas: **7 cubiertas · 2 con red de se
 | error | El panel publicitario | n/a | Sin petición, no hay fallo posible. Cuando entre un anunciante real esta fila deja de ser `n/a` y es la primera que hay que reabrir |
 | error | El footer | n/a | El año lo calcula el servidor al renderizar la página. Si `hoyBog()` fallara, falla la página entera, no el footer: no existe un estado de error propio de esta franja |
 | overflow / long-text | El wordmark `VivaGuest` | n/a | Cadena fija de nueve caracteres escrita en el código. No la teclea nadie y no viene de la base |
-| **movimiento reducido** | El panel con `prefers-reduced-motion: reduce` | 🧪 backstop | Playwright con `reducedMotion: 'reduce'`: el `background-color` computado del panel resuelve a `--anuncio-1` y su `animation-duration` es `0s`, **y** el spinner del botón sigue con duración distinta de cero |
+| **movimiento reducido** | El panel con `prefers-reduced-motion: reduce` | 🧪 backstop | Playwright con `contextOptions: { reducedMotion: 'reduce' }` (**corregido en ejecución 10-01**: `test.use({ reducedMotion })` no compila en `@playwright/test@1.62.1`, la opción vive en `BrowserContextOptions`, no en `PlaywrightTestOptions`): el `background-color` computado del panel resuelve a `--anuncio-1` y su `animation-duration` es `0s`, **y** el spinner del botón sigue con duración distinta de cero |
 | **percepción del fundido** | Que el paso de 1.115:1 se vea de verdad | 🧪 backstop | Ningún test automático puede juzgar si un paso de contraste se percibe. Visto por un humano a 1440px, con el ciclo corriendo 20 segundos completos, antes de aprobar la fase |
 
 ---
