@@ -462,7 +462,12 @@ test.describe('El pie del login a partir de lg:', () => {
     // se rompe si alguien "simplifica" el arbol metiendo el pie dentro.
     await expect(page.locator('main footer')).toHaveCount(0);
 
-    await expect(pie.getByText(copyrightEsperado(), { exact: true })).toBeVisible();
+    // `toHaveText` sobre el parrafo y NO `getByText(...)` + `toBeVisible()`: los
+    // dos caen ante un ano equivocado, pero el segundo cae con `element(s) not
+    // found`, que no dice QUE ano salio. Medido con el senuelo del ano literal.
+    // Mismo hallazgo de clase que el `.match() ?? []` del plan 10-02: una prueba
+    // que cae sin explicar por que es media prueba.
+    await expect(pie.locator('p')).toHaveText(copyrightEsperado());
 
     const cajaPie = await pie.boundingBox();
     const cajaCopyright = await pie.locator('p').boundingBox();
@@ -503,7 +508,7 @@ test.describe('El pie del login en el telefono', () => {
 
     const pie = page.getByRole('contentinfo');
     await expect(pie).toBeVisible();
-    await expect(pie.getByText(copyrightEsperado(), { exact: true })).toBeVisible();
+    await expect(pie.locator('p')).toHaveText(copyrightEsperado());
 
     const cajaPie = await pie.boundingBox();
     const cajaCopyright = await pie.locator('p').boundingBox();
