@@ -398,3 +398,200 @@ test.describe('El arranque del split y la holgura vertical', () => {
     expect(recorrido.alto).toBeLessThanOrEqual(recorrido.visible);
   });
 });
+
+/**
+ * El ano esperado se calcula AQUI, con un formateador de zona de Bogota
+ * explicito. Y es la unica forma correcta de calcularlo en este archivo:
+ *
+ *   - `playwright.config.ts` fija `timezoneId: 'America/Bogota'` para el
+ *     NAVEGADOR. El servidor de Next corre con la zona de la maquina, que en CI
+ *     es UTC. La zona del navegador no alcanza al render del servidor.
+ *   - `new Date().getFullYear()` del proceso de test caeria en EXACTAMENTE la
+ *     misma trampa que se esta persiguiendo: el 31 de diciembre a las 19:00 de
+ *     Bogota devolveria el ano siguiente, coincidiria con un producto defectuoso
+ *     y la prueba pasaria en verde contra el defecto.
+ *
+ * Mismo patron y misma zona literal que `e2e/calendario.spec.ts:68`. No se
+ * importa `hoyBog()` a proposito: un instrumento que comparte el helper con el
+ * producto no puede distinguir un helper roto de un helper correcto.
+ */
+function anioBogota(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    timeZone: 'America/Bogota',
+  }).format(new Date());
+}
+
+/** La copia literal de `10-UI-SPEC.md` §12. Es contrato, no texto de relleno. */
+function copyrightEsperado(): string {
+  return `© ${anioBogota()} VivaGuest. Todos los derechos reservados.`;
+}
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * DEFIENDE D10-2 (el pie full-width abajo) y D10-5 (el ano calculado).
+ *
+ * Las cifras salen de `10-UI-SPEC.md` §8.1 y son aritmetica:
+ *   - `lg:h-barra` = **56px** exactos a partir de 1024px
+ *   - `lg:px-xl` = **24px**, y esa es LA UNICA ALINEACION QUE ESTA PANTALLA
+ *     REGALA: el borde izquierdo del copyright cae exactamente sobre el borde
+ *     izquierdo de la tarjeta del anuncio, que tambien esta a 24px del viewport.
+ *     Es gratis solo mientras `px-xl` siga ahi, y por eso se mide contra la
+ *     tarjeta y no contra el numero 24 a secas.
+ *
+ * Se afirma el texto COMPLETO y no solo el ano: la copia de §12 es contrato, y un
+ * pie que pierda "Todos los derechos reservados" tiene que ponerse rojo.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+test.describe('El pie del login a partir de lg:', () => {
+  test('es la unica contentinfo, mide 56px y alinea con la tarjeta del anuncio', async ({
+    page,
+  }) => {
+    // 1280x720 es el viewport del proyecto: no se cambia, para que este caso mida
+    // la misma geometria que ven los cinco casos de login de arriba.
+    await page.goto('/login');
+
+    const pie = page.getByRole('contentinfo');
+    await expect(pie).toBeVisible();
+
+    // EXACTAMENTE una. Dos `contentinfo` en una pagina obligan al lector de
+    // pantalla a desambiguarlas por nombre, y ninguna de las dos lo tiene (§10.1).
+    await expect(page.getByRole('contentinfo')).toHaveCount(1);
+
+    // Y vive FUERA del `<main>`: `<main>` envuelve solo el login. Esto es lo que
+    // se rompe si alguien "simplifica" el arbol metiendo el pie dentro.
+    await expect(page.locator('main footer')).toHaveCount(0);
+
+    await expect(pie.getByText(copyrightEsperado(), { exact: true })).toBeVisible();
+
+    const cajaPie = await pie.boundingBox();
+    const cajaCopyright = await pie.locator('p').boundingBox();
+    const cajaAnuncio = await page.locator('[data-slot="anuncio"]').boundingBox();
+    if (!cajaPie || !cajaCopyright || !cajaAnuncio) {
+      throw new Error('No se pudo medir el pie del login a 1280.');
+    }
+
+    // `lg:h-barra` = 56. El alto SI se afirma exacto aca porque es una altura
+    // fijada por clase, no una altura derivada del texto.
+    expect(Math.round(cajaPie.height)).toBe(56);
+
+    // Los 24px de `lg:px-xl`, y que son LOS MISMOS 24px de la tarjeta del
+    // anuncio. La segunda mitad es la que convierte un numero en una alineacion.
+    expect(Math.round(cajaCopyright.x)).toBe(24);
+    expect(Math.abs(cajaCopyright.x - cajaAnuncio.x)).toBeLessThanOrEqual(1);
+  });
+});
+
+/**
+ * Debajo de `lg:` desaparece el PANEL, no el pie. §8.1: a 390px de ancho quedan
+ * 358px utiles y la fila necesitaria 288 + 16 + 60 = **364px**, asi que se pasa
+ * por 6px y el texto envolveria. Apilado, el pie mide ~85px.
+ *
+ * El alto va como RANGO (80..90) y no como numero exacto a proposito: depende de
+ * la metrica real de Geist al renderizar, y una asercion de un pixel sobre texto
+ * es una asercion que se cae sin que nada este roto. El rango si distingue los dos
+ * modos de fallo que importan: una fila (56px) y un pie que crecio al doble.
+ */
+test.describe('El pie del login en el telefono', () => {
+  test('sigue visible, apilado, y mide entre 80 y 90 de alto', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/login');
+
+    // El panel no, el pie si. Las dos mitades juntas son lo que dice que el
+    // `hidden lg:block` esta en el panel y NO se le pego al pie por copiar y pegar.
+    await expect(page.locator('[data-slot="panel-publicidad"]')).toBeHidden();
+
+    const pie = page.getByRole('contentinfo');
+    await expect(pie).toBeVisible();
+    await expect(pie.getByText(copyrightEsperado(), { exact: true })).toBeVisible();
+
+    const cajaPie = await pie.boundingBox();
+    const cajaCopyright = await pie.locator('p').boundingBox();
+    const cajaIconos = await pie.locator('div').first().boundingBox();
+    if (!cajaPie || !cajaCopyright || !cajaIconos) {
+      throw new Error('No se pudo medir el pie del login a 390.');
+    }
+
+    // Apilado: el copyright esta ARRIBA del bloque de iconos. En una fila las dos
+    // `y` serian practicamente la misma.
+    expect(cajaCopyright.y).toBeLessThan(cajaIconos.y);
+
+    expect(Math.round(cajaPie.height)).toBeGreaterThanOrEqual(80);
+    expect(Math.round(cajaPie.height)).toBeLessThanOrEqual(90);
+  });
+});
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * DEFIENDE §10.3: los dos iconos deshabilitados NO son una trampa de foco.
+ *
+ * Y esto solo se puede probar en un navegador, por una razon MEDIDA en el plan
+ * 10-02: `@base-ui/react` emite `tabindex="0"` junto con `disabled`. El markup
+ * literal que sale de la primitiva es
+ *
+ *     <button type="button" data-disabled="" tabindex="0" disabled="" ...>
+ *
+ * asi que leer el `tabindex` no dice NADA. Lo que decide es que el motor no le da
+ * el foco a un control deshabilitado, y eso es comportamiento del navegador.
+ *
+ * NO se usa `toBeDisabled()` de Playwright, y es deliberado: `toBeDisabled()`
+ * considera deshabilitado tambien un elemento con `aria-disabled`, asi que pasaria
+ * en verde con el senuelo puesto. Una asercion que no distingue el caso correcto
+ * del caso PROHIBIDO por §10.3 regla 2 es una asercion que no mide nada.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+test.describe('Los dos iconos de redes no atrapan el foco', () => {
+  const REDES = ['Instagram, aún no disponible', 'TikTok, aún no disponible'];
+
+  for (const nombre of REDES) {
+    test(`${nombre}: disabled nativo, sin aria-disabled, y focus() no le da el foco`, async ({
+      page,
+    }) => {
+      await page.goto('/login');
+
+      const boton = page.getByRole('contentinfo').getByLabel(nombre);
+
+      const atributos = await boton.evaluate((el) => ({
+        disabled: el.hasAttribute('disabled'),
+        ariaDisabled: el.getAttribute('aria-disabled'),
+      }));
+
+      // Las DOS mitades. La primera sola pasaria con `aria-disabled` anadido
+      // encima, y ese es justamente el estado que §10.3 regla 2 prohibe.
+      expect(atributos.disabled).toBe(true);
+      expect(atributos.ariaDisabled).toBeNull();
+
+      // El probe de foco: se le PIDE el foco y se comprueba si lo recibio. Esta es
+      // la asercion que de verdad defiende §10.3, porque mide la consecuencia y no
+      // el atributo.
+      const recibioFoco = await boton.evaluate((el) => {
+        (el as HTMLElement).focus();
+        return document.activeElement === el;
+      });
+      expect(recibioFoco).toBe(false);
+    });
+  }
+
+  test('cuatro Tab desde la contrasena no alcanzan ninguno de los dos', async ({ page }) => {
+    await page.goto('/login');
+
+    // Se arranca en `Contraseña` con `exact: true` por una colision MEDIDA: el
+    // boton de mostrar/ocultar lleva `aria-label="Mostrar contraseña"` y sin
+    // `exact` el localizador casa con dos elementos (strict mode).
+    await page.getByLabel('Contraseña', { exact: true }).focus();
+
+    const alcanzados: string[] = [];
+    for (let salto = 0; salto < 4; salto += 1) {
+      await page.keyboard.press('Tab');
+      alcanzados.push(
+        await page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? ''),
+      );
+    }
+
+    // Cuatro saltos alcanzan de sobra el final del documento desde la contrasena:
+    // mostrar/ocultar, Entrar, y lo que venga despues. Ninguno puede ser una red.
+    for (const nombre of REDES) {
+      expect(alcanzados).not.toContain(nombre);
+    }
+  });
+});
