@@ -539,10 +539,13 @@ test.describe('El pie del login en el telefono', () => {
  * asi que leer el `tabindex` no dice NADA. Lo que decide es que el motor no le da
  * el foco a un control deshabilitado, y eso es comportamiento del navegador.
  *
- * NO se usa `toBeDisabled()` de Playwright, y es deliberado: `toBeDisabled()`
- * considera deshabilitado tambien un elemento con `aria-disabled`, asi que pasaria
- * en verde con el senuelo puesto. Una asercion que no distingue el caso correcto
- * del caso PROHIBIDO por §10.3 regla 2 es una asercion que no mide nada.
+ * NO se usa `toBeDisabled()` de Playwright, y no es una preferencia: esta MEDIDO.
+ * Con `aria-disabled` en vez de `disabled` (o sea con la trampa de foco de §10.3
+ * regla 2 puesta, y con el probe de foco de abajo devolviendo `true`),
+ * `await expect(boton).toBeDisabled()` pasa en **VERDE**. Es una asercion que da
+ * el visto bueno a un control que recibe el foco, se anuncia como no disponible y
+ * no hace nada al pulsar Enter. No distingue el caso correcto del caso prohibido,
+ * que es la definicion de una asercion que no mide nada.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 test.describe('Los dos iconos de redes no atrapan el foco', () => {
