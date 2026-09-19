@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 09
 current_phase_name: el-producto-probado-de-punta-a-punta
 status: paused
-stopped_at: Completed 10-02-PLAN.md
-last_updated: "2026-09-19T06:04:43.251Z"
+stopped_at: Completed 10-01-PLAN.md
+last_updated: "2026-09-19T06:15:10.856Z"
 last_activity: 2026-09-18
 last_activity_desc: "El recorrido del Core Value existe por primera vez: del .ics de Airbnb al recibo de la aseadora, un solo test, 75 aserciones, cero insert directo"
-state_head: 96de4a0407903db0d9515da682b196be0deda0df
+state_head: 58fd0b55cade42652fe57c22b65c5e110792fbad
 progress:
   total_phases: 10
   completed_phases: 6
   total_plans: 112
-  completed_plans: 104
+  completed_plans: 105
 milestone_name: milestone
 ---
 
@@ -396,6 +396,7 @@ Progress: [██████████] 100%
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 10 P02 | 9m 22s | 3 tasks | 4 files |
+| Phase 10 P01 | 20min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -481,6 +482,8 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Phase ?]: 07-14: app/(admin)/finanzas/loading.tsx cuelga el filtro de periodo. Aislado con ocho corridas: sin el archivo 4/4 en verde, con el archivo 6 fallos en 4. loading.tsx es el fallback de Suspense DEL SEGMENTO y tambien se aplica al cambio de parametros de la misma ruta. No se arregla desde 07-14 por alcance: afecta a cuatro rutas
 - [Phase 09]: El pie de login mide la ausencia de borde contra la clase del <footer>, no contra el markup completo: border-transparent de la clase base del Button hace de border-t un rojo permanente
 - [Phase 09]: Las aserciones de conteo usan .match(...) ?? [] para que el rojo nombre el conteo en vez de 'Target cannot be null or undefined'
+- [Phase 09]: El 10% que falta en /login es UN canal central (45/10/45 con la columna del medio vacia), no dos margenes exteriores: deja la pantalla con dos numeros en vez de tres blancos por viewport
+- [Phase 09]: test.use({ reducedMotion: 'reduce' }) no compila con @playwright/test@1.62.1; la emulacion se declara por contextOptions, y el senuelo 5 comprobo que llega al CSS
 
 ### Pending Todos
 
@@ -581,8 +584,8 @@ Registradas por el plan 07-14 el 2026-09-13 al cerrar la fase. **Los planners de
 
 ## Session Continuity
 
-Last session: 2026-09-19T06:04:34.522Z
-Stopped at: Completed 10-02-PLAN.md
+Last session: 2026-09-19T06:15:10.390Z
+Stopped at: Completed 10-01-PLAN.md
 
 **Abiertos:** (1) el checkpoint humano de **07-13**, el recorrido de nueve puntos en un iPhone real; sin el, la Fase 7 no cierra y 07-13 no tiene SUMMARY a proposito. (2) el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real, con sus cinco criterios de fallo en `06-10-SUMMARY.md`.
 

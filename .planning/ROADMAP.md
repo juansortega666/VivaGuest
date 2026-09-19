@@ -442,11 +442,11 @@ Fases con patrón ya documentado en el research (se puede saltar):
 **Goal:** Que el dashboard del admin deje de verse como shadcn recién instalado y se vuelva un producto. El primer entregable, y el único alcance cerrado hoy, es `/login`: pantalla partida con panel de publicidad a la izquierda (placeholder animado entre grises, 45%), login a la derecha (45%) y footer full-width con copyright de año dinámico e iconos de Instagram y TikTok en disabled. Debajo de 1024px el panel de publicidad desaparece y queda el login centrado actual. Se conservan el wordmark Poppins y los tokens del UI-SPEC vigente.
 **Requirements**: — (ninguno nuevo; PLAT-01 y PLAT-02 ya están entregados y esta fase no cambia su comportamiento)
 **Depends on:** Phase 9
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 
-- [ ] 10-01-PLAN.md — El trazador: la rejilla 45/10/45, el panel publicitario y su ciclo de cuatro grises (wave 1)
+- [x] 10-01-PLAN.md — El trazador: la rejilla 45/10/45, el panel publicitario y su ciclo de cuatro grises (wave 1)
 - [x] 10-02-PLAN.md — El pie de página y sus dos glifos de marca, probados sin navegador (wave 1)
 - [ ] 10-03-PLAN.md — El año de Bogotá, el pie cableado, y la suite completa como regresión (wave 2)
 
