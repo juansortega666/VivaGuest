@@ -1,268 +1,130 @@
-# RETOMAR — punto de pausa del 2026-09-12 (noche)
+# RETOMAR — punto de pausa del 2026-09-18
 
 > Escribe **`RETOMAR`** en una sesión nueva, parada en la raíz del repo.
 > Este archivo primero. Después `.planning/STATE.md`.
 
 ---
 
-## LO PRIMERO: DÓNDE QUEDÓ LA CONVERSACIÓN
+## DÓNDE ESTÁ EL PROYECTO
 
-Se estaba planeando la **Fase 7 (Financiero)**. El research está hecho y
-commiteado (`.planning/phases/07-financiero/07-RESEARCH.md`, 1412 líneas), y el
-contexto con las decisiones del dueño también (`07-CONTEXT.md`).
-
-**Falta una sola cosa para poder planear: cuatro decisiones del dueño.** Se le
-iban a preguntar y se interrumpió para dormir. Están abajo, en "LAS CUATRO
-PREGUNTAS". Con esas respuestas se lanza `/gsd-plan-phase 7` y sigue solo.
-
----
-
-## LO QUE PASÓ HOY, Y POR QUÉ IMPORTA
-
-Se probó la aplicación **en un iPhone real por primera vez**. Esa sola prueba
-destapó **dos bugs que los 112 tests en verde no veían, y cada uno bastaba por
-sí solo para que ningún aseador recibiera jamás un aviso.**
-
-1. **El alta de la suscripción fallaba siempre con 42501.** El `upsert on
-   conflict` desde el cliente necesita UPDATE sobre `user_id`, que la migración
-   16 había revocado a propósito. Postgres lo exige aunque no haya conflicto.
-   Arreglado con la migración 22 (función definer). Seis aserciones pgTAP nuevas,
-   una de ellas señuelo.
-2. **El middleware redirigía `POST /api/push/drain` a `/login`,** que contesta
-   405 a un POST. La notificación se quedaba en `pendiente` para siempre, sin un
-   error visible en ninguna parte. El matcher excluía `api/cron` pero no
-   `api/push`.
-
-Y un tercero, menor pero que costó un diagnóstico entero: **las aseadoras de la
-semilla de desarrollo no podían entrar**, porque su `role` estaba solo en
-`profiles` y no en `raw_app_meta_data`, que es de donde el middleware lo lee. El
-síntoma era "le doy a Entrar y no pasa nada", y se le echó la culpa a Safari.
-
-**La lección, escrita para que no se repita: la Fase 5 no se podía validar sin un
-teléfono.** Todo verde y dos fallos mortales conviviendo.
-
-### Qué quedó probado en el iPhone (iOS 18.7, Safari 26.6.1)
-
-Instalación en pantalla de inicio, permiso concedido, suscripción guardada
-contra `web.push.apple.com`, **aviso entregado y visto**, y el aseo pasando a
-`en_curso` desde el teléfono. Apple respondió 201, 3 de 3 entregadas.
-
-**Lo que NO se probó todavía: la Fase 6 desde el teléfono.** El checklist por
-cuartos, la foto de evidencia, terminar el aseo, y el reporte de daño o gasto.
-Quedó un aseo en curso en la base para retomarlo. Es lo primero que conviene
-hacer mañana, antes de construir encima.
-
----
-
-## LAS CUATRO PREGUNTAS QUE BLOQUEAN LA FASE 7
-
-Salen del research. Ninguna la puede tomar un agente: son de negocio.
-
-### 1. El mes que termina en fin de semana (BLOQUEA EL SCHEMA)
-
-En **8 de cada 24 meses** el mes termina sábado o domingo. Cerrando el último día
-hábil quedan **5 días huérfanos en 2026 y 7 en 2027**: aseos que ocurren después
-del cierre de su mes y que hoy no pagaría nadie.
-
-- **(a)** El periodo termina el día del cierre. "Enero" va del 1 al 30 y el 31 es
-  de febrero. **Si se elige esta, la cabecera necesita `periodo_desde` y
-  `periodo_hasta` DESDE EL DÍA UNO**; añadirlas después de cerrar meses reales es
-  caro.
-- **(b)** Cerrar contando días que aún no ocurrieron. Inaceptable: paga por
-  adelantado.
-- **(c, recomendada por el research)** El periodo es el mes calendario y el
-  cierre se mueve al **primer día hábil del mes siguiente**. Cierra el mes
-  completo sin inventar nada. Contradice la letra de FIN-03, así que necesita que
-  el dueño confirme que la intención era "cerrar el mes" y no "cerrar ese día".
-
-### 2. ¿Sobrevive el recibo del gasto? (BLOQUEA UN CRITERIO YA DECIDIDO)
-
-D7-2 exige llegar desde cada gasto a su foto. RET-06 borra las fotos **a los 30
-días**, y `cleaning_photos` no distingue política por `kind`. O sea: **el enlace
-ya está roto el mes siguiente**, no dentro de seis meses.
-
-Las fotos de gasto son **~3% del volumen**. Eximirlas cuesta poco.
-
-Recomendación del research: alinear `kind='gasto'` con los 6 meses del resto.
-**Pase lo que pase, la decisión tiene que quedar escrita en `STATE.md` bajo
-consecuencias para la Fase 9**, o la purga va a borrar los recibos sin saber que
-rompía este requisito.
-
-### 3. La fuga de la tarifa al huésped (SEGURIDAD, y está MEDIDA)
-
-**Un aseador puede consultar hoy cuánto se le cobra al huésped.** Medido
-impersonando a la aseadora sembrada: `select max(tarifa_huesped) from
-public.cleanings` devuelve `90000`. Son dos superficies:
-
-- La de `cleanings`: **ningún código la lee** (verificado por grep). Cerrarla es
-  casi gratis.
-- La de `properties`, en la ventana -1..+7: **la usa el CRUD del admin**
-  (`lib/data/apartamentos.ts:106`). Cerrarla obliga a rehacer el embed
-  `properties(...)` de `lib/data/aseo-aseador.ts`.
-
-Opciones: cerrar solo la fácil y anotar la otra como deuda; cerrar las dos; o
-partir las columnas de dinero a una tabla aparte (esto último es v2).
-
-### 4. El aseo que quedó pendiente al cerrar
-
-Un aseo del día 28 que sigue sin completarse el día del cierre no entra en ese
-mes, y como su fecha es del mes cerrado, **no entrará nunca en ninguno**.
-
-Recomendación del research: mantener la pertenencia por fecha (es coherente con
-el resto del sistema) **y mostrarle al admin, antes de cerrar, cuántos aseos del
-periodo quedaron sin computar y cuáles**. Cuesta una columna y convierte un
-agujero silencioso en una lista que alguien puede resolver antes de pagar.
-
-### Una quinta, menor, que se puede resolver sin el dueño
-
-Por dónde llega la alerta del 70% de Storage (RET-07). Recomendación: banner
-persistente en `/finanzas` y `/operacion`. Cumple "ve" y "alerta" sin tocar el
-enum de notificaciones, y se ve aunque el push falle.
-
----
-
-## OTRO PENDIENTE QUE EL DUEÑO PIDIÓ
-
-Quiere un **documento de una página para ubicarse en el proyecto**, con el
-formato de uno que usa en otro proyecto (`~/Downloads/lider_v1_bloques.html`):
-pestañas por bloque, y dentro de cada una las funcionalidades con código, una
-línea de contexto y bullets de alcance.
-
-Quedaron dos preguntas sin responder: (1) si lo quiere solo con el alcance, como
-el original, o con el estado encima (hecho / a medias / pendiente); y (2) si lo
-quiere como archivo local o como página web con link, para abrirla desde el
-celular.
-
----
-
-## CÓMO LEVANTAR EL ENTORNO
-
-```
-open -a Docker                                  # esperar a que arranque
-npx supabase start -x studio,logflare,vector,imgproxy,edge-runtime
-npm ci
-npm run db:reset
-```
-
-`logflare` (así lo llama el CLI, **no** `analytics`) falla su healthcheck en esta
-máquina y tumba a los demás contenedores. `-x analytics` no hace nada.
-
-**`.env.local` no está en el repo y la copia de respaldo YA NO EXISTE.** Se
-regenera: las llaves salen de `npx supabase status`, y el par VAPID de
-`npx --no-install web-push generate-vapid-keys --json`. Hoy rotar no cuesta nada
-si no hay suscripciones vivas; el día que las haya, rotar las invalida todas sin
-período de gracia.
-
-Los dos secretos de Vault **se borran en cada `db:reset`** y hay que recrearlos,
-o el disparo inmediato del push no sale (queda en `pendiente` y lo recoge el
-cron):
-
-```sql
-select vault.create_secret('<el CRON_SHARED_SECRET de .env.local>', 'cron_shared_secret');
-select vault.create_secret('<el origen de la app>', 'app_base_url');
-```
-
-### Para levantar la app
-
-```
-NEXT_PUBLIC_VIVAGUEST_FEED_LOCAL=1 npm run build
-NEXT_PUBLIC_VIVAGUEST_FEED_LOCAL=1 PORT=3001 npm run start
-```
-
-**Esa variable no es opcional.** Sin ella, siete specs de `calendario.spec.ts`
-salen rojos: es la concesión que permite validar feeds contra `127.0.0.1`.
-
-### Para probar desde un teléfono
-
-```
-cloudflared tunnel --url http://localhost:3001
-```
-
-Y apuntar `APP_BASE_URL` en `.env.local` **y el secreto `app_base_url` de Vault**
-a la URL que imprime. Cambia en cada arranque, así que la prueba se hace de
-corrido.
-
-Credenciales de desarrollo: `admin@vivaguest.test`, `maria@vivaguest.test`,
-`luz@vivaguest.test`, todas con `VivaGuest2026!`.
-
-Ojo: los 39 apartamentos de la semilla son placeholders **sin tarifas y
-desactivados**, así que no se les puede crear un aseo. Para probar hay que
-completarle a uno `tarifa_huesped`, `pago_aseador`, `responsable_id` y
-`is_active`.
-
----
-
-## SUITES, MEDIDAS EL 2026-09-12 A LAS 21:15
-
-| Capa | Resultado |
-|---|---|
-| E2E (Chromium) | **112 pasando, 1 saltado** (E4, con su razón escrita) |
-| pgTAP | 11 archivos, **275** aserciones, PASS |
-| Unitarios | 55 archivos, **1006** tests |
-| Integración | 19 archivos, **169** tests |
-| `tsc --noEmit` | limpio |
-| `ci:arch` | los tres scripts OK |
-
----
-
-## TRAMPAS MEDIDAS QUE VAN A VOLVER A MORDER
-
-1. **La suite E2E contra el proyecto equivocado.** `reuseExistingServer` está en
-   `true`: si otro Next ocupa el 3000, Playwright reusa el servidor ajeno y corre
-   todo contra la app equivocada. Salida: `PLAYWRIGHT_PORT=3200 npm run test:e2e`.
-2. **La suite necesita `npm run db:reset` antes.** Sin eso, dos aserciones de
-   `operacion.spec.ts` caen por colisión contra el índice único parcial. Y aun
-   con reset hay **flake ocasional en los toasts**: se vio una corrida con dos
-   rojos que en la siguiente pasaron sin tocar nada.
-3. **El Chromium por defecto de Playwright no implementa notificaciones.** Es
-   `chromium-headless-shell`. Por eso el proyecto fija `channel: 'chromium'`, y
-   el caso E1 corre con `channel: 'chrome'` (requiere
-   `npx playwright install chrome`).
-4. **Chrome no tiene Push API en incógnito**, y todo contexto normal de Playwright
-   lo es. El error dice "permission denied" con el permiso concedido.
-5. **`max-w-<talla>` compila a cuatro u ocho píxeles.** Todo ancho nuevo va como
-   `--container-<nombre-propio>`. `npm run ci:arch` lo vigila.
-6. **Los guardarraíles de CI funcionan por regex.** Un comentario que mencione un
-   token prohibido hace fallar la revisión aunque el código esté bien.
-7. **`revalidatePath` cuelga el navegador** en las Server Actions de `(admin)`.
-   El refresco se pide con `router.refresh()` desde el cliente.
-8. **`coalesce` y `nullif` NO se califican con `pg_catalog`**: son construcciones
-   del lenguaje, no funciones, y calificarlas da "function does not exist". En
-   una función con `search_path = ''` esto muerde.
-9. **En pgTAP, una escritura dentro de la subconsulta de la aserción no la ve la
-   aserción**: el `select` externo lee el snapshot anterior. La escritura va en su
-   propia sentencia.
-
----
-
-## ESTADO DE LAS FASES
+**Las 83 funciones del alcance v1 están construidas.** No falta ninguna por
+desarrollar. Lo que sigue **no es construir features**: es hacer que el producto
+sirva.
 
 | Fase | Estado |
 |---|---|
-| 1 a 4 | Completas |
-| **5 — Push e instalación** | **Completa y VALIDADA EN UN IPHONE REAL.** Todos los planes salvo el asistente `/instalar`, **eliminado del código el 2026-09-18** (quick `260918-h47`) |
-| **6 — PWA del aseador** | 10 de 10 planes. **Sin probar en teléfono todavía** |
-| **7 — Financiero** | Research y contexto hechos. **Bloqueada por las cuatro preguntas de arriba** |
-| 8, 9 | Sin empezar |
+| 1 a 8 | completas y mergeadas |
+| 9 (producto probado) | **parada a propósito en 3/7**, por decisión del dueño |
 
-El asistente `/instalar` y sus cinco capturas están **ELIMINADOS DEL CÓDIGO**
-desde el 2026-09-18 (quick `260918-h47`), no descartados a la espera. Ya no es
-una idea en pausa: no queda nada que retomar.
+**Suites:** unit 1236 · pgTAP 389 · integración 205 · E2E 160 colectados, 159
+verdes, 1 saltado, **cero rojos**.
 
-**Corrección de un dato falso que llevaba aquí desde antes:** este archivo
-afirmaba que *"la ruta existe y no da 404"*. **Nunca fue cierto.** El directorio
-`app/(cleaner)/instalar/` jamás tuvo una `page.tsx`: contenía dos archivos de
-Server Actions y nada más, así que los cuatro enlaces del banner del aseador
-apuntaban a un 404. El propio ROADMAP decía lo contrario en el estado de la
-Fase 5. Hoy el directorio no existe y no queda un solo enlace: `grep -rn
-"/instalar"` sobre el árbol de código da cero.
+`main` está en GitHub, árbol limpio, nada sin subir.
 
-La instalación es **manual y presencial**: el dueño la hace teléfono por
-teléfono y entrega el aparato ya instalado. No volver a proponerlo.
+---
 
-**Lo único que sobrevive de todo esto, y no es negociable:** el botón que pide el
-permiso de avisos (`BotonActivarAvisos.tsx`) sigue entero y sigue alcanzable
-desde la app del aseador. El permiso de push no se puede conceder desde fuera de
-la app: iOS y Android exigen que el diálogo salga de un toque dentro de ella.
-Instalar la PWA a mano pone el icono en la pantalla de inicio y **no** activa los
-avisos. Borrar ese botón mataría NOTIF-01 y con él el Core Value.
+## LO PRIMERO: LA PREGUNTA QUE SIGUE SIN RESPUESTA
+
+El 2026-09-18 el dueño dijo, textual:
+
+> *"realmente la app es inusable y seguramente para allá vamos a mover nuestros
+> esfuerzos"*
+
+**Se le preguntó cuatro veces qué vio. No contestó.**
+
+Es el dato más valioso que falta. Las 83 funciones existen y las cuatro suites
+están verdes, así que "inusable" **no significa que falte una función**:
+significa que algo del uso real no se sostiene.
+
+**Pregúntaselo antes de proponer nada.** Si no contesta, las pistas están en
+`.planning/codebase/CONCERNS.md`, 14 puntos ordenados por impacto operativo. Los
+tres candidatos:
+
+1. el filtro de periodo de `/finanzas` colgándose al cambiar de rango
+2. los huecos de contrato de los paneles laterales (§17 de `08-UI-SPEC.md`)
+3. **la cola offline NUNCA se construyó**, aunque `PROJECT.md` la declara como
+   constraint desde el día uno
+
+Y uno ya arreglado que tenía exactamente esa textura: el toast de cancelar un
+aseo no aparecía **1 de cada 3 veces**. Hacías la acción, funcionaba, y la app no
+te decía nada.
+
+---
+
+## LO QUE SE HIZO EL 2026-09-18, Y POR QUÉ IMPORTA
+
+**GSD actualizado de 1.6.1 a 1.14.0.** Respaldo del viejo en
+`~/.claude/gsd-core.bak-1.6.1`. Un parche local quedó en `gsd-local-patches/` sin
+re-aplicar (es de `complete-milestone.md`, workflow que nunca se ha corrido).
+
+**El código mapeado por primera vez**, 4 agentes en paralelo → 7 documentos en
+`.planning/codebase/`, 1211 líneas. **Léelos antes de planear cualquier cosa.**
+
+**`CLAUDE.md` mentía en 4 puntos del stack** y se corrigió. Ese archivo se carga
+como instrucciones vinculantes en cada sesión, así que cualquier agente que
+arrancara planeaba contra un stack inexistente.
+
+**El recorrido del Core Value existe por primera vez** (`e2e/`, plan `09-04`): un
+solo test que va del `.ics` de Airbnb al recibo que abre la aseadora, cruzando
+sync, confirmación, asignación, push, checklist, foto real subida al bucket,
+margen y cierre de periodo. **75 aserciones, cero `insert` directo sobre
+`cleanings`.**
+
+Antes había 159 pruebas que decían *"esta pantalla funciona"* y **ninguna** que
+dijera *"el producto funciona"*.
+
+---
+
+## LAS DECISIONES DEL DUEÑO QUE NO SE REABREN
+
+1. **Nada se borra nunca.** Ni fotos a los 30 días ni aseos a los 6 meses. El
+   espacio se resuelve pagando Supabase Pro. De los 7 requisitos RET quedó
+   RET-07 (alerta al 70%), ya hecho. Los demás en `BACKLOG.md`.
+2. **El asistente de instalación se eliminó entero** (1842 líneas). La PWA se
+   instala a mano, teléfono por teléfono. **Sobrevive el botón de activar
+   avisos**, porque el permiso de push no se puede conceder desde fuera de la
+   app.
+3. **Los paneles laterales** son para mostrar información de algo seleccionado.
+   Crear y editar siguen siendo páginas.
+
+---
+
+## LO QUE QUEDA ABIERTO
+
+| Qué | Quién |
+|---|---|
+| **Los 39 apartamentos reales sin cargar** (plan `09-03`, preparación lista) | el dueño, los links de iCal no están en el repo |
+| `07-13`, el recorrido de 9 puntos en un iPhone real | el dueño |
+| `05-17`, la verificación de la Fase 5, nunca se corrió | agente |
+| `09-05`, `09-06`, `09-07` de la Fase 9 | agente |
+
+**Nada de esto bloquea empezar a trabajar en el producto.**
+
+---
+
+## ANTES DE TOCAR CÓDIGO
+
+```bash
+npx supabase start
+npm run db:reset
+```
+
+Y lee `COMO-CORRER-PRUEBAS.md` en la raíz. Tiene tres trampas que **parecen bugs
+y no lo son**, y cada una cuesta una hora de diagnóstico si nadie te las contó.
+La peor: sin `PLAYWRIGHT_PORT=3210` la suite corre contra la aplicación de otro
+proyecto y da 14 rojos falsos.
+
+---
+
+## EL MÉTODO DE ESTE PROYECTO
+
+**Ninguna aserción cuenta hasta haberla visto en rojo.** Se mete el defecto a
+propósito, se comprueba que la prueba lo atrapa, se anota, y se quita.
+
+No es ceremonia. En esta última sesión, **tres señuelos no pusieron nada en
+rojo**, y cada uno destapó una prueba que llevaba tiempo sin comprobar nada. Uno
+de ellos dejó un caso en verde dos veces seguidas: la fuga de datos estaba en una
+pantalla que la prueba no miraba.
+
+**Y lo conversado va antes que lo ejecutado:** definir y analizar huecos hablando
+con el dueño **antes** de lanzar cualquier comando GSD.
