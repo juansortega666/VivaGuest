@@ -1,13 +1,27 @@
 import type { Metadata } from 'next';
 
 import { Card, CardContent } from '@/components/ui/card';
+import { hoyBog } from '@/lib/domain/dates';
 
 import { FormularioLogin } from './_components/FormularioLogin';
 import { PanelPublicidad } from './_components/PanelPublicidad';
+import { PieDeLogin } from './_components/PieDeLogin';
 
 export const metadata: Metadata = {
   title: 'Entrar · VivaGuest',
 };
+
+// `/login` estaba en el manifest de prerenderizado del ultimo build con
+// `initialRevalidateSeconds: false`: HTML generado en el build y nunca
+// revalidado. Con eso, el ano del pie se congela en el ano del deploy.
+// Una hora de ventana es de sobra para un ano en un pie de pagina, y conserva
+// el HTML cacheable, que es lo que le importa a un telefono con mala senal.
+//
+// NO se borre esta linea "porque la pagina es estatica": es precisamente lo que
+// hace que deje de serlo del todo. La compuerta que lo defiende vive en
+// `page.contrato.test.ts`, porque el defecto exige dos builds en dos fechas
+// distintas y ninguna suite de este repo puede mover el reloj del build.
+export const revalidate = 3600;
 
 /**
  * `/login` — PLAT-01 y PLAT-02 (UI-SPEC §12.1).
@@ -22,7 +36,14 @@ export const metadata: Metadata = {
  * no hay ni un porcentaje. Debajo de 1024px el panel desaparece por CSS y lo
  * que queda es exactamente la pantalla de antes.
  *
- * Esta pagina NO lee sesion, ni cookies, ni cabeceras, ni la base (T-10-02).
+ * Esta pagina NO lee sesion, ni cookies, ni cabeceras, ni la base (T-10-02). Con
+ * `revalidate` la ruta pasa a ISR, o sea UN HTML generado una vez y servido a
+ * todos los visitantes durante una hora: el dia que alguien meta aqui una
+ * lectura de sesion, el primer visitante fijaria su HTML para los demas.
+ *
+ * Y el reloj se lee AQUI y en ningun otro sitio de la pantalla, con `hoyBog()`
+ * (§8.2). `PieDeLogin` recibe el ano por prop y es funcion pura de su prop, asi
+ * que es verificable sin intervenir el tiempo.
  */
 export default function LoginPage() {
   return (
@@ -59,6 +80,12 @@ export default function LoginPage() {
           </Card>
         </main>
       </div>
+
+      {/* HERMANO de la region del split y ULTIMO hijo del contenedor de la
+          pantalla: fuera del `<main>`, que envuelve solo el login. Asi el
+          `<footer>` es la unica `contentinfo` de la pagina (§10.1). Y no se capa
+          a `max-w-admin`: D10-2 lo pide full-width. */}
+      <PieDeLogin anio={hoyBog().slice(0, 4)} />
     </div>
   );
 }
