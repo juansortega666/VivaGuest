@@ -1,20 +1,20 @@
 ---
-gsd_state_version: 1.0
+gsd_state_version: "1.0"
 milestone: v1.0
-milestone_name: milestone
 current_phase: 09
 current_phase_name: el-producto-probado-de-punta-a-punta
 status: paused
-stopped_at: Fase 09 PARADA A PROPOSITO en 3/7 (09-01, 09-02, 09-04) por decision del dueno. El criterio 1 esta cumplido: el recorrido del Core Value existe y pasa. Quedan 09-05, 09-06, 09-07 y 09-03 (checkpoint humano con los 39 feeds reales)
-last_updated: "2026-09-18T06:00:00.000Z"
+stopped_at: Completed 10-02-PLAN.md
+last_updated: "2026-09-19T06:04:43.251Z"
 last_activity: 2026-09-18
 last_activity_desc: "El recorrido del Core Value existe por primera vez: del .ics de Airbnb al recibo de la aseadora, un solo test, 75 aserciones, cero insert directo"
+state_head: 96de4a0407903db0d9515da682b196be0deda0df
 progress:
-  total_phases: 9
+  total_phases: 10
   completed_phases: 6
-  total_plans: 103
-  completed_plans: 99
-  percent: 96
+  total_plans: 112
+  completed_plans: 104
+milestone_name: milestone
 ---
 
 # Project State
@@ -391,6 +391,11 @@ Progress: [██████████] 100%
 | Phase 07 P11 | 75min | 2 tasks | 11 files |
 | Phase 07 P12 | 135min | 3 tasks | 13 files |
 | Phase 07 P14 | 4h30m | 4 tasks | 6 files |
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 10 P02 | 9m 22s | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -474,6 +479,8 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Phase ?]: 07-14: la concurrencia del cierre se mide con dos procesos psql de verdad (docker exec al contenedor del stack local) sincronizados con pg_sleep_until, no con dos llamadas en paralelo a PostgREST. El test EXIGE que los intervalos de las dos sesiones se solapen: sin esa asercion, dos llamadas que se estorbaron por casualidad dejarian el mismo estado que dos simultaneas
 - [Phase ?]: 07-14: page.waitForURL y expect(page).toHaveURL NUNCA ven el cambio de URL de FiltroPeriodo, ni con 20 s de plazo, porque su sondeo corre dentro del documento y se traba con el commit de la transicion de React. Se sondea page.url() desde Node y la asercion sobre la URL se escribe despues
 - [Phase ?]: 07-14: app/(admin)/finanzas/loading.tsx cuelga el filtro de periodo. Aislado con ocho corridas: sin el archivo 4/4 en verde, con el archivo 6 fallos en 4. loading.tsx es el fallback de Suspense DEL SEGMENTO y tambien se aplica al cambio de parametros de la misma ruta. No se arregla desde 07-14 por alcance: afecta a cuatro rutas
+- [Phase 09]: El pie de login mide la ausencia de borde contra la clase del <footer>, no contra el markup completo: border-transparent de la clase base del Button hace de border-t un rojo permanente
+- [Phase 09]: Las aserciones de conteo usan .match(...) ?? [] para que el rojo nombre el conteo en vez de 'Target cannot be null or undefined'
 
 ### Pending Todos
 
@@ -574,8 +581,8 @@ Registradas por el plan 07-14 el 2026-09-13 al cerrar la fase. **Los planners de
 
 ## Session Continuity
 
-Last session: 2026-09-14T02:29:36.832Z
-Stopped at: Completado 07-14-PLAN.md. Fase 07 ejecutada entera salvo el checkpoint humano de 07-13.
+Last session: 2026-09-19T06:04:34.522Z
+Stopped at: Completed 10-02-PLAN.md
 
 **Abiertos:** (1) el checkpoint humano de **07-13**, el recorrido de nueve puntos en un iPhone real; sin el, la Fase 7 no cierra y 07-13 no tiene SUMMARY a proposito. (2) el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real, con sus cinco criterios de fallo en `06-10-SUMMARY.md`.
 
