@@ -394,6 +394,10 @@ Progress: [██████████] 100%
 
 ## Accumulated Context
 
+### Roadmap Evolution
+
+- Fase 10 agregada (2026-09-18): rediseño del dashboard admin, arrancando por `/login` como pantalla partida con panel de publicidad placeholder
+
 ### Decisions
 
 Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que más pesan sobre el trabajo actual:

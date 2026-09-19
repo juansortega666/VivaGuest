@@ -742,7 +742,7 @@ Por la misma razón, **el estado "sin anunciante" del futuro tampoco tiene copia
 
 ## 13. UI Considerations
 
-Consideraciones de estado aplicables resueltas: **7 cubiertas · 2 con red de seguridad · 0 sin resolver**.
+Consideraciones de estado aplicables resueltas: **7 cubiertas · 2 con red de seguridad · 0 sin resolver**, sobre 17 candidatas que levantó el probe de estados (2026-09-19). Las cinco que no aparecen arriba están declaradas `n/a` abajo, con su razón: una categoría descartada en silencio es indistinguible de una olvidada.
 
 | Categoría | Elemento | Estado | Resolución |
 |---|---|---|---|
@@ -756,6 +756,10 @@ Consideraciones de estado aplicables resueltas: **7 cubiertas · 2 con red de se
 | overflow | Alto del bloque del login en el viewport más bajo | ✅ covered | 321px de bloque contra 625px de región a 1024 × 768: 152px de holgura por lado (§2.3) |
 | zero-one-many | — | n/a | La pantalla no tiene ninguna colección. Los dos iconos son un par fijo, no una lista |
 | partial | — | n/a | No hay datos parciales: la pantalla no lee nada de la base |
+| loading | El panel publicitario | n/a | No carga nada. Los cuatro grises son `background-color` en keyframes de CSS, no imágenes con petición de red que pueda quedar pendiente |
+| error | El panel publicitario | n/a | Sin petición, no hay fallo posible. Cuando entre un anunciante real esta fila deja de ser `n/a` y es la primera que hay que reabrir |
+| error | El footer | n/a | El año lo calcula el servidor al renderizar la página. Si `hoyBog()` fallara, falla la página entera, no el footer: no existe un estado de error propio de esta franja |
+| overflow / long-text | El wordmark `VivaGuest` | n/a | Cadena fija de nueve caracteres escrita en el código. No la teclea nadie y no viene de la base |
 | **movimiento reducido** | El panel con `prefers-reduced-motion: reduce` | 🧪 backstop | Playwright con `reducedMotion: 'reduce'`: el `background-color` computado del panel resuelve a `--anuncio-1` y su `animation-duration` es `0s`, **y** el spinner del botón sigue con duración distinta de cero |
 | **percepción del fundido** | Que el paso de 1.115:1 se vea de verdad | 🧪 backstop | Ningún test automático puede juzgar si un paso de contraste se percibe. Visto por un humano a 1440px, con el ciclo corriendo 20 segundos completos, antes de aprobar la fase |
 
