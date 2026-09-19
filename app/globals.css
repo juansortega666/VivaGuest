@@ -716,6 +716,78 @@
   transition-duration: 120ms;
 }
 
+/* ── Fase 10: los cuatro grises del slot publicitario — 10-UI-SPEC.md §6.1 ───
+   D10-4: el placeholder del anuncio hace cross-fade entre cuatro grises. NO se
+   pueden reciclar los neutros que ya existen: --canvas contra --muted da
+   1.037:1, un paso que en un fundido de 600ms sobre 600px de ancho no se ve, y
+   la paleta actual solo alcanza para tres grises.
+
+   Estos cuatro tienen paso adyacente >= 1.11:1 y los cuatro quedan MAS OSCUROS
+   que --canvas (#F6F7F8), que es el fondo de la pagina: el paso mas claro
+   conserva 1.181:1 contra ella, asi que el borde de la tarjeta no se disuelve en
+   ningun momento del ciclo. De referencia, el borde que hoy separa una tabla de
+   la pagina (--canvas contra --border) es 1.168:1: el momento mas tenue del
+   panel sigue siendo mas visible que eso.
+
+   NO son de marca, NO cambian con el rebrand, y --brand-identity y --brand-gold
+   NO entran aca: un placeholder con el dorado de la identidad se leeria como una
+   pieza de diseno terminada, y el dorado da 1.69:1.                           */
+:root {
+  --anuncio-1: oklch(0.9200 0.0045 250);  /* #E2E5E7 */
+  --anuncio-2: oklch(0.8850 0.0060 250);  /* #D6D9DD */
+  --anuncio-3: oklch(0.8500 0.0075 250);  /* #CACED3 */
+  --anuncio-4: oklch(0.8150 0.0090 250);  /* #BEC3C8 */
+}
+
+@theme inline {
+  --color-anuncio-1: var(--anuncio-1);
+  --color-anuncio-2: var(--anuncio-2);
+  --color-anuncio-3: var(--anuncio-3);
+  --color-anuncio-4: var(--anuncio-4);
+}
+
+/* ── Fase 10: el ciclo del placeholder publicitario — 10-UI-SPEC.md §7 ───────
+   D10-4: cuatro grises, 5s por paso, 600ms de transicion. 4 x 5s = 20s de ciclo,
+   asi que el reposo de cada paso son 22% (4.4s) y el fundido 3% (0.6s).
+
+   `linear` y no `ease-out`: `ease-out` sobre un fundido de 600ms entre dos grises
+   a 1.115:1 arranca de golpe y se lee como un parpadeo. Un cross-fade entre dos
+   colores planos es lineal por definicion. El `ease-out` de 120ms del @utility
+   `transicion` sigue siendo la regla para TODO lo demas; esto es una animacion,
+   no una transicion de estado.
+
+   Se apaga con el bloque de prefers-reduced-motion que ya existe mas abajo en
+   este archivo. NO se anade una segunda regla: el sitio donde se apaga el
+   movimiento de este producto es uno solo, y el elemento cae a su propio
+   `background-color` (ver 10-UI-SPEC.md §7.3).                                */
+@theme {
+  --animate-anuncio: ciclo-anuncio 20s linear infinite;
+
+  @keyframes ciclo-anuncio {
+    0%,  22% { background-color: var(--anuncio-1); }
+    25%, 47% { background-color: var(--anuncio-2); }
+    50%, 72% { background-color: var(--anuncio-3); }
+    75%, 97% { background-color: var(--anuncio-4); }
+    100%     { background-color: var(--anuncio-1); }
+  }
+}
+
+/* ── Fase 10: la rejilla de /login — 10-UI-SPEC.md §2.1 ──────────────────────
+   45% publicidad · 10% canal · 45% login (D10-3). Va como @utility y no como
+   `grid-cols-[45%_10%_45%]` en el JSX por la misma razon por la que los 120ms
+   de movimiento viven en `@utility transicion`: el reparto es el contrato de la
+   pantalla y tiene que estar en UN sitio, con su razon al lado.
+
+   Tailwind v4 no tiene namespace de plantilla de rejilla, asi que un token no es
+   posible; una utilidad si, y acepta variantes (`lg:rejilla-login`).
+
+   La columna del medio NO lleva elemento: es una pista vacia. El login se
+   coloca con `lg:col-start-3`. Un div espaciador seria un nodo en el arbol de
+   accesibilidad que no separa nada.                                          */
+@utility rejilla-login {
+  grid-template-columns: 45% 10% 45%;
+}
+
 @layer base {
   @media (prefers-reduced-motion: reduce) {
     *,

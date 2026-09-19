@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { Card, CardContent } from '@/components/ui/card';
 
 import { FormularioLogin } from './_components/FormularioLogin';
+import { PanelPublicidad } from './_components/PanelPublicidad';
 
 export const metadata: Metadata = {
   title: 'Entrar · VivaGuest',
@@ -14,26 +15,50 @@ export const metadata: Metadata = {
  * No hace ninguna comprobacion de sesion: de eso se encarga el middleware, que
  * manda a su raiz a quien ya tenga sesion valida. Duplicar la comprobacion aqui
  * seria una segunda tabla de ruteo que mantener sincronizada.
+ *
+ * FASE 10 (10-UI-SPEC.md §2 y §10.1, D10-2/D10-3/D10-6): la pantalla esta
+ * partida 45% publicidad · 10% de canal · 45% login a partir de `lg:` (1024px).
+ * El reparto vive ENTERO en `@utility rejilla-login` de `app/globals.css`: aqui
+ * no hay ni un porcentaje. Debajo de 1024px el panel desaparece por CSS y lo
+ * que queda es exactamente la pantalla de antes.
+ *
+ * Esta pagina NO lee sesion, ni cookies, ni cabeceras, ni la base (T-10-02).
  */
 export default function LoginPage() {
   return (
-    <main className="flex min-h-svh flex-col items-center justify-center bg-canvas p-lg">
-      {/*
-        El wordmark va en `--foreground`, NO en el color de marca. El coral de la
-        identidad (`--brand-identity`) da 2.64:1 contra blanco y no llega al 4.5:1
-        que WCAG exige para texto; su sitio son el logo y las areas grandes, no una
-        palabra de 24px. Poppins si es la tipografia de marca y el login es uno de
-        los tres sitios donde vive (UI-SPEC §3, ACTUALIZACION 2026-09-01).
-      */}
-      <h1 className="mb-2xl font-brand text-display text-foreground">VivaGuest</h1>
+    // El fondo se queda en `--canvas` y NO pasa a blanco: es lo que le da borde
+    // visible a la `Card` blanca debajo de 1024px, que es literalmente la
+    // pantalla de hoy (§6.4). Se muda aqui desde el `<main>` porque ahora hay
+    // dos columnas que compartirlo.
+    <div className="flex min-h-svh flex-col bg-canvas">
+      <div className="flex flex-1 lg:grid lg:rejilla-login">
+        {/* COLUMNA 1 */}
+        <PanelPublicidad />
 
-      {/* 400px es la medida del contrato. `w-full` debajo de esa anchura para que
-          en un telefono no se salga de la pantalla. */}
-      <Card className="w-full max-w-login">
-        <CardContent>
-          <FormularioLogin />
-        </CardContent>
-      </Card>
-    </main>
+        {/* COLUMNA 2: pista vacia de la rejilla, SIN elemento. Un div espaciador
+            seria un nodo mas en el arbol de accesibilidad que no separa nada
+            (§10.1); el login se coloca con `lg:col-start-3`. */}
+
+        {/* COLUMNA 3 */}
+        <main className="flex flex-1 flex-col items-center justify-center p-lg lg:col-start-3 lg:p-xl">
+          {/*
+            El wordmark va en `--foreground`, NO en el color de marca. El coral de la
+            identidad (`--brand-identity`) da 2.64:1 contra blanco y no llega al 4.5:1
+            que WCAG exige para texto; su sitio son el logo y las areas grandes, no una
+            palabra de 24px. Poppins si es la tipografia de marca y el login es uno de
+            los tres sitios donde vive (UI-SPEC §3, ACTUALIZACION 2026-09-01).
+          */}
+          <h1 className="mb-2xl font-brand text-display text-foreground">VivaGuest</h1>
+
+          {/* 400px es la medida del contrato. `w-full` debajo de esa anchura para que
+              en un telefono no se salga de la pantalla. */}
+          <Card className="w-full max-w-login">
+            <CardContent>
+              <FormularioLogin />
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    </div>
   );
 }
