@@ -61,7 +61,7 @@ export default function LoginPage() {
     // visible a la `Card` blanca debajo de 1024px, que es literalmente la
     // pantalla de hoy (§6.4). Se muda aqui desde el `<main>` porque ahora hay
     // dos columnas que compartirlo.
-    <div className="flex min-h-svh flex-col bg-canvas">
+    <div className="flex min-h-[calc(100svh-var(--alto-barra-pruebas,0px))] flex-col bg-canvas">
       <div className="flex flex-1 lg:grid lg:rejilla-login">
         {/* COLUMNA 1 */}
         <PanelPublicidad />

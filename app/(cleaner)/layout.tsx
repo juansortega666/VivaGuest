@@ -65,7 +65,7 @@ export default async function CleanerLayout({
   const endpointRegistrado = await leerEndpointDePushPropio(supabase, user.id);
 
   return (
-    <div className="min-h-svh bg-canvas">
+    <div className="min-h-[calc(100svh-var(--alto-barra-pruebas,0px))] bg-canvas">
       <main className="mx-auto flex w-full max-w-aseador flex-col gap-lg p-lg">
         {/*
           PRIMER HIJO DE `<main>`, encima del `<h1>` de cada pagina (§7). No es

@@ -45,6 +45,25 @@ export const metadata: Metadata = {
   icons: { apple: "/apple-touch-icon.png" },
 };
 
+/**
+ * La barra de "ambiente de pruebas" (2026-09-19, pedida por el dueno).
+ *
+ * Se muestra SIEMPRE salvo que el despliegue se declare de produccion, y esa
+ * es la polaridad correcta a proposito: si alguien olvida poner la variable,
+ * el error es una barra de mas en un ambiente real -- feo y evidente -- y no
+ * una barra de menos en el ambiente de pruebas, que es alguien tomando por
+ * bueno un dato de mentira sin saberlo.
+ *
+ * El alto viaja como variable CSS en el <body> y NO como una clase fija,
+ * porque las tres pantallas raiz del producto (login, admin, aseador) piden
+ * `min-h-svh`: sin restarles este alto, la barra empuja y aparece un scroll de
+ * 48px en pantallas disenadas para no tenerlo. Cuando la barra no se pinta la
+ * variable vale 0px y la aritmetica de esas tres pantallas queda intacta.
+ */
+const MOSTRAR_BARRA_PRUEBAS =
+  process.env.NEXT_PUBLIC_VIVAGUEST_ENTORNO !== "produccion";
+const ALTO_BARRA_PRUEBAS = MOSTRAR_BARRA_PRUEBAS ? "48px" : "0px";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -68,7 +87,21 @@ export default function RootLayout({
       lang="es"
       className={`${geistSans.variable} ${geistMono.variable} ${poppins.variable}`}
     >
-      <body className="antialiased">
+      <body
+        className="antialiased"
+        style={
+          { "--alto-barra-pruebas": ALTO_BARRA_PRUEBAS } as React.CSSProperties
+        }
+      >
+        {MOSTRAR_BARRA_PRUEBAS && (
+          // `h-12` son los 48px que pidio el dueno como minimo. No es una
+          // franja decorativa: es lo que impide que alguien lea un dato de
+          // prueba como si fuera real, asi que va arriba del todo, a ancho
+          // completo, y no se puede cerrar.
+          <div className="flex h-12 items-center justify-center bg-amber-400 px-lg text-center text-sm font-semibold tracking-wide text-neutral-950">
+            AMBIENTE DE PRUEBAS · los datos de esta pantalla no son reales
+          </div>
+        )}
         <TooltipProvider>{children}</TooltipProvider>
         <Toaster />
       </body>
