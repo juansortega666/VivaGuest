@@ -34,16 +34,30 @@ export function PanelPublicidad({ children }: { children?: React.ReactNode }) {
     // `hidden lg:block` y no renderizado condicional (§2.4): conocer el viewport
     // exige cliente, y el panel apareceria despues de la primera pintura con un
     // salto visible. Con `display: none` la animacion tampoco avanza.
-    <div aria-hidden="true" className="hidden p-xl lg:block" data-slot="panel-publicidad">
-      {/* `size-full` para llenar la columna: la tarjeta no promete ninguna
-          relacion de aspecto porque el ratio recorre 0.72 a 0.92 entre los
-          viewports soportados (§3.2). `rounded-2xl` = 10.8px, un escalon por
-          encima del `rounded-xl` de la primitiva `Card`, porque es la superficie
-          mas grande del producto y el radio de una tarjeta de 400px se pierde en
-          ella. Sin `will-change`: un `background-color` de 20s no necesita capa
-          propia y reservaria memoria de video para siempre. */}
+    <div
+      aria-hidden="true"
+      className="hidden place-items-center p-xl lg:grid"
+      data-slot="panel-publicidad"
+    >
+      {/* CORRECCION 2026-09-19, del dueno mirando la pantalla: con `size-full` la
+          tarjeta se estiraba a todo el alto de la columna y su forma la decidia
+          el viewport, no el diseno -- 483x711, un 0.68 que se lee desproporcionado.
+          Medida otra vez la referencia de GlossGenius que D10-3 adopta, su tarjeta
+          es 337x363 = **0.93** y ocupa el 82% del alto, con aire arriba y abajo.
+          No toca ni el techo ni el piso: tiene forma propia.
+
+          `aspect-[0.93]` la reproduce. `max-h-full` la deja encogerse por alto en
+          vez de desbordar cuando la ventana es baja, y el `place-items-center` del
+          padre la centra en los dos ejes -- de ahi sale el aire, sin margenes que
+          calcular. A 1180px de ancho: 531x571 con 70px de aire arriba y abajo.
+
+          `rounded-2xl` = 10.8px, un escalon por encima del `rounded-xl` de la
+          primitiva `Card`, porque es la superficie mas grande del producto y el
+          radio de una tarjeta de 400px se pierde en ella. Sin `will-change`: un
+          `background-color` de 20s no necesita capa propia y reservaria memoria
+          de video para siempre. */}
       <div
-        className="size-full overflow-hidden rounded-2xl bg-anuncio-1 animate-anuncio"
+        className="aspect-[0.93] max-h-full w-full overflow-hidden rounded-2xl bg-anuncio-1 animate-anuncio"
         data-slot="anuncio"
       >
         {children}
