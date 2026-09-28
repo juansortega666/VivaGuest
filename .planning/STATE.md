@@ -4,10 +4,10 @@ milestone: v1.0
 current_phase: 10
 current_phase_name: Rediseño del dashboard admin
 status: executing
-stopped_at: "10-04 completo: checkpoint humano aprobado el 2026-09-28. La FASE 10 no se declara cerrada: lo decide el verificador y el dueno tiene pendiente si sigue con mas pantallas del dashboard."
-last_updated: "2026-09-28T20:36:34.469Z"
+stopped_at: "Quick 260928-lqd completo: el anillo de foco rescatado y e2e/login.spec.ts en 22. La FASE 10 sigue sin declararse cerrada: lo decide el verificador y el dueno tiene pendiente si sigue con mas pantallas del dashboard."
+last_updated: "2026-09-28T21:35:00.000Z"
 last_activity: 2026-09-28
-last_activity_desc: Phase 10 execution started
+last_activity_desc: "Quick 260928-lqd: rescate de los tres arreglos de foco de /login"
 state_head: dc233720125bbada8b35b178ddb8310b934cc84c
 progress:
   total_phases: 10
@@ -519,6 +519,7 @@ Ninguno.
 | 260918-a33 | RET-07: el admin ve el consumo de Storage y la alerta salta al 70%. Lo unico que avisa antes de llenarse, porque el dueno decidio que nada se borra nunca | 2026-09-18 | e4de15a | [260918-a33-alerta-de-storage](./quick/260918-a33-alerta-de-storage/) |
 | 260918-h47 | Fuera el asistente de instalacion entero: 1842 lineas de una isla muerta, los cuatro enlaces rotos y el item del menu. El dueno instala cada telefono a mano | 2026-09-18 | c471318 | [260918-h47-fuera-el-asistente-de-instalacion](./quick/260918-h47-fuera-el-asistente-de-instalacion/) |
 | 260918-h47 | Fuera el asistente de instalacion, entero: la isla muerta de `/instalar`, los cuatro enlaces del banner que caian en 404 y el link del menu del admin. `BotonActivarAvisos` y toda la deteccion de instalacion se conservan | 2026-09-18 | 793091b | [260918-h47-fuera-el-asistente-de-instalacion](./quick/260918-h47-fuera-el-asistente-de-instalacion/) |
+| 260928-lqd | Rescate de los tres arreglos de foco de `/login` de la rama paralela que se borra: `--ring` deja el bloque de marca y pasa a `--status-progress` (los dos rojos median 1.65:1 entre si), el campo invalido recupera su foco por parche local (los dos estados eran el mismo pixel, delta-E 0) y el anillo sube de /50 a /70 (2.39:1 -> 3.58:1, WCAG 2.2 SC 2.4.13). `e2e/login.spec.ts` 19 -> 22, cero borrados. El boton `Entrar` sigue rojo | 2026-09-28 | d9142f9 | [260928-lqd-rescate-foco-login](./quick/260928-lqd-rescate-foco-login/) |
 
 ## Consecuencias de la Fase 1 para fases posteriores
 
@@ -582,11 +583,12 @@ Registradas por el plan 07-14 el 2026-09-13 al cerrar la fase. **Los planners de
 | Calendario | Integración con Booking.com | Fuera de MVP | 2026-08-31 |
 | Calendario | Google Calendar como fuente (es suscriptor del mismo .ics) | Descartado | 2026-08-31 |
 | Piloto | Métrica de éxito del piloto sin definir | Abierto | 2026-08-31 |
+| Accesibilidad | El anillo de foco no llega a 3:1 contra el relleno del botón primario (2.04:1 a /50, 1.36:1 a /70, bajando). Choque de luminancias entre `--ring` y `--primary`: solo se cierra decidiendo el valor de marca, nunca subiendo la opacidad. Detalle en `deferred-items.md` de la Fase 10, entrada 4 | Abierto, necesita decisión del dueño | 2026-09-28 |
 
 ## Session Continuity
 
-Last session: 2026-09-28T20:36:33.883Z
-Stopped at: 10-04 completo: checkpoint humano aprobado el 2026-09-28. La FASE 10 no se declara cerrada: lo decide el verificador y el dueno tiene pendiente si sigue con mas pantallas del dashboard.
+Last session: 2026-09-28T21:35:00.000Z
+Stopped at: Quick 260928-lqd completo (3 commits, `e2e/login.spec.ts` de 19 a 22 en verde). La FASE 10 sigue sin declararse cerrada: lo decide el verificador y el dueno tiene pendiente si sigue con mas pantallas del dashboard.
 
 **Abiertos:** (1) el checkpoint humano de **07-13**, el recorrido de nueve puntos en un iPhone real; sin el, la Fase 7 no cierra y 07-13 no tiene SUMMARY a proposito. (2) el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real, con sus cinco criterios de fallo en `06-10-SUMMARY.md`.
 
