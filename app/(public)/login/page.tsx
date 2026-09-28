@@ -211,14 +211,32 @@ export default function LoginPage() {
               <FormularioLogin />
             </div>
           </main>
+
+          {/*
+            * EL PIE VIVE DENTRO DE LA COLUMNA DEL LOGIN, Y FUERA DEL `<main>`.
+            * Dos mitades, y son independientes:
+            *
+            * 1. POR QUE DENTRO DE LA COLUMNA. Decision del dueno del 2026-09-26
+            *    contra la referencia de Runway: esto deroga la mitad de D10-2 que
+            *    pedia el pie a ancho completo. Su ancho lo decide ahora la columna
+            *    y no la pantalla, asi que ni un pixel del pie cruza a la mitad
+            *    izquierda. Y trae una consecuencia geometrica que conviene tener
+            *    escrita: la region del split queda como UNICO hijo del contenedor
+            *    de la pantalla, asi que el panel se lleva el alto completo.
+            *    Por lo mismo cae el motivo por el que el pie no se capaba a
+            *    `max-w-admin`: ya no hay nada que capar, lo capa su columna.
+            *
+            * 2. POR QUE SIGUE FUERA DEL `<main>`, Y ESTO NO SE DEROGA. Esta
+            *    MEDIDO en 10-03 (senuelo 4): un `<footer>` descendiente de
+            *    `<main>` **deja de mapear al rol `contentinfo`**, porque el rol
+            *    solo aplica cuando el elemento esta al alcance del `body`. El
+            *    elemento sigue existiendo, sigue pintando la copia, y desaparece
+            *    del indice de regiones del lector de pantalla. Es el modo de
+            *    fallo silencioso perfecto: la pantalla se ve identica.
+          */}
+          <PieDeLogin anio={hoyBog().slice(0, 4)} />
         </div>
       </div>
-
-      {/* HERMANO de la region del split y ULTIMO hijo del contenedor de la
-          pantalla: fuera del `<main>`, que envuelve solo el login. Asi el
-          `<footer>` es la unica `contentinfo` de la pagina (§10.1). Y no se capa
-          a `max-w-admin`: D10-2 lo pide full-width. */}
-      <PieDeLogin anio={hoyBog().slice(0, 4)} />
     </div>
   );
 }

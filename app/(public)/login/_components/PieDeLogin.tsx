@@ -44,8 +44,20 @@ import { IconoInstagram, IconoTikTok } from './IconosRedes';
  *     defecto sin escribir nada.
  *
  * Y una que es decision, no olvido: sin borde superior y sin fondo propio. D10-5
- * dice "nada mas", y la separacion visual ya la dan el borde inferior de la
- * tarjeta del anuncio y el aire bajo el bloque del login (§8.1).
+ * dice "nada mas", y la separacion visual la dan el aire bajo el bloque del
+ * login y el cambio de superficie contra el panel de la izquierda (§8.1). Hasta
+ * el 2026-09-26 tambien la daba el borde inferior de la tarjeta del anuncio;
+ * esa tarjeta dejo de existir cuando el panel paso a sangre completa.
+ *
+ * DONDE VIVE ESTE PIE, DESDE EL REDISENO DEL 2026-09-26: ya NO es full-width.
+ * Vive dentro de la columna del login, como ultimo hijo de
+ * `data-slot="columna-login"` y hermano del `<main>`, asi que su ancho lo decide
+ * el envoltorio de esa columna en `page.tsx` y no este archivo. Como hijo flex
+ * de la columna se estira solo, y su `lg:px-xl` pasa a alinear el copyright con
+ * el padding del `<main>` de su propia columna en vez de con el borde del
+ * viewport. NO HAY QUE TOCAR NADA AQUI PARA ESO: la `className` es la misma byte
+ * a byte, y `PieDeLogin.test.ts` afirma la cadena literal precisamente para que
+ * un cambio de sitio no se convierta en un cambio de markup.
  */
 export function PieDeLogin({ anio }: { anio: string }) {
   return (

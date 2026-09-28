@@ -510,19 +510,26 @@ test.describe('El placeholder con movimiento reducido', () => {
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
- * LOS DOS NUMEROS QUE EL DUENO ESCOGIO: el 45% y el corte en 1024px.
+ * LOS DOS NUMEROS QUE EL DUENO ESCOGIO: el 50% (2026-09-26) y el corte en
+ * 1024px (D10-6, que NO se deroga).
  *
  * El 1024 no es un numero redondo elegido a gusto: es ARITMETICA
  * (`10-UI-SPEC.md` §2.2). El formulario mide 400px (`max-w-login`, D10-7) y su
  * columna lleva `lg:p-xl`, 24px por lado, asi que la columna necesita 448px.
  *
- *     448 / 0.45 = 995.6px de viewport
+ *     448 / 0.50 = 896px de viewport
  *
- * **Por debajo de 996px el 45% empezaria a comerse el padding del formulario.**
- * El corte de D10-6 queda 28.4px por encima de ese piso, con 6.4px de holgura
- * sobre el padding a cada lado: a 1024 el aire a la izquierda de la Card son
- * 24 + 6.4 = **30.4px**. Esa cifra es la que hace visible el modo de fallo, y es
- * la razon de medirla en el viewport mas apretado y no en el mas comodo.
+ * **Por debajo de 896px el 50% empezaria a comerse el padding del formulario.**
+ * Con el reparto derogado (45%) ese piso estaba en 995.6px y el corte de 1024
+ * quedaba con **28.4px** de holgura; con el 50/50 el piso baja a 896 y la
+ * holgura sube a **128px**. O sea que el corte que el dueno escogio sigue siendo
+ * correcto y ahora con margen de sobra: es un resultado del cambio de reparto,
+ * no un detalle.
+ *
+ * Y el aire a cada lado del bloque a 1024 pasa de 30.4 a **56px**: la columna
+ * mide 512 y el bloque 400, asi que (512 - 400) / 2 = 56, muy por encima de los
+ * 24 de `lg:p-xl`. Esa cifra es la que hace visible el modo de fallo, y es la
+ * razon de medirla en el viewport mas apretado y no en el mas comodo.
  *
  * La frontera se prueba por los DOS lados. Un caso de un pixel parece mania y no
  * lo es: es lo que distingue "el panel desaparece en el telefono" de "el panel
@@ -530,7 +537,7 @@ test.describe('El placeholder con movimiento reducido', () => {
  * ─────────────────────────────────────────────────────────────────────────────
  */
 test.describe('El arranque del split y la holgura vertical', () => {
-  test('a 1024 el panel ya se ve y la Card conserva sus 400px', async ({ page }) => {
+  test('a 1024 el panel ya se ve y el bloque del login conserva sus 400px', async ({ page }) => {
     // 1024 es `lg:` exacto: `--breakpoint-lg` no esta redeclarado en
     // `globals.css`, asi que `lg:` son los 64rem de fabrica.
     await page.setViewportSize({ width: 1024, height: 768 });
@@ -611,24 +618,34 @@ function copyrightEsperado(): string {
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
- * DEFIENDE D10-2 (el pie full-width abajo) y D10-5 (el ano calculado).
+ * DEFIENDE QUE EL PIE VIVE DENTRO DE LA COLUMNA DEL LOGIN (decidido el
+ * 2026-09-26) y D10-5 (el ano calculado).
+ *
+ * **ESTO DEROGA LA MITAD DE D10-2 QUE PEDIA EL PIE FULL-WIDTH.** Lo que la
+ * version anterior de este caso media era la alineacion de 24px entre el borde
+ * izquierdo del copyright y el borde izquierdo de la tarjeta del anuncio, que
+ * tambien estaba a 24px del viewport. Esa era "la unica alineacion que esta
+ * pantalla regalaba", y ya no se regala: la tarjeta del anuncio dejo de existir
+ * cuando el panel paso a sangre completa, y su borde izquierdo es ahora el de la
+ * pantalla. La alineacion que queda es contra el padding del `<main>` de su
+ * propia columna.
  *
  * Las cifras salen de `10-UI-SPEC.md` §8.1 y son aritmetica:
  *   - `lg:h-barra` = **56px** exactos a partir de 1024px
- *   - `lg:px-xl` = **24px**, y esa es LA UNICA ALINEACION QUE ESTA PANTALLA
- *     REGALA: el borde izquierdo del copyright cae exactamente sobre el borde
- *     izquierdo de la tarjeta del anuncio, que tambien esta a 24px del viewport.
- *     Es gratis solo mientras `px-xl` siga ahi, y por eso se mide contra la
- *     tarjeta y no contra el numero 24 a secas.
+ *   - a 1280, la columna del login arranca en 640 y mide 640: el pie tiene que
+ *     medir eso mismo y arrancar ahi mismo. Esas dos aserciones juntas son LA
+ *     COMPUERTA CONTRA EL PIE FULL-WIDTH: la de la `x` se pone roja en cuanto
+ *     alguien lo devuelve al contenedor de la pantalla
+ *   - `lg:px-xl` = **24px** desde el borde de SU COLUMNA, no del viewport
+ *   - y el panel llega hasta abajo del todo: su borde inferior coincide con el
+ *     del contenedor de la pantalla, o sea el pie no cruza por encima de el
  *
  * Se afirma el texto COMPLETO y no solo el ano: la copia de §12 es contrato, y un
  * pie que pierda "Todos los derechos reservados" tiene que ponerse rojo.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 test.describe('El pie del login a partir de lg:', () => {
-  test('es la unica contentinfo, mide 56px y alinea con la tarjeta del anuncio', async ({
-    page,
-  }) => {
+  test('es la unica contentinfo, mide 56px y ocupa el ancho de su columna', async ({ page }) => {
     // 1280x720 es el viewport del proyecto: no se cambia, para que este caso mida
     // la misma geometria que ven los cinco casos de login de arriba.
     await page.goto('/login');
@@ -653,7 +670,10 @@ test.describe('El pie del login a partir de lg:', () => {
 
     const cajaPie = await pie.boundingBox();
     const cajaCopyright = await pie.locator('p').boundingBox();
-    if (!cajaPie || !cajaCopyright) {
+    const cajaColumna = await page.locator('[data-slot="columna-login"]').boundingBox();
+    const cajaPantalla = await page.locator('[data-slot="pantalla-login"]').boundingBox();
+    const cajaPanel = await page.locator('[data-slot="panel-publicidad"]').boundingBox();
+    if (!cajaPie || !cajaCopyright || !cajaColumna || !cajaPantalla || !cajaPanel) {
       throw new Error('No se pudo medir el pie del login a 1280.');
     }
 
@@ -661,12 +681,28 @@ test.describe('El pie del login a partir de lg:', () => {
     // fijada por clase, no una altura derivada del texto.
     expect(Math.round(cajaPie.height)).toBe(56);
 
-    // Los 24px de `lg:px-xl`. La segunda mitad de esta asercion (que eran LOS
-    // MISMOS 24px de la tarjeta del anuncio) murio con la tarjeta: el panel va a
-    // sangre completa desde el 2026-09-26 y su borde izquierdo es el de la
-    // pantalla. La alineacion que reemplaza a aquella se mide contra la columna
-    // del login, no contra el anuncio.
-    expect(Math.round(cajaCopyright.x)).toBe(24);
+    // LA COMPUERTA CONTRA EL PIE FULL-WIDTH. El pie arranca donde arranca su
+    // columna (640) y mide lo que mide su columna (640). La primera se pone roja
+    // imprimiendo 0 en cuanto alguien lo devuelve al contenedor de la pantalla.
+    expect(Math.round(cajaPie.x)).toBe(Math.round(cajaColumna.x));
+    expect(Math.round(cajaPie.width)).toBe(Math.round(cajaColumna.width));
+
+    // Y por el otro lado llega hasta el borde derecho de la pantalla: el pie no
+    // se queda corto ni se capa a un ancho maximo propio.
+    expect(Math.round(cajaPie.x + cajaPie.width)).toBe(
+      Math.round(cajaPantalla.x + cajaPantalla.width),
+    );
+
+    // Los 24px de `lg:px-xl`, medidos desde el borde de SU COLUMNA y no del
+    // viewport. Esa es la alineacion que sustituye a la que murio con la tarjeta
+    // del anuncio: el copyright cae sobre el padding del `<main>` de su columna.
+    expect(Math.round(cajaCopyright.x - cajaColumna.x)).toBe(24);
+
+    // EL PANEL LLEGA HASTA ABAJO. Con el pie mudado a la columna, la region del
+    // split es el unico hijo del contenedor y el panel se lleva el alto entero.
+    // Si el pie volviera a ser full-width, el panel se quedaria 56px corto.
+    expect(Math.abs(cajaPanel.y + cajaPanel.height - (cajaPantalla.y + cajaPantalla.height))).
+      toBeLessThanOrEqual(1);
   });
 });
 
@@ -706,6 +742,12 @@ test.describe('El pie del login en el telefono', () => {
 
     expect(Math.round(cajaPie.height)).toBeGreaterThanOrEqual(80);
     expect(Math.round(cajaPie.height)).toBeLessThanOrEqual(90);
+
+    // Y OCUPA LA PANTALLA ENTERA, que es lo que demuestra que meterlo dentro de
+    // la columna del login el 2026-09-26 no le quito nada al telefono: debajo de
+    // `lg:` la columna del login ES la pantalla, porque el panel no se renderiza.
+    expect(Math.round(cajaPie.x)).toBe(0);
+    expect(Math.round(cajaPie.width)).toBe(390);
   });
 });
 
