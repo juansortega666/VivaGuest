@@ -2,7 +2,7 @@
 phase: 10-rediseno-del-dashboard-admin
 plan: 04
 subsystem: ui-login
-status: checkpoint-pendiente
+status: complete
 tags: [rediseno, derogacion, grid, a11y, aria-hidden, contraste, playwright, contract-test, wave-3]
 
 requires:
@@ -58,8 +58,8 @@ metrics:
 
 actuals:
   tokens: 32923    # chars/4 sobre `git diff 5f8d6af..HEAD`. El estimate decía 95000: sobreestimado por 2.9x, y el número va sin maquillar
-  tasks: 4         # de 5. La Task 5 es el checkpoint humano y está ABIERTA
-  commits: 4       # MEDIDO: git rev-list --count 5f8d6af..HEAD
+  tasks: 5         # las cinco, con el checkpoint humano de la Task 5 ya emitido el 2026-09-28
+  commits: 5       # MEDIDO: git rev-list --count 5f8d6af..HEAD en el momento de cerrar el checkpoint
 plan_head_before: 5f8d6afe6e064fb59f2e90855c803c035fac031d
 
 requirements-completed: []   # el plan declara explícitamente que no hay ninguno nuevo
@@ -121,7 +121,11 @@ coverage:
     human_judgment: false
   - deliverable: "Que la pantalla se lea como producto, que el fundido se perciba sobre la superficie nueva, que el gris a sangre completa no se lea como esqueleto de carga, y que el wordmark blanco se distinga durante el ciclo"
     human_judgment: true
-    rationale: "Cuatro juicios perceptuales. Ningún instrumento de este repo puede emitirlos, y dos de ellos son los `🧪 backstop` de §13 que este rediseño volvió a abrir porque la superficie cambió de forma y de tamaño. Es la Task 5, y está ABIERTA."
+    verification:
+      - kind: human-check
+        ref: "Task 5 · checkpoint gate=blocking · revisión visual del dueño, 2026-09-28"
+        status: pass
+    rationale: "Cuatro juicios perceptuales. Ningún instrumento de este repo puede emitirlos, y dos de ellos son los `🧪 backstop` de §13 que este rediseño volvió a abrir porque la superficie cambió de forma y de tamaño. EMITIDO el 2026-09-28: el dueño miró la pantalla y aprobó, literal, *\"listo mejoro bastante\"*."
 ---
 
 # Phase 10 Plan 04: El rediseño contra la referencia de Runway — Summary
@@ -432,28 +436,52 @@ Ninguno nuevo. Las seis entradas del `<threat_model>` del plan quedan así:
 
 Ninguno nuevo. El único de la fase sigue siendo el `children` de `PanelPublicidad` sin consumidor, declarado intencional en 10-01 y atado a la pregunta abierta 2 de `10-CONTEXT.md`.
 
-## El checkpoint de 10-03 queda SUPERADO por este rediseño
+## El checkpoint de 10-03 queda CERRADO POR SUSTITUCIÓN
 
-`10-03-SUMMARY.md` dejó su Task 4 abierta con dos juicios humanos pendientes: la percepción del fundido entre los cuatro grises, y la legibilidad de los dos glifos a 16px. **Ese checkpoint no se repite: queda sustituido por la Task 5 de este plan.** El fundido y los glifos siguen existiendo, pero la forma en la que viven cambió por completo: el ciclo corre ahora sobre una superficie a sangre completa de 640×672 en vez de una tarjeta de 528×596 con radio y recuadro, y los glifos se movieron del borde de la pantalla al borde de la columna del login. Un juicio emitido sobre la pantalla vieja no dice nada de la nueva.
+`10-03-SUMMARY.md` dejó su Task 4 abierta con dos juicios humanos pendientes: la percepción del fundido entre los cuatro grises, y la legibilidad de los dos glifos a 16px. **Ese checkpoint no se repitió: quedó sustituido por la Task 5 de este plan, y con la aprobación del 2026-09-28 queda CERRADO.** El fundido y los glifos siguen existiendo, pero la forma en la que viven cambió por completo: el ciclo corre ahora sobre una superficie a sangre completa de 640×672 en vez de una tarjeta de 528×596 con radio y recuadro, y los glifos se movieron del borde de la pantalla al borde de la columna del login. Un juicio emitido sobre la pantalla vieja no decía nada de la nueva, y por eso se volvió a emitir sobre esta.
 
-Y el rediseño **abre una pregunta que no existía**: la razón 2 de la §3.1 derogada decía que un gris a sangre completa contra el borde del navegador es indistinguible de un esqueleto de carga, y ese marco ya no está. Esa pregunta también va al checkpoint.
+`10-03-SUMMARY.md` **no se edita**: es el registro de lo que pasó entonces, y su `status: checkpoint-pendiente` describe con exactitud el estado en el que ese plan terminó. Lo que cierra su checkpoint es este documento, que es donde el juicio se emitió de verdad.
 
-## La Task 5 está ABIERTA: el checkpoint humano
+Y el rediseño **abrió una pregunta que no existía**: la razón 2 de la §3.1 derogada decía que un gris a sangre completa contra el borde del navegador es indistinguible de un esqueleto de carga, y ese marco ya no está. Esa pregunta fue al checkpoint junto con las otras tres.
 
-`status: checkpoint-pendiente` y no `complete`, a propósito, igual que hizo 10-03. La Task 5 es un checkpoint `gate="blocking"` y los cuatro juicios que pide no los puede emitir ningún instrumento de este repo ni este ejecutor.
+## La Task 5 está CERRADA: el checkpoint humano, aprobado el 2026-09-28
 
-**El entorno está levantado y esperando.** Cuando el juicio esté emitido va a este SUMMARY: los seis puntos del `how-to-verify` con las palabras del humano si dijo algo distinto de "bien", el resultado de la comprobación de movimiento reducido si se hizo, y el paso de `status` a `complete`.
+**Resultado: APROBADO.** El dueño miró la pantalla y respondió, literal:
 
-**Tres reglas para el reanudado, y ninguna es opcional:**
+> *"listo mejoro bastante"*
 
-1. **Si el fundido no se percibe:** no se cambian los cuatro grises por cuenta propia. Salen de §6.1 con sus contrastes medidos y separarlos más es decisión del dueño. Se registra como hallazgo con los cuatro valores (`#E2E5E7`, `#D6D9DD`, `#CACED3`, `#BEC3C8`) y su contraste adyacente (1.115, 1.119, 1.123).
-2. **Si el wordmark blanco se pierde en el gris más claro:** la salida es **un velo detrás del wordmark**, y NO cambiarle el color (decisión cerrada) ni oscurecer §6.1 (reabre el juicio del fundido). Se implementa solo si cabe en el propio wordmark, con tokens de la escala; si pide tocar §6.1, va a un plan aparte. En cualquier caso se anota con sus palabras y §10.4 se actualiza.
-3. **Si un glifo está mal:** se corrige solo su `<path>` en `IconosRedes.tsx`, se vuelve a correr `npm run ci:arch` y `npm run test:unit`, y se anota.
+**Aprobado el 2026-09-28**, sobre el build servido en `http://127.0.0.1:3210/login`. Es la respuesta a la pregunta 1 del `how-to-verify`, que es la única que decide si el plan cierra: *¿ya no parece shadcn recién instalado?* La respuesta es sí, y es comparativa ("mejoró bastante"), que es exactamente el juicio que se pedía: no si la pantalla es perfecta, sino si el rediseño la movió en la dirección correcta contra la que entregaron 10-01 a 10-03.
+
+**Los seis puntos, con lo que el dueño dijo de cada uno:**
+
+| # | Punto | Resultado |
+|---|---|---|
+| 1 | La pantalla entera, como producto (1440px) | **Aprobado**, con sus palabras: *"listo mejoro bastante"* |
+| 2 | El fundido entre los cuatro grises sobre la superficie nueva | Sin objeción. No pidió separar más los cuatro grises |
+| 3 | El gris a sangre completa: ¿superficie o esqueleto de carga? | Sin objeción. La pregunta que el rediseño abrió queda respondida por omisión: no se lee como algo cargando |
+| 4 | El wordmark blanco durante el ciclo | Sin objeción. **No pidió velo**, así que la entrada de §10.4 se queda exactamente como está, con su 1.27:1 y su condición de salida |
+| 5 | Los dos glifos del pie | Sin objeción. Cierra por sustitución el segundo juicio que 10-03 dejó abierto |
+| 6 | Los cinco anchos (1440, 1280, 1024, 1023, 390) | Sin objeción |
+
+**Y las tres reglas del reanudado NO se dispararon, que es la razón de que este cierre no toque ni una línea de código:**
+
+1. El fundido se percibe, así que **los cuatro grises de §6.1 no se tocaron**. Siguen siendo `#E2E5E7`, `#D6D9DD`, `#CACED3` y `#BEC3C8`, con sus contrastes adyacentes de 1.115, 1.119 y 1.123.
+2. El wordmark blanco se distingue, así que **no entra velo** y **el color no se reabrió**: sigue decidido desde el 2026-09-26.
+3. Ningún glifo está mal, así que **`IconosRedes.tsx` no se tocó**.
+
+**Lo que queda dicho y sin hacer, porque el dueño no lo pidió:** el fondo de la columna del login sigue en `--canvas` (#F6F7F8), casi blanco pero no blanco, mientras que la referencia de Runway usa blanco puro. No estaba en el alcance que se cerró el 2026-09-26 y no se tocó. Si algún día chirría, es un cambio de una línea.
+
+**Este cierre es exclusivamente documental.** No entró ni una línea de `app/` ni de `e2e/`: el árbol de código quedó tal como lo dejó el commit `a24a4f9`, y las cinco capas que corrieron antes del checkpoint siguen siendo la medición válida.
+
+**Lo que este cierre NO hace, y es deliberado:**
+
+- **No cierra la Fase 10.** Eso lo decide el verificador, y el dueño tiene pendiente decidir si la fase sigue con más pantallas del dashboard. La deuda 1 de `10-UI-SPEC.md` §15 sigue en pie y sigue siendo la más importante: esta fase entrega **una** pantalla, y el objetivo del ROADMAP para la Fase 10 habla del dashboard entero.
+- **No resuelve los tres rojos ajenos** (la fixture caducada de `sync-diff.integration.test.ts` y los dos E2E de `operacion` y `push-instalacion`). Siguen registrados en `deferred-items.md` y en `.planning/WINDOWS.md`, con su diagnóstico.
 
 ## Self-Check: PASSED
 
 - `app/(public)/login/page.tsx`, `PanelPublicidad.tsx`, `PieDeLogin.tsx`, `page.contrato.test.ts`, `e2e/login.spec.ts`, `app/globals.css` — los seis existen en disco y están modificados
 - `.planning/phases/10-rediseno-del-dashboard-admin/deferred-items.md` — existe en disco
-- Los cuatro commits existen en `git log --all`: `08ace39`, `b410dfa`, `b2257cd`, `a24a4f9`
-- `git rev-list --count 5f8d6af..HEAD` = **4**, que coincide con `commits: 4` del frontmatter. Este plan corrió solo en la wave 3, así que el número de la rama y el del plan son el mismo
+- Los cinco commits existen en `git log --all`: `08ace39`, `b410dfa`, `b2257cd`, `a24a4f9` y `dc23372`
+- `git rev-list --count 5f8d6af..HEAD` = **5** al cerrar el checkpoint, que coincide con `commits: 5` del frontmatter. Este plan corrió solo en la wave 3, así que el número de la rama y el del plan son el mismo. El commit de este cierre documental es el sexto y no se cuenta aquí a propósito: `commits` se mide en el momento de escribir, no se narra hacia adelante
 - Las cuatro compuertas de forma verificadas, con sus salidas anotadas arriba
