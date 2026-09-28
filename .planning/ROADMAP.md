@@ -442,7 +442,7 @@ Fases con patrón ya documentado en el research (se puede saltar):
 **Goal:** Que el dashboard del admin deje de verse como shadcn recién instalado y se vuelva un producto. El primer entregable, y el único alcance cerrado hoy, es `/login`: pantalla partida **50/50** sin canal entre las columnas, con el slot publicitario **a sangre completa** en la mitad izquierda (placeholder animado entre cuatro grises, pegado a los cuatro bordes, con el wordmark en blanco arriba a la izquierda) y el bloque de login **sin tarjeta** centrado en la mitad derecha, con el pie **dentro de esa misma columna**: copyright de año dinámico e iconos de Instagram y TikTok en disabled. Debajo de 1024px el panel de publicidad desaparece y queda el login centrado actual con el pie apilado. Se conservan el wordmark Poppins, los 400px del formulario y los tokens del UI-SPEC vigente. Referencia: la pantalla de acceso de Runway, escogida por el dueño el 2026-09-26, que **deroga D10-2 y D10-3** (el 45/45 con canal del 10% y el footer full-width, con GlossGenius como referencia).
 **Requirements**: — (ninguno nuevo; PLAT-01 y PLAT-02 ya están entregados y esta fase no cambia su comportamiento)
 **Depends on:** Phase 9
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans executed
 
 Plans:
 **Wave 1**
@@ -452,11 +452,11 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 10-03-PLAN.md — El año de Bogotá, el pie cableado, y la suite completa como regresión (wave 2)
+- [x] 10-03-PLAN.md — El año de Bogotá, el pie cableado, y la suite completa como regresión (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 10-04-PLAN.md — El rediseño contra la referencia de Runway: 50/50, panel a sangre completa, login sin tarjeta, dos wordmarks y el pie dentro de la columna. Deroga D10-2 y D10-3 (wave 3)
+- [x] 10-04-PLAN.md — El rediseño contra la referencia de Runway: 50/50, panel a sangre completa, login sin tarjeta, dos wordmarks y el pie dentro de la columna. Deroga D10-2 y D10-3 (wave 3)
 
 **Cross-cutting constraints:**
 
