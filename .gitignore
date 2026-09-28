@@ -63,3 +63,6 @@ public/swe-worker*
 # Cache de las herramientas de investigacion. Es transitorio y por maquina.
 .planning/research/.cache/
 .planning/state.json
+
+# Lock de sesion de GSD: efimero, por sesion y por PID.
+.planning/milestone.lock
