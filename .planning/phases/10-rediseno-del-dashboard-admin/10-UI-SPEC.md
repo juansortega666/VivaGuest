@@ -9,6 +9,44 @@ created: 2026-09-18
 
 # Fase 10 — Contrato de diseño de UI
 
+## DEROGACIÓN 2026-09-26
+
+> **Léelo antes que nada.** Este documento se escribió el 2026-09-18 y los planes 10-01, 10-02 y
+> 10-03 lo ejecutaron al pie de la letra. El 2026-09-26 el dueño miró la pantalla entregada y la
+> **rechazó**. No fue un defecto de implementación: fue un cambio de decisión, y el plan 10-04 lo
+> implementó. Las secciones §2, §3, §7.3, §8.1, §10.1, §10.4, §11.5, §13 y §15 están actualizadas
+> contra el diseño nuevo, y conservan lo derogado como registro.
+
+**Referencia nueva:** la pantalla de acceso de **Runway** (refero.design, página
+`96ea87d0-db62-4b18-8b39-46a960461f51`, "Runway Log In UI"). Las seis medidas se tomaron sobre la
+captura de 2732x1536 en esa sesión, no de memoria:
+
+| Propiedad | Medida en la referencia |
+|---|---|
+| Corte del split | **50.3%** del ancho. Dos columnas, sin canal vacío entre ellas |
+| Panel izquierdo | Imagen **a sangre completa**: pegada a los cuatro bordes, 100% del alto, sin padding, sin radio, sin tarjeta |
+| Wordmark del panel | `runway` en blanco, DENTRO del panel, arriba a la izquierda, a ~32px de los dos bordes |
+| Columna derecha | Fondo blanco, el bloque del formulario centrado en los dos ejes, ~330px de ancho a 1366px de viewport |
+| Superficie del formulario | **Ninguna**: sin borde, sin sombra, sin tarjeta. Solo los `Input` llevan borde propio y ~10px de radio |
+| Orden vertical | Título centrado, luego los campos, luego el botón primario a ancho completo |
+
+**Qué queda derogado, y qué sobrevive de cada decisión:**
+
+| Decisión | Decía | Queda derogado | Sobrevive |
+|---|---|---|---|
+| **D10-2** | "publicidad 45% izquierda · login 45% derecha · footer full-width" | el reparto y la posición del pie | qué va en cada lado: publicidad izquierda, login derecha, pie abajo |
+| **D10-3** | "la proporción es 45/45, NO 75/25", con GlossGenius como referencia | el número y la referencia | **su razón de fondo, que es la que hace admisible el 50%:** un formulario de login necesita de 360 a 440px para no verse apretado, y a 1280px el 50% son 640px. El techo del 51% medido en el corpus de ~1.300 logins (Wealthsimple) tampoco se rompe |
+
+**Lo que NO se deroga:** D10-1 (no se cambia de biblioteca), D10-4 (el placeholder animado entre
+grises), D10-5 (el pie con el año calculado y las redes en disabled), D10-6 (debajo de 1024px el
+panel desaparece) y D10-7 (la identidad no se toca). Las cinco siguen cerradas.
+
+**La referencia del 2026-09-18 (GlossGenius, refero.design/pages/767d341f-df17-46d2-b246-8b8771686900)
+no se borra de este documento.** Un contrato de diseño que se reescribe en silencio es un contrato
+que nadie puede auditar, y esta fase lleva tres planes ejecutados contra el texto viejo.
+
+---
+
 > Contrato visual y de interacción. Lo consumen `gsd-planner` y `gsd-executor`.
 > Idioma de la interfaz: **español de Colombia, trato de "tú"**. Código, tokens, rutas y REQ-IDs quedan como están.
 
@@ -26,7 +64,8 @@ created: 2026-09-18
 
 | Hecho anclado | Consecuencia de diseño |
 |---|---|
-| **D10-3: publicidad 45% · login 45% · footer full-width.** El 10% que falta no está asignado en ninguna decisión | Se asigna acá, y es **un canal central vacío**, no márgenes exteriores. §2.1 dice por qué, y §2.2 mide qué pasa en cada viewport |
+| **Reparto 50/50 sin canal, decidido el 2026-09-26** (deroga D10-2 y D10-3, que pedían 45% · 10% de canal · 45%) | Dos pistas del 50% y ninguna pista vacía que repartir. El login se coloca en la columna 2. §2.1 dice por qué, y §2.2 mide qué pasa en cada viewport |
+| **El pie vive dentro de la columna del login, no a ancho completo** (deroga la otra mitad de D10-2) | La región del split queda como único hijo del contenedor, así que el panel se lleva el alto entero. §8.1 |
 | **D10-4: la publicidad es un placeholder animado entre cuatro grises**, 5s por paso, 600ms de transición, apagada bajo `prefers-reduced-motion` | Son **cuatro tokens de color nuevos** y **una animación de CSS**, cero JavaScript. §6.1 y §7 |
 | **Los cuatro grises no pueden salir de la paleta actual.** Medido: `--canvas` contra `--muted` da **1.037:1**, que en un cross-fade de 600ms sobre 600px de ancho no se ve | La fase declara cuatro grises propios con paso adyacente ≥ **1.11:1**. §6.1 |
 | **D10-4 exige que el panel siga visible con el movimiento apagado** | El bloque global de `prefers-reduced-motion` de `globals.css` pone `animation-duration: 0s`, y con `animation-fill-mode: none` el elemento cae a **su propio `background-color`**. Por eso `bg-anuncio-1` en la clase base **no es redundante: es el estado de movimiento reducido**. §7.2 |
@@ -34,7 +73,7 @@ created: 2026-09-18
 | **`/login` está prerenderizado como estático.** Medido en `.next/prerender-manifest.json` del último build: la ruta está listada con `initialRevalidateSeconds: false` | `new Date().getFullYear()` en la página **congela el año en el momento del build**. El año sale de `hoyBog().slice(0, 4)` y la página declara `revalidate`. §8.2 |
 | **El proceso corre en UTC** (Vercel y CI), y `lib/domain/dates.ts` ya tiene la advertencia escrita | Entre las 19:00 y las 23:59 de Bogotá del 31 de diciembre, UTC ya es el año siguiente: el footer mostraría `2027` cinco horas antes. Es el mismo defecto de clase que `fecha_aseo` como `timestamptz`. §8.2 |
 | **D10-6: debajo de 1024px el panel desaparece, no se apila ni se encoge** | `display: none` por variante `lg:`, no renderizado condicional: el servidor no conoce el viewport y un hook de cliente introduce un parpadeo en la primera pintura. §2.4 |
-| **D10-7: la identidad no se toca.** `max-w-login` son 400px | Ese 400 es lo que fija el piso del split: `400 + 2 × 24` de padding no cabe en el 45% por debajo de **995.6px** de viewport. El corte en 1024 del dueño queda **28px por encima del piso aritmético**. §2.3 |
+| **D10-7: la identidad no se toca.** `max-w-login` son 400px | Ese 400 es lo que fija el piso del split: `400 + 2 × 24` de padding no cabe en el 50% por debajo de **896px** de viewport. El corte en 1024 del dueño queda **128px por encima del piso aritmético**. Con el 45% derogado el piso estaba en 995.6px y la holgura era de 28.4px. §2.2 |
 | **El formulario no se toca.** `FormularioLogin.tsx` no aparece en ningún diff de esta fase | Sus estados de error y de carga se heredan tal cual, y §9 mide qué le hacen al layout nuevo: **12.5px de desplazamiento**, medidos, aceptados y no reservados |
 | **`max-w-<talla>` compila a 4 u 8 píxeles en este repo** (`check-max-w-tallas.sh`, costó dos quicks) | Esta fase **no declara ningún token de contenedor** y no usa ningún `max-w-*` nuevo. La compuerta de registro en `cn()` no se dispara. §4.2 |
 | **El guardarraíl 6 prohíbe valores de color literales fuera de `app/globals.css`** | Los cuatro grises se declaran en `globals.css` como tokens. Ningún `bg-[#E2E5E7]` y ningún `style={{ background: … }}` en el panel |
@@ -109,92 +148,142 @@ Las cuatro ya están en el repo y las cuatro ya las usa `/login` hoy. **No se co
 | **`framer-motion` / `motion`** | Una dependencia nueva de runtime para una interpolación de color que CSS hace nativa, en una pantalla sin sesión donde cada kilobyte se paga antes de que el usuario esté autenticado. Y el contrato de movimiento de `02-UI-SPEC` §6.4 ya vive en CSS: una segunda vía de animación es una segunda vía de desactivarla bajo `prefers-reduced-motion` |
 | **`useEffect` + `setInterval` en un componente de cliente** | Es la alternativa real y por eso se argumenta en §7.1: convierte el panel en un componente de cliente, y sobre todo **se salta el bloque global de `prefers-reduced-motion`**, que solo alcanza animaciones y transiciones de CSS. Un temporizador de JS le seguiría cambiando el color a quien pidió que no |
 | **Apilar el panel arriba del login en móvil** | Prohibido por D10-6, y la razón del dueño está medida en su propio texto: empuja el campo de correo fuera de la pantalla |
-| **`aspect-ratio` fijo para el panel** | Tentador para "preparar" el slot. Medido en §3.2: el panel es un retrato cuyo ratio va de **0.72 a 0.92** entre los viewports soportados. Un `aspect-ratio` fijo dejaría franjas de página muertas arriba o abajo del panel, o lo sacaría de la pantalla en alto |
+| **`aspect-ratio` fijo para el panel** | Tentador para "preparar" el slot, y desde el 2026-09-26 además imposible: el panel ES la mitad de la pantalla y no tiene forma que prometer (§3.2). Medido con el señuelo 2b de 10-04: devolverle `aspect-[0.93] max-h-full` a 1280x720 empuja el contenedor de 672 a 744px y la pantalla se pone a hacer scroll, con el botón `Entrar` por debajo del pliegue |
 | **Un `<aside>` para el panel** | `<aside>` es una *landmark* `complementary`. Una landmark con `aria-hidden="true"` es una contradicción: se anuncia en el índice de regiones y no tiene contenido. Va un `<div>` pelado. §10.2 |
-| **Capar el footer a `max-w-admin` (1440px)** | D10-2 lo pide full-width. Y con `px-xl` el borde izquierdo del copyright cae **exactamente** sobre el borde izquierdo de la tarjeta del anuncio, que es la única alineación que esta pantalla puede ofrecer gratis. §8.1 |
+| **Capar el footer a `max-w-admin` (1440px)** | Ya no hay nada que capar: **desde el 2026-09-26 el pie vive dentro de la columna del login y su ancho lo decide esa columna** (§8.1). La razón derogada era que D10-2 lo pedía full-width, con la alineación gratis del copyright contra el borde de la tarjeta del anuncio; esa tarjeta desapareció con el sangrado completo |
 | **Poner el split en un `app/(public)/layout.tsx`** | Amarraría cualquier página pública futura (recuperación de contraseña, aviso legal) al panel publicitario sin que nadie lo haya decidido. El split es una propiedad **de la pantalla de login**, no del grupo de rutas. Vive en `page.tsx` y sus organismos, en `_components/` |
 
 ---
 
-## 2. La geometría: 45 · 10 · 45
+## 2. La geometría: 50 · 50
 
-### 2.1 El 10% que falta es un canal central, no márgenes
+> **DEROGADA 2026-09-26 la versión anterior de esta sección**, que titulaba "45 · 10 · 45" y
+> repartía un canal central vacío del 10%. Lo que sigue es el reparto vigente. La tabla de las tres
+> reparticiones posibles de aquel 10% se conserva abajo como registro de lo que se decidió el
+> 2026-09-18, porque explica por qué el panel quedó anclado al borde izquierdo (y eso sí sobrevive).
 
-D10-3 cierra dos números y deja el tercero sin asignar. Las tres reparticiones posibles del 10%, y por qué gana una:
+### 2.1 Dos pistas, sin canal
 
-| Repartición | Qué se ve | Veredicto |
+`grid-template-columns: 50% 50%`. No hay tercera pista, no hay hueco entre las columnas y el borde
+derecho del panel es el mismo píxel que el borde izquierdo de la columna del login. **El login se
+coloca con `lg:col-start-2`**, no con `lg:col-start-3`.
+
+Medido en la referencia de Runway, el corte está en el **50.3%** del ancho y las dos columnas se
+tocan. El 50% queda justo debajo del techo del 51% que se midió en el corpus de ~1.300 logins.
+
+**Registro de lo derogado.** El 2026-09-18 D10-3 cerraba dos números (45 y 45) y dejaba el tercero
+sin asignar. Las tres reparticiones posibles de aquel 10%, con el veredicto de entonces:
+
+| Repartición | Qué se veía | Veredicto de 2026-09-18 |
 |---|---|---|
-| **10% de canal central** | El panel queda anclado al borde izquierdo de la pantalla (con su propio recuadro de 24px) y el login al derecho; todo el aire sobrante está entre los dos | **ELEGIDA** |
-| 5% + 5% de márgenes exteriores, columnas pegadas | El panel flota con 96px de blanco a su izquierda y 24px a su derecha, y el login queda a 96px del borde derecho. El panel deja de leerse anclado y se lee empujado hacia el centro | Descartada: la asimetría de 96 contra 24 alrededor de la misma tarjeta se ve, y un espacio publicitario que algún día se vende ocupa el borde de la pantalla, no el centro |
-| 10% de margen derecho | El login pegado al panel y todo el aire al final | Descartada: dejaría el formulario a 24px del panel animado, que es la peor vecindad posible para el único control de la pantalla |
+| **10% de canal central** | El panel anclado al borde izquierdo de la pantalla (con su propio recuadro de 24px) y el login al derecho; todo el aire sobrante entre los dos | ELEGIDA entonces, **derogada el 2026-09-26** |
+| 5% + 5% de márgenes exteriores | El panel flotando con 96px de blanco a su izquierda y 24px a su derecha | Descartada: un espacio publicitario que algún día se vende ocupa el borde de la pantalla, no el centro |
+| 10% de margen derecho | El login pegado al panel y todo el aire al final | Descartada: dejaría el formulario a 24px del panel animado |
 
-Y hay una razón de mantenimiento, que es la que zanja: con un solo canal la pantalla tiene **dos números** (los 24px del recuadro y el 10% del canal). Con márgenes exteriores tendría tres blancos distintos, de tres anchos distintos, en cada viewport.
+**Lo que sobrevive de ese razonamiento y sigue vigente:** el espacio publicitario ocupa el borde de
+la pantalla. Con el 50/50 a sangre completa eso se cumple de la forma más literal posible, y sin
+ningún blanco que repartir: la pantalla pasa de tener dos números (los 24px del recuadro y el 10%
+del canal) a tener **cero**.
 
 **La rejilla se declara como utilidad, no como valor arbitrario en la clase:**
 
 ```css
-/* ── Fase 10: la rejilla de /login — 10-UI-SPEC.md §2.1 ──────────────────────
-   45% publicidad · 10% canal · 45% login (D10-3). Va como @utility y no como
-   `grid-cols-[45%_10%_45%]` en el JSX por la misma razon por la que los 120ms
-   de movimiento viven en `@utility transicion`: el reparto es el contrato de la
-   pantalla y tiene que estar en UN sitio, con su razon al lado.
+/* ── Fase 10: la rejilla de /login — 10-UI-SPEC.md §2 ────────────────────────
+   50% publicidad · 50% login, sin canal entre las dos.
 
-   Tailwind v4 no tiene namespace de plantilla de rejilla, asi que un token no es
-   posible; una utilidad si, y acepta variantes (`lg:rejilla-login`).
+   DEROGACION 2026-09-26, decidida por el dueno contra una referencia medida: la
+   pantalla de acceso de Runway, cuyo corte del split es el **50.3%** del ancho y
+   cuyas dos columnas se tocan, sin hueco. Eso DEROGA D10-2 (el reparto y el pie
+   full-width) y D10-3 (el 45/45 con GlossGenius como referencia). [...]
 
-   La columna del medio NO lleva elemento: es una pista vacia. El login se
-   coloca con `lg:col-start-3`. Un div espaciador seria un nodo en el arbol de
-   accesibilidad que no separa nada.                                          */
+   YA NO HAY PISTA VACIA: el login se coloca en la columna 2, con
+   `lg:col-start-2`. La version derogada ponia un canal del 10% en el medio y
+   mandaba el login a la tercera pista.                                        */
 @utility rejilla-login {
-  grid-template-columns: 45% 10% 45%;
+  grid-template-columns: 50% 50%;
 }
 ```
 
+Va como `@utility` y no como `grid-cols-[50%_50%]` en el JSX por la misma razón por la que los 120ms
+de movimiento viven en `@utility transicion`: el reparto es el contrato de la pantalla y tiene que
+estar en UN sitio, con su razón al lado. Tailwind v4 no tiene namespace de plantilla de rejilla, así
+que un token no es posible; una utilidad sí, y acepta variantes (`lg:rejilla-login`).
+
 ### 2.2 El presupuesto horizontal, medido en los cinco viewports
 
-El alto de viewport sale del método de `08-UI-SPEC` §6.4: alto de pantalla menos ~87px de cromo del navegador. El footer mide 56px a partir de `lg:` (§8.1).
+El bloque del login sigue midiendo 400px (`max-w-login`) y su columna sigue llevando `lg:p-xl`
+(24px por lado). El pie mide 56px a partir de `lg:` y vive **dentro de la columna del login** (§8.1).
 
-| Viewport | Columna del anuncio (45%) | Tarjeta del anuncio (−48) | Canal (10%) | Columna del login (45%) | Aire a cada lado del formulario |
-|---|---|---|---|---|---|
-| **1920** | 864.0px | **816.0px** | 192.0px | 864.0px | 232.0px |
-| **1440** (referencia) | 648.0px | **600.0px** | 144.0px | 648.0px | 124.0px |
-| **1280** (piso soportado) | 576.0px | **528.0px** | 128.0px | 576.0px | 88.0px |
-| **1024** (arranque del split) | 460.8px | **412.8px** | 102.4px | 460.8px | **30.4px** |
-| **390** | no se renderiza | — | — | ancho completo | 16px (`p-lg`, como hoy) |
+| Viewport | Columna del panel (50%) | Columna del login (50%) | Aire a cada lado del bloque | Pie (x, ancho) |
+|---|---|---|---|---|
+| **1920** | 960 | 960 | 280 | 960, 960 |
+| **1440** (referencia) | 720 | 720 | 160 | 720, 720 |
+| **1280** (el del proyecto) | **640** | **640** | **120** | **640, 640** |
+| **1024** (arranque del split) | **512** | **512** | **56** | **512, 512** |
+| 1023 | no se renderiza | ancho completo | como hoy | ancho completo |
+| **390** | no se renderiza | ancho completo | 16 (`p-lg`, como hoy) | ancho completo, apilado |
 
-**El aire a cada lado no es decoración: es lo que hace que 1024 sea el número correcto.** El formulario mide 400px (`max-w-login`, D10-7) y su columna lleva `p-xl` (24px por lado), así que la columna necesita **448px**. Dividido por 0.45 son **995.6px de viewport**. El corte de D10-6 en 1024 queda 28.4px por encima de ese piso, con 6.4px de holgura sobre el padding a cada lado. **Por debajo de 996px el 45% empezaría a comer el padding del formulario**; el dueño cortó antes, y el número que escogió es correcto por aritmética, no por gusto.
+**El piso aritmético baja, y eso es un resultado del cambio de reparto, no un detalle.** El bloque
+mide 400px y su columna lleva 24px de padding por lado, así que la columna necesita **448px**:
+
+```
+448 / 0.50 = 896px de viewport
+```
+
+**Por debajo de 896px el 50% empezaría a comerse el padding del bloque.** Con el 45% derogado ese
+piso estaba en `448 / 0.45 = 995.6px` y el corte de D10-6 en 1024 quedaba con **28.4px** de holgura;
+con el 50/50 la holgura sube a **128px**. El corte que el dueño escogió sigue siendo correcto por
+aritmética, y ahora con margen de sobra.
+
+Y el aire a cada lado del bloque a 1024 pasa de 30.4 a **56px**: la columna mide 512, el bloque 400,
+y `(512 − 400) / 2 = 56`, muy por encima de los 24 de `lg:p-xl`. Esa es la cifra que hace visible el
+modo de fallo, y es la razón de medirla en el viewport más apretado y no en el más cómodo. Está
+afirmada en `e2e/login.spec.ts`.
 
 ### 2.3 El presupuesto vertical
 
-| Viewport | Pantalla | Viewport | Footer | Región del split | Tarjeta del anuncio | Ratio de la tarjeta |
-|---|---|---|---|---|---|---|
-| 1920 × 1080 | 1080 | 993 | 56 | 937 | 816 × **889** | 0.918 |
-| 1440 × 900 | 900 | 810 | 56 | 754 | 600 × **706** | 0.850 |
-| 1280 × 800 | 800 | 700 | 56 | 644 | 528 × **596** | 0.886 |
-| 1024 × 768 | 768 | 681 | 56 | 625 | 412.8 × **577** | 0.715 |
-| 390 × 844 | 844 | 664 | **85** | 579 | — | — |
+**Con el pie mudado a la columna del login, la región del split es el ÚNICO hijo del contenedor de
+la pantalla y se queda con todo su alto.** El panel va del borde superior al inferior de ese
+contenedor: ya no hay 56px de pie restándole altura, y no hay tarjeta con forma propia que recorte
+nada. El panel es, literalmente, la mitad izquierda entera.
 
-**El bloque del login mide 321px y cabe en los cinco.** Medido contra las primitivas instaladas, no estimado:
+| Viewport | Pantalla | Viewport útil | Panel (a sangre completa) |
+|---|---|---|---|
+| 1920 × 1080 | 1080 | 993 | 960 × **993** |
+| 1440 × 900 | 900 | 810 | 720 × **810** |
+| 1280 × 800 | 800 | 700 | 640 × **700** |
+| 1024 × 768 | 768 | 681 | 512 × **681** |
+| 390 × 844 | 844 | 664 | no se renderiza |
+
+A 1280 × 720 con la barra de ambiente de pruebas puesta (48px), el panel mide **640 × 672**. Esa es
+la geometría que mide la suite E2E, y la razón de que el sangrado se afirme contra
+`[data-slot="pantalla-login"]` y nunca contra el viewport (§11.5, trampa 4).
+
+**El bloque del login mide 321px y cabe en los cinco.** Medido contra las primitivas instaladas, no
+estimado. La única fila que cambia respecto de la versión derogada es la de la `Card`, que ya no
+existe: el bloque perdió sus 32px de `py-(--card-spacing)`.
 
 | Pieza | Cálculo | Alto |
 |---|---|---|
 | Wordmark `VivaGuest` | `text-display` 24px × 1.2 | **29px** |
 | `mb-2xl` bajo el wordmark | | 32px |
-| `Card`: `py-(--card-spacing)` | `--spacing(4)` = 16, arriba y abajo | 32px |
+| ~~`Card`: `py-(--card-spacing)`~~ | derogada el 2026-09-26: el bloque no tiene superficie | ~~32px~~ **0** |
 | Campo `Email` | label 14 × 1.375 = 19 + `gap-2` 8 + `Input` `h-8` 32 | **59px** |
 | `gap-lg` del `<form>` | | 16px |
-| Campo `Contraseña` | igual que el anterior; el `div.relative` no añade alto | **59px** |
+| Campo `Contraseña` | igual que el anterior | **59px** |
 | `gap-lg` | | 16px |
 | Botón `Entrar` | `size="lg"` → `h-9` | **36px** |
 | `gap-sm` | | 8px |
-| Aviso de contraseña olvidada | `text-micro` 12 × 1.4 = 17, **dos líneas** a 368px de ancho útil | **34px** |
-| | | **Total 321px** |
+| Aviso de contraseña olvidada | `text-micro` 12 × 1.4 = 17, **dos líneas** | **34px** |
+| | | **Total 289px** |
 
-El ancho útil dentro de la `Card` es `400 − 2 × 16` = **368px**. Con eso el aviso de 71 caracteres a 12px no cabe en una línea y ocupa dos: está contado.
+**Sin la tarjeta el ancho útil del bloque pasa de 368 a 400px**, así que el aviso de 71 caracteres a
+12px tiene 32px más de sitio. Se sigue contando a dos líneas por prudencia: si cupiera en una, el
+bloque sería aún más bajo y la holgura vertical solo crece.
 
-**Holgura vertical del bloque del login:** 152px arriba y abajo en el caso más apretado (1024 × 768). No hay ningún viewport soportado donde el login haga scroll.
-
-**La palanca, si algún día no cupiera:** los 32px del `mb-2xl` del wordmark son el primer recorte, no el contenido del formulario.
+**Holgura vertical:** el caso más apretado sigue siendo 1024 × 768, y ahí el bloque comparte columna
+con el pie de 56px. El caso `a 1024x768 el login no queda debajo del pliegue` de `e2e/login.spec.ts`
+lo defiende y **no se editó** en el rediseño: mide la misma propiedad y siguió verde por sí solo.
 
 ### 2.4 Debajo de 1024px: el panel desaparece por CSS
 
@@ -202,43 +291,75 @@ El ancho útil dentro de la `Card` es `400 − 2 × 16` = **368px**. Con eso el 
 hidden lg:block
 ```
 
-**`display: none`, no renderizado condicional, y no es un atajo.** Un renderizado condicional necesita conocer el viewport, y eso solo se sabe en el cliente: o se mete un hook de media query (y el panel aparece después de la primera pintura, con un salto visible justo en el arranque de la pantalla) o se adivina en el servidor. Con `display: none` el panel simplemente no existe en la pantalla del teléfono, y una animación sobre un elemento con `display: none` **no avanza**: no hay coste de pintura.
+**`display: none`, no renderizado condicional, y no es un atajo.** Un renderizado condicional
+necesita conocer el viewport, y eso solo se sabe en el cliente: o se mete un hook de media query (y
+el panel aparece después de la primera pintura, con un salto visible justo en el arranque de la
+pantalla) o se adivina en el servidor. Con `display: none` el panel simplemente no existe en la
+pantalla del teléfono, y una animación sobre un elemento con `display: none` **no avanza**: no hay
+coste de pintura.
 
-Lo demás debajo de 1024px es **exactamente la pantalla de hoy**: `p-lg`, `bg-canvas`, `Card` de ancho completo con tope de 400px, centrada. Cero clases nuevas en el árbol del formulario. El único añadido es el footer, que sí se queda (§8.1).
+**Lo único que cambia con el rediseño es DÓNDE se declara el corte.** Ya no está en la raíz de
+`PanelPublicidad` sino en su envoltorio, `data-slot="columna-anuncio"`, porque el wordmark blanco
+tiene que desaparecer con el panel: dos declaraciones del mismo breakpoint en dos sitios se
+desincronizan a la primera. La propiedad que D10-6 compra no cambia ni un ápice.
 
-**Y hay una deuda que nace aquí, declarada en §15.3:** cuando el slot cargue una imagen real, `display: none` **no evita la descarga**. Ese día el panel necesita `<picture>` con `media`, o se convierte en frontera de cliente.
+Lo demás debajo de 1024px es **exactamente la pantalla de hoy**: `p-lg`, `bg-canvas`, bloque de
+ancho completo con tope de 400px, centrado, y el pie apilado abajo ocupando la pantalla entera
+(debajo de `lg:` la columna del login ES la pantalla).
+
+**Y hay una deuda que nace aquí, declarada en §15.3:** cuando el slot cargue una imagen real,
+`display: none` **no evita la descarga**.
 
 ---
 
-## 3. El panel: tarjeta insertada, no sangrado completo
+## 3. El panel: sangrado completo, no tarjeta insertada
+
+> **INVERTIDA EL 2026-09-26.** Esta sección decía exactamente lo contrario (tarjeta insertada con
+> `p-xl`, `rounded-2xl` y forma propia) y así se construyó en 10-01 y se corrigió el 2026-09-19. El
+> dueño la derogó al escoger Runway como referencia. Las tres razones de entonces se conservan
+> abajo, con lo que implica cada una hoy: dos se convierten en deuda o en pregunta, y una se
+> resuelve sola.
 
 ### 3.1 La decisión
 
-**Tarjeta insertada.** 24px (`p-xl`) de recuadro en los cuatro lados de su columna, `rounded-2xl`, `overflow-hidden`.
+**Sangrado completo.** El slot ocupa los cuatro bordes de su columna, al 100% del alto, sin
+recuadro, sin radio, sin relación de aspecto y sin superficie propia. Medido en la referencia de
+Runway: la imagen está pegada a los cuatro bordes y ocupa el alto entero.
 
-Las tres razones, en orden de peso:
+Clase del elemento animado: `size-full overflow-hidden bg-anuncio-1 animate-anuncio`.
+`overflow-hidden` se queda para el día que entre un creativo real; `bg-anuncio-1` se queda porque es
+el estado de movimiento reducido (§7.3) y **no es redundante con los keyframes**.
 
-1. **El slot tiene que aceptar cualquier relación de aspecto, y ninguna le va a calzar.** §3.2 lo mide. Un panel a sangre completa obliga a `object-fit: cover`, o sea a **recortar** el creativo, porque dejar franjas contra el borde desnudo del navegador se lee como un defecto de maquetación. Recortar un anuncio es cortarle el logo o el texto: es el único modo de fallo que un anunciante no perdona. Una tarjeta con borde declarado y radio permite `object-fit: contain`, y las franjas caen **sobre la propia superficie de la tarjeta**, que se lee como un marco intencional.
-2. **Un gris a sangre completa contra el borde del navegador es indistinguible de un esqueleto de carga.** Hoy el panel es exactamente eso: un gris. Con radio y recuadro dice "acá hay una superficie"; sin ellos dice "esto todavía está cargando", y el admin que entra veinte veces al día no tiene forma de saber que no.
-3. **La tarjeta es donde vive el estado "sin anunciante"**, que es la pregunta abierta 2 de `10-CONTEXT.md`. El día que se responda, la respuesta cae dentro de un recuadro que ya existe, sin que la página cambie de forma.
+**Las tres razones de la decisión derogada, y qué implica cada una ahora:**
 
-**Radio:** `rounded-2xl` = `--radius-2xl` = `0.375rem × 1.8` = **10.8px**. Un escalón por encima del `rounded-xl` (8.4px) de la primitiva `Card`, porque es la superficie más grande de toda la aplicación (816 × 889 a 1920) y el radio de una tarjeta de 400px se pierde en ella. **Sale de la escala `--radius-*` que ya existe: cero tokens nuevos.**
+1. **"El slot tiene que aceptar cualquier relación de aspecto, y ninguna le va a calzar."** Seguía
+   siendo cierto, y a sangre completa se convierte en **deuda declarada** (§15.9): un creativo real
+   se recorta con `object-fit: cover` o deja franjas contra el borde del navegador, y recortar un
+   anuncio es cortarle el logo. La tarjeta permitía `object-contain` con las franjas cayendo sobre
+   una superficie que se leía como marco intencional. Eso se perdió a cambio del diseño que el dueño
+   escogió, y queda escrito para que nadie lo redescubra cuando llegue el primer anunciante.
+2. **"Un gris a sangre completa contra el borde del navegador es indistinguible de un esqueleto de
+   carga."** Esta razón **no se puede resolver calculando**: es percepción. Pasa a ser una pregunta
+   explícita del juicio humano del plan 10-04 (§13, fila de la percepción del fundido), y es la
+   pregunta nueva que el rediseño abre.
+3. **"La tarjeta es donde vive el estado sin anunciante."** Se resuelve sola: ese estado vive ahora
+   dentro del panel entero. Sigue siendo la pregunta abierta 2 de `10-CONTEXT.md` y sigue sin
+   responderse en esta fase.
 
-### 3.2 Por qué ninguna relación de aspecto se puede prometer
+**Radio:** ninguno. El `rounded-2xl` (10.8px) de la versión derogada desaparece, y `e2e/login.spec.ts`
+afirma que el `border-radius` computado del elemento animado es `0px`.
 
-De la tabla de §2.3, el ancho partido por el alto de la tarjeta:
+### 3.2 Ya no se promete ninguna relación de aspecto, y ahora la razón es otra
 
-| Viewport | Ratio |
-|---|---|
-| 1024 × 768 | **0.715** |
-| 1440 × 900 | 0.850 |
-| 1280 × 800 | 0.886 |
-| 1920 × 1080 | **0.918** |
+La versión derogada medía el ratio de la tarjeta en los cuatro viewports (de 0.715 a 0.918, un 28%
+de variación) para concluir que **no se puede declarar `aspect-ratio`**. La conclusión sobrevive,
+pero su razón cambia por completo: no es que el ratio varíe demasiado, es que **el panel ES la mitad
+de la pantalla** y no tiene forma que prometer. Se estira con la región y ya.
 
-Siempre retrato, y con un recorrido de **0.72 a 0.92** entre los viewports soportados: un 28% de variación. Eso cierra dos cosas de una vez:
-
-- **No se declara `aspect-ratio`.** El panel se estira con la región y ya.
-- **Cuando haya anunciantes, el contrato con ellos no puede ser "una imagen".** Tiene que ser un creativo que tolere un retrato de ratio variable: `object-contain` centrado sobre la superficie de la tarjeta, o un creativo por rango de ratio. Eso es la pregunta abierta 2 de `10-CONTEXT.md` y **no se responde en esta fase**; lo que esta fase entrega es la tarjeta que hace que la respuesta sea posible sin rehacer la pantalla.
+Lo que no cambia: **cuando haya anunciantes, el contrato con ellos no puede ser "una imagen".** Tiene
+que ser un creativo que tolere un retrato de ratio variable, y ahora además a sangre completa, con
+el recorte que eso implica. Es la pregunta abierta 2 de `10-CONTEXT.md` y **no se responde en esta
+fase**.
 
 ### 3.3 El slot es un `children`, no un componente cerrado
 
@@ -247,9 +368,34 @@ Siempre retrato, y con un recorrido de **0.72 a 0.92** entre los viewports sopor
 export function PanelPublicidad({ children }: { children?: React.ReactNode })
 ```
 
-Hoy nadie le pasa `children` y el panel pinta el ciclo de grises. El día que haya un creativo, entra por ahí y el ciclo se convierte en el fondo sobre el que se posa. **La firma con `children` se escribe ahora**, aunque hoy esté sin usar: es la diferencia entre un slot y un rectángulo, y es lo único que D10-4 pide preparar ("lo que se construye es el slot").
+**Sin cambios.** Hoy nadie le pasa `children` y el panel pinta el ciclo de grises. El día que haya un
+creativo, entra por ahí y el ciclo se convierte en el fondo sobre el que se posa. La firma con
+`children` se escribió en 10-01 aunque hoy esté sin usar: es la diferencia entre un slot y un
+rectángulo, y es lo único que D10-4 pide preparar.
 
-Lo que **no** entra hoy, y no es un olvido: conteo de impresiones, rotación de creativos, orden de anunciantes, estado sin anunciante, `<a>` envolvente. Todo eso es la pregunta abierta 2.
+Lo que **no** entra hoy, y no es un olvido: conteo de impresiones, rotación de creativos, orden de
+anunciantes, estado sin anunciante, `<a>` envolvente. Todo eso es la pregunta abierta 2.
+
+### 3.4 El wordmark del panel
+
+Desde el 2026-09-26 hay **dos wordmarks** en la pantalla: el de siempre, centrado encima del
+formulario y dentro del `<main>`, que sigue siendo el único `<h1>` de la página; y uno nuevo sobre el
+panel, arriba a la izquierda, a 32px (`2xl`) de los dos bordes, en **blanco**, como en la referencia.
+
+**No vive dentro de `PanelPublicidad`, y eso no es cosmético.** La raíz del panel lleva
+`aria-hidden="true"`, así que un texto renderizado ahí dentro desaparece del árbol de accesibilidad
+**sin que la pantalla cambie ni un píxel**. El wordmark es hermano del panel dentro del envoltorio
+`data-slot="columna-anuncio"`, que lleva el `relative` que lo ancla. El E2E lo defiende con
+`closest('[aria-hidden="true"]') === null` y no con un localizador de texto: los localizadores de
+texto de Playwright no filtran subárboles `aria-hidden` y darían verde con el defecto puesto
+(medido: con el wordmark dentro del panel, `getByText('VivaGuest')` encuentra 3 elementos).
+
+**El `<h1>` no se muda al panel**, y la alternativa se descartó con razones: dejaría al `<main>` sin
+encabezado y pondría el único encabezado de nivel 1 de la página flotando sobre una región
+decorativa. El wordmark del panel es un `<p>` y **no lleva `aria-hidden`**: un lector de pantalla lee
+la marca dos veces, que es redundancia y no barrera (§15.11).
+
+**El color es blanco y su contraste es una infracción conocida y aceptada. Ver §10.4.**
 
 ---
 
@@ -477,10 +623,11 @@ Con `animation-duration: 0s` y `animation-fill-mode: none` (el de fábrica), **n
 
 > **La clase base del panel lleva `bg-anuncio-1`, y eso NO es redundante con los keyframes: es el estado de movimiento reducido.** Quitarlo por "duplicado" deja un rectángulo transparente sobre `--canvas`, o sea el panel desaparecido, para el usuario que pidió menos movimiento.
 
-Clase completa del elemento animado:
+Clase completa del elemento animado, actualizada al sangrado completo del 2026-09-26 (la versión
+derogada llevaba además `aspect-[0.93] max-h-full` y `rounded-2xl`):
 
 ```
-size-full overflow-hidden rounded-2xl bg-anuncio-1 animate-anuncio
+size-full overflow-hidden bg-anuncio-1 animate-anuncio
 ```
 
 **No se escribe una segunda regla de `prefers-reduced-motion` para este panel.** El movimiento de este producto se apaga en un solo sitio; la única excepción declarada en todo el sistema es `.animate-spin`, y está justificada porque un spinner es información de estado. Un placeholder decorativo no lo es.
@@ -489,9 +636,9 @@ size-full overflow-hidden rounded-2xl bg-anuncio-1 animate-anuncio
 
 ### 7.4 La animación no se pausa, y el panel no reacciona a nada
 
-- **No se pausa mientras el formulario envía.** No compite por atención con nada: el botón cambia de label y saca su spinner, que está a 700px de distancia en el eje horizontal.
+- **No se pausa mientras el formulario envía.** No compite por atención con nada: el botón cambia de label y saca su spinner, que a 1280px está a ~760px de distancia en el eje horizontal (el centro del bloque del login menos el centro del panel).
 - **No responde a hover, ni a foco, ni a clic.** No es interactivo, no tiene cursor propio y no tiene estado.
-- **No hay `will-change`.** Un `background-color` de 20s sobre un elemento sin transformaciones no necesita promoción a capa, y `will-change` sobre 816 × 889 píxeles reserva memoria de vídeo para siempre por una animación que corre una vez cada 5 segundos.
+- **No hay `will-change`.** Un `background-color` de 20s sobre un elemento sin transformaciones no necesita promoción a capa, y `will-change` sobre 960 × 993 píxeles (el panel a sangre completa a 1920) reserva memoria de vídeo para siempre por una animación que corre una vez cada 5 segundos.
 
 ---
 
@@ -499,24 +646,52 @@ size-full overflow-hidden rounded-2xl bg-anuncio-1 animate-anuncio
 
 ### 8.1 Anatomía
 
+> **DEROGADA 2026-09-26 la mitad de D10-2 que pedía el pie a ancho completo.** El pie vive ahora
+> **dentro de la columna del login**, como último hijo de `data-slot="columna-login"` y hermano del
+> `<main>`. Ni un píxel suyo cruza a la mitad izquierda, y por eso el panel llega hasta abajo.
+
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ © 2026 VivaGuest. Todos los derechos reservados.            [ig] [tt]   │
-└─────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────┬────────────────────────────────────────────────┐
+│                            │                                                │
+│   panel a sangre completa  │              bloque del login                  │
+│                            │                                                │
+│                            ├────────────────────────────────────────────────┤
+│                            │ © 2026 VivaGuest. Todos los…       [ig] [tt]   │
+└────────────────────────────┴────────────────────────────────────────────────┘
 ```
 
 | | A partir de `lg:` (≥1024px) | Debajo de `lg:` |
 |---|---|---|
+| Ancho | **el de su columna** (640 a 1280, 512 a 1024). No el de la pantalla | el de la pantalla, porque debajo de `lg:` la columna del login ES la pantalla |
 | Disposición | Una fila, `justify-between`, `items-center` | Columna centrada, `gap-sm` |
 | Alto | `lg:h-barra` = **56px** exactos | Automático: `py-lg` + 17 + 8 + 28 = **85px** |
-| Padding lateral | `px-xl` = 24px | `px-lg` = 16px |
+| Padding lateral | `px-xl` = 24px, **desde el borde de su columna** | `px-lg` = 16px |
 | Superficie | `--canvas`, la misma de la página. **Sin fondo propio, sin borde superior** | igual |
 
-**Por qué apila debajo de `lg:`, con el número:** a 390px de ancho el footer tiene `390 − 2 × 16` = **358px** útiles. La línea de copyright mide ~288px a 12px, los dos iconos de 28px con su `gap-xs` son 60px, y la separación mínima entre los dos bloques son 16px: **288 + 16 + 60 = 364px**. Se pasa por 6px, así que en una sola fila el texto envolvería y el alto dejaría de ser predecible. Apilado, el footer mide 85px y el bloque del login sigue teniendo 129px de aire a cada lado en un iPhone de 664px de viewport (§2.3).
+**La `className` de `PieDeLogin` NO cambió con la mudanza, y es byte a byte la misma.** Como hijo
+flex de la columna el pie se estira solo. `PieDeLogin.test.ts` afirma la cadena literal y sus 12
+casos siguen verdes: es lo que demuestra que un cambio de sitio no se convirtió en un cambio de
+markup.
 
-**Sin borde superior y sin fondo propio, y es una decisión:** D10-5 dice "nada más". Su separación visual ya está dada por el borde inferior de la tarjeta del anuncio, que queda 24px por encima, y por los 152px de aire bajo el bloque del login. Un `border-t` sería una línea que cruza la pantalla entera para separar aire de aire.
+**Por qué apila debajo de `lg:`, con el número, y el cálculo NO cambia:** a 390px de ancho el pie
+tiene `390 − 2 × 16` = **358px** útiles. La línea de copyright mide ~288px a 12px, los dos iconos de
+28px con su `gap-xs` son 60px, y la separación mínima entre los dos bloques son 16px:
+**288 + 16 + 60 = 364px**. Se pasa por 6px, así que en una sola fila el texto envolvería. Apilado,
+el pie mide 85px. Debajo de `lg:` la columna del login es la pantalla entera, así que meter el pie
+dentro de la columna no le quitó nada al teléfono, y el E2E lo afirma midiendo que a 390 el pie
+arranca en 0 y mide 390.
 
-**La única alineación que esta pantalla regala:** con `px-xl` (24px), el borde izquierdo del copyright cae **exactamente** sobre el borde izquierdo de la tarjeta del anuncio, que también está a 24px del borde del viewport. Los iconos se alinean con el borde derecho de la pantalla menos los mismos 24px, **no** con el borde del formulario: alinearlos con el formulario exigiría que el footer replicara la aritmética de la columna del login, y eso son tres números más para ganar una alineación que nadie va a notar a 124px de distancia.
+**Sin borde superior y sin fondo propio, y sigue siendo una decisión:** D10-5 dice "nada más". Su
+separación visual la dan el aire bajo el bloque del login y **el cambio de superficie contra el panel
+de la izquierda**. Hasta el 2026-09-26 también la daba el borde inferior de la tarjeta del anuncio;
+esa tarjeta dejó de existir con el sangrado completo (§3).
+
+**LA ALINEACIÓN QUE ESTA PANTALLA REGALABA YA NO SE REGALA, y conviene saber por qué.** Con el
+diseño derogado, `px-xl` (24px) hacía que el borde izquierdo del copyright cayera exactamente sobre
+el borde izquierdo de la tarjeta del anuncio, que también estaba a 24px del viewport. Esa
+coincidencia murió con la tarjeta: el panel a sangre completa arranca en 0. La alineación que queda
+es la del copyright con el padding del `<main>` **de su propia columna**, y se afirma así en el E2E
+(`copyright.x − columna.x === 24`), no contra el número 24 a secas medido desde el viewport.
 
 ### 8.2 El año se calcula en Bogotá, y la página tiene que dejar de ser estática
 
@@ -600,22 +775,50 @@ Hereda `02-UI-SPEC` §13 completo. Lo que esta pantalla añade:
 
 ### 10.1 La estructura, y qué es landmark y qué no
 
+Árbol vigente desde el 2026-09-26, con los cinco `data-slot` que el E2E necesita:
+
 ```
-<div>                          ← contenedor de la pantalla, min-h-svh, flex-col
-  <div>                        ← region del split: flex-1, lg:grid lg:rejilla-login
-    <div aria-hidden="true">   ← COLUMNA 1: el panel. hidden lg:block. NO es <aside>
-      <div />                  ← la tarjeta animada. Sin hijos, sin texto, sin foco
+<div data-slot="pantalla-login">            ← min-h svh menos la barra de pruebas, flex-col, bg-canvas
+  <div>                                     ← region del split: flex-1, lg:grid lg:rejilla-login
+    <div data-slot="columna-anuncio">       ← COLUMNA 1. relative, hidden lg:block
+      <div aria-hidden="true"               ← el panel. NO es <aside>. size-full
+           data-slot="panel-publicidad">
+        <div data-slot="anuncio" />         ← el elemento animado, a sangre completa. Sin hijos
+      </div>
+      <p data-slot="wordmark-panel" />      ← HERMANO del panel, absolute a 32px. FUERA del aria-hidden
     </div>
-                               ← COLUMNA 2: pista vacia de la rejilla. SIN elemento
-    <main lg:col-start-3>      ← COLUMNA 3: wordmark + Card + FormularioLogin
+    <div data-slot="columna-login">         ← COLUMNA 2. lg:col-start-2, flex-col
+      <main>                                ← wordmark <h1> + bloque del login
+        <h1 />                              ← el UNICO <h1> de la pagina
+        <div data-slot="bloque-login" />    ← 400px, max-w-login. SIN tarjeta
+      </main>
+      <footer>                              ← contentinfo, unico. HERMANO del <main>, no hijo
+    </div>
   </div>
-  <footer>                     ← contentinfo, unico en la pagina
 </div>
 ```
 
-- **El panel es un `<div>`, no un `<aside>`.** Una landmark `complementary` con `aria-hidden="true"` es una contradicción: aparece en el índice de regiones y no tiene contenido que ofrecer.
-- **La columna del medio no lleva elemento.** Es una pista vacía de la rejilla. Un div espaciador sería un nodo más en el árbol que no separa nada.
-- **`<main>` envuelve solo el login**, que es el contenido principal de la pantalla. **`<footer>`** es la única `contentinfo` de la página.
+- **El panel es un `<div>`, no un `<aside>`.** Una landmark `complementary` con `aria-hidden="true"`
+  es una contradicción: aparece en el índice de regiones y no tiene contenido que ofrecer.
+- **Ya no hay columna del medio.** La pista vacía del reparto derogado desapareció con el canal.
+- **`<main>` envuelve solo el login**, que es el contenido principal de la pantalla.
+- **Hay exactamente UN `<h1>`** y vive dentro del `<main>`. El wordmark del panel es un `<p>`.
+
+**LAS DOS REGLAS DE ESTE ÁRBOL, Y LAS DOS ESTÁN MEDIDAS, NO RAZONADAS:**
+
+1. **Un texto dentro del subárbol `aria-hidden` del panel desaparece del árbol de accesibilidad sin
+   que la pantalla cambie ni un píxel.** Por eso el wordmark es hermano del panel y no hijo, y por
+   eso el `relative` vive en el envoltorio. La compuerta es
+   `closest('[aria-hidden="true"]') === null` en `e2e/login.spec.ts`, y **no** un localizador de
+   texto: medido con el defecto puesto, `getByText('VivaGuest')` encuentra 3 elementos y daría
+   verde. Es el mismo hallazgo de clase que el `toBeDisabled()` de 10-03.
+2. **Un `<footer>` descendiente de `<main>` deja de mapear al rol `contentinfo`.** Medido en 10-03
+   (señuelo 4) y vuelto a medir en 10-04 (señuelo 2): el rol solo aplica cuando el `footer` está al
+   alcance del `body`. El elemento sigue existiendo, sigue pintando la copia, y **desaparece del
+   índice de regiones del lector de pantalla**. Es el modo de fallo silencioso perfecto: la pantalla
+   se ve idéntica. Por eso el pie es hermano del `<main>` y no hijo, y la mudanza a la columna del
+   2026-09-26 **no derogó esta regla**. Las dos aserciones que la defienden (el conteo de
+   `contentinfo` y el de `main footer`) tienen dientes independientes, confirmado por aislamiento.
 
 ### 10.2 El panel está oculto al lector de pantalla, y es seguro que lo esté
 
@@ -641,13 +844,53 @@ Sí conservan **nombre accesible** (`aria-label`), porque un lector de pantalla 
 |---|---|
 | `--foreground` sobre `--canvas` | **16.54:1** |
 | `--muted-foreground` sobre `--canvas` (copyright) | **5.57:1**, AA |
-| Iconos deshabilitados (#5C6470 al 50% sobre `--canvas`) | **2.09:1** — **exento** por WCAG 1.4.3 (componentes inactivos). **Es el único uso de esa exención en todo el producto**, y está acá para que un auditor no lo reporte como hallazgo nuevo |
+| Iconos deshabilitados (#5C6470 al 50% sobre `--canvas`) | **2.09:1** — **EXENCIÓN LEGÍTIMA** por WCAG 1.4.3, que excluye expresamente los componentes inactivos. **Es el único uso de esa exención en todo el producto**, y está acá para que un auditor no lo reporte como hallazgo nuevo |
+| Wordmark blanco sobre el panel | **1.27:1** sobre `--anuncio-1` — **INFRACCIÓN CONOCIDA Y ACEPTADA, no exención.** Ver el bloque de abajo, y no confundir las dos etiquetas |
 | Los cuatro grises del panel | Superficie decorativa sin texto: 1.4.3 no aplica. Pero los cuatro dan ≥ **10:1** con `--foreground`, así que el slot sigue siendo apto para texto el día que lo tenga |
 | Anillo de foco | 2px `--primary` con `outline-offset: 2px`, sin cambios. En el panel no hay nada que enfocar |
 | Estado nunca por color solo | Los iconos deshabilitados llevan **opacidad + nombre accesible**, no solo color |
 | `prefers-reduced-motion` | §7.3. El panel queda quieto en `--anuncio-1`; el spinner sigue girando |
 | Zoom al 200% | A 1024px de viewport con zoom 200% el ancho efectivo es 512px: **por debajo de 1024**, así que el panel desaparece y queda el login de una columna. Es decir, la respuesta a D10-6 **es también** la respuesta a WCAG 1.4.4 en esta pantalla, sin trabajo extra |
 | `<html lang="es">` | Ya está en `app/layout.tsx` |
+
+#### El wordmark blanco del panel: infracción aceptada, NO exención, y la diferencia importa
+
+**Decidido por el dueño el 2026-09-26, con las cifras medidas sobre la mesa.** Se le presentó la
+medición y respondió, literal: *"no importa que ahorita no pase contraste por que es placeholder"*.
+El wordmark del panel va en **blanco**. No se vuelve a preguntar.
+
+Las cifras, con la fórmula de WCAG 2.1 sobre los cuatro grises de §6.1:
+
+| Gris del ciclo | Hex | Blanco encima | `--foreground` (#111827) encima |
+|---|---|---|---|
+| `--anuncio-1` (el más claro) | #E2E5E7 | **1.27:1** | 14.0:1 |
+| `--anuncio-4` (el más oscuro) | #BEC3C8 | **1.77:1** | 10.0:1 |
+
+El wordmark es `text-display` (24px, peso 600), o sea texto grande para WCAG 1.4.3, cuyo umbral es
+**3:1**. El contraste real de hoy es **1.27:1** en el gris más claro, que es la parte baja del ciclo.
+
+**Por qué se registra como infracción y no como exención, y por qué no da lo mismo.** La entrada de
+los iconos inactivos de arriba **sí** es una exención legítima: la norma los excluye expresamente.
+Acá **no hay exclusión que aplique**. El wordmark no es un componente inactivo: es texto sobre una
+superficie decorativa, y ninguna cláusula de la norma lo exime. Llamarlo "exención" sería falsificar
+el registro, y distinguir las dos cosas es justo lo que un auditor tiene que poder hacer.
+
+**Por qué se acepta, y la premisa es correcta:** los cuatro grises de D10-4 **no son el fondo final**.
+Son el marcador de posición de un creativo que todavía no existe. El blanco es lo correcto contra la
+referencia de Runway y contra la imagen que algún día ocupe ese espacio; lo que no es correcto es el
+fondo de hoy.
+
+**CONDICIÓN DE SALIDA, y es una obligación con dueño, no una nota suelta.** El día que entre el
+primer creativo real en el slot **hay que volver a medir el wordmark contra ESE fondo**. Si el
+creativo es claro, el wordmark necesita velo o cambia de color. Esa obligación está escrita como
+carga de **quien cierre la pregunta abierta 2 de `10-CONTEXT.md`** (el formato del slot cuando haya
+anunciantes reales), y ese archivo la enuncia por su lado: quien responda esa pregunta responde
+también esta.
+
+**Lo que NO se hace hoy, y es deliberado:** no se oscurecen los cuatro grises de §6.1 y no se le mete
+un velo al panel. Las dos cosas son parches contra un fondo provisional, y las dos volverían a abrir
+el juicio del fundido. **Quien quiera cambiar el color del wordmark tiene que borrar antes esta
+entrada, no al revés.**
 
 ---
 
@@ -663,7 +906,7 @@ La lista es **el inventario instalado, no una lista blanca cerrada**: si durante
 
 | Componente | Import | Uso en esta fase |
 |---|---|---|
-| `Card`, `CardContent` | `@/components/ui/card` | La tarjeta del login. **Sin cambios**, tal como está hoy |
+| ~~`Card`, `CardContent`~~ | ~~`@/components/ui/card`~~ | **DEROGADO 2026-09-26: el bloque del login ya no vive dentro de una tarjeta.** Las primitivas siguen instaladas y las usan otras pantallas; lo que desapareció es su uso en `/login`, y con él el `data-slot="card"` de esta pantalla. `page.contrato.test.ts` se pone rojo si vuelve |
 | `Button` | `@/components/ui/button` | Los dos iconos deshabilitados del footer (`variant="ghost" size="icon-sm" disabled`). El botón `Entrar` ya existe |
 | `Field`, `FieldLabel`, `FieldError` | `@/components/ui/field` | Dentro de `FormularioLogin`, que no se toca |
 | `Input` | `@/components/ui/input` | Igual |
@@ -674,11 +917,11 @@ Por superficie, junto a la página que los usa, que es la convención del repo.
 
 | Componente | Responsabilidad | Cliente o servidor |
 |---|---|---|
-| `PanelPublicidad` | La columna 1: contenedor con `p-xl` + tarjeta `rounded-2xl` con `bg-anuncio-1 animate-anuncio`. Acepta `children` como slot futuro (§3.3). `aria-hidden` y `hidden lg:block` | **Servidor.** Sin estado, sin efectos, sin `'use client'` |
-| `PieDeLogin` | El footer: copyright con el año recibido por prop + los dos botones deshabilitados. Fila a partir de `lg:`, columna debajo | **Servidor.** Función pura de `anio: string` |
+| `PanelPublicidad` | La columna 1 **a sangre completa**: `size-full` con un elemento animado `size-full overflow-hidden bg-anuncio-1 animate-anuncio`, sin recuadro, sin radio y sin forma propia. Acepta `children` como slot futuro (§3.3). Lleva `aria-hidden`; el corte de `lg:` **ya no vive aquí** sino en su envoltorio `columna-anuncio` (§2.4) | **Servidor.** Sin estado, sin efectos, sin `'use client'` |
+| `PieDeLogin` | El pie: copyright con el año recibido por prop + los dos botones deshabilitados. Fila a partir de `lg:`, columna debajo. **Vive dentro de la columna del login desde el 2026-09-26, y su `className` no cambió con la mudanza** (§8.1) | **Servidor.** Función pura de `anio: string` |
 | `IconosRedes` | Exporta `IconoInstagram` e `IconoTikTok` como SVG inline. §11.3 | **Servidor** |
 
-**Archivos modificados:** `app/(public)/login/page.tsx` (la rejilla, el `revalidate`, el `hoyBog()`) y `app/globals.css` (los cuatro grises, la animación, la utilidad de rejilla). **Nada más.**
+**Archivos modificados:** `app/(public)/login/page.tsx` (la rejilla, los cinco `data-slot`, el wordmark del panel, el `revalidate`, el `hoyBog()`) y `app/globals.css` (los cuatro grises, la animación, la utilidad de rejilla). **Nada más.** `FormularioLogin.tsx` no aparece en ningún diff de esta fase, y hay una compuerta que compara su blob.
 
 ### 11.3 Los dos iconos de marca, que no salen de lucide
 
@@ -694,11 +937,12 @@ Por el hallazgo B, `lucide-react@1.39.0` no exporta ninguna marca comercial. Reg
 
 Esta pantalla ya usa `Eye`, `EyeOff` y `Loader2`, los tres dentro de `FormularioLogin`, que no se toca. **Esta fase no añade ningún icono lucide.** Los dos glifos de §11.3 son SVG del proyecto y quedan anotados como excepción declarada a la lista cerrada de `02-UI-SPEC` §14.3.
 
-### 11.5 Tres trampas del repo que el executor tiene que tener delante
+### 11.5 Cuatro trampas del repo que el executor tiene que tener delante
 
 1. **`bg-[#E2E5E7]` rompe el build de CI.** Guardarraíl 6. Los cuatro grises solo pueden nombrarse en `app/globals.css`.
 2. **Un `max-w-*` nuevo sin registrar en `cn()` no llega al DOM.** `lib/utils.ts`. Esta fase no debería necesitar ninguno (§4.2); si aparece, el registro no es opcional.
-3. **`animate-anuncio` sin `bg-anuncio-1` deja el panel invisible con movimiento reducido.** §7.3. Es la clase que se borra "por redundante" en la primera limpieza.
+3. **`animate-anuncio` sin `bg-anuncio-1` deja el panel invisible con movimiento reducido.** §7.3. Es la clase que se borra "por redundante" en la primera limpieza. Medido con el señuelo 5 de 10-04: el `background-color` computado pasa de `oklch(0.92 0.0045 250)` a `rgba(0, 0, 0, 0)`, o sea el panel literalmente transparente.
+4. **Medir el sangrado contra el viewport en vez de contra `[data-slot="pantalla-login"]` da un rojo contra el código correcto.** `app/layout.tsx` pinta una barra de ambiente de pruebas de **48px** en todo entorno cuyo `NEXT_PUBLIC_VIVAGUEST_ENTORNO` no sea `produccion`, y la suite E2E corre justamente ahí. El contenedor de `/login` es `min-h-[calc(100svh-var(--alto-barra-pruebas,0px))]`, así que en la corrida de Playwright empieza en `y = 48`. Una aserción escrita como `expect(panel.y).toBe(0)` sale ROJA contra el producto correcto, y es el peor tipo de rojo: el que hace que alguien "arregle" el producto para complacer al instrumento.
 
 ---
 
@@ -742,26 +986,27 @@ Por la misma razón, **el estado "sin anunciante" del futuro tampoco tiene copia
 
 ## 13. UI Considerations
 
-Consideraciones de estado aplicables resueltas: **7 cubiertas · 2 con red de seguridad · 0 sin resolver**, sobre 17 candidatas que levantó el probe de estados (2026-09-19). Las cinco que no aparecen arriba están declaradas `n/a` abajo, con su razón: una categoría descartada en silencio es indistinguible de una olvidada.
+Consideraciones de estado aplicables resueltas: **7 cubiertas · 3 con red de seguridad · 0 sin resolver**, sobre 17 candidatas que levantó el probe de estados (2026-09-19), revisadas una a una contra la geometría del 2026-09-26. Las cinco que no aparecen arriba están declaradas `n/a` abajo, con su razón: una categoría descartada en silencio es indistinguible de una olvidada. **Ninguna de las cinco `n/a` cambia con el rediseño**, y la fila `error` del panel sigue siendo la primera que se reabre el día que entre un anunciante real.
 
 | Categoría | Elemento | Estado | Resolución |
 |---|---|---|---|
-| empty | Slot publicitario sin anunciante | ✅ covered | El ciclo de cuatro grises **es** el estado vacío del slot; no lleva copia, por §12.1 |
+| empty | Slot publicitario sin anunciante | ✅ covered | El ciclo de cuatro grises **es** el estado vacío del slot; no lleva copia, por §12.1. Con el sangrado completo ocupa la mitad izquierda entera en vez de una tarjeta insertada, y el estado vacío no cambia de naturaleza |
 | loading | Botón `Entrar` | ✅ covered | Heredado sin cambios: `disabled` + `Loader2` + `Entrando…` (§9) |
-| error | Credenciales, cuenta desactivada, genérico | ✅ covered | Las copias están en §12; el desplazamiento de 12.5px del bloque centrado está medido y aceptado en §9.1 |
+| error | Credenciales, cuenta desactivada, genérico | ✅ covered | Las copias están en §12, intactas; el desplazamiento de 12.5px del bloque centrado está medido y sigue aceptado en §9.1 |
 | populated | Formulario con los dos campos llenos | ✅ covered | Sin cambio de alto: el `Input` es de alto fijo (`h-8`) y no crece con el contenido |
 | long-text | El mensaje de error más largo | ✅ covered | Medido en §9.1: tres de los cuatro mensajes caben en una línea a 14px en 368px; el genérico usa dos y desplaza 25px en vez de 12.5px |
-| long-text | Copyright del footer a 390px | ✅ covered | Medido en §8.1: 288 + 16 + 60 = 364px contra 358px disponibles, por eso el footer apila debajo de `lg:` |
-| overflow | El panel por debajo de 1024px | ✅ covered | `hidden lg:block`. Y el piso aritmético de 995.6px de §2.2 demuestra que el corte está en el sitio correcto |
-| overflow | Alto del bloque del login en el viewport más bajo | ✅ covered | 321px de bloque contra 625px de región a 1024 × 768: 152px de holgura por lado (§2.3) |
+| long-text | Copyright del footer a 390px | ✅ covered | Medido en §8.1: 288 + 16 + 60 = 364px contra 358px disponibles, por eso el pie apila debajo de `lg:`. **El cálculo NO cambia con la mudanza a la columna**: debajo de `lg:` la columna del login es la pantalla entera |
+| overflow | El panel por debajo de 1024px | ✅ covered | `hidden lg:block`, declarado ahora en el envoltorio `columna-anuncio` para que el wordmark desaparezca con el panel. Y el piso aritmético baja de 995.6 a **896px** con el 50/50 (§2.2), así que el corte de 1024 queda con **128px** de holgura en vez de 28.4 |
+| overflow | Alto del bloque del login en el viewport más bajo | ✅ covered | El bloque baja de 321 a **289px** al perder la tarjeta, y ahora comparte columna con el pie de 56px. A 1024 × 768 sigue sin scroll, y lo defiende el caso del pliegue de `e2e/login.spec.ts`, que **no se editó** en el rediseño y siguió verde por sí solo (§2.3) |
 | zero-one-many | — | n/a | La pantalla no tiene ninguna colección. Los dos iconos son un par fijo, no una lista |
 | partial | — | n/a | No hay datos parciales: la pantalla no lee nada de la base |
 | loading | El panel publicitario | n/a | No carga nada. Los cuatro grises son `background-color` en keyframes de CSS, no imágenes con petición de red que pueda quedar pendiente |
 | error | El panel publicitario | n/a | Sin petición, no hay fallo posible. Cuando entre un anunciante real esta fila deja de ser `n/a` y es la primera que hay que reabrir |
 | error | El footer | n/a | El año lo calcula el servidor al renderizar la página. Si `hoyBog()` fallara, falla la página entera, no el footer: no existe un estado de error propio de esta franja |
-| overflow / long-text | El wordmark `VivaGuest` | n/a | Cadena fija de nueve caracteres escrita en el código. No la teclea nadie y no viene de la base |
+| overflow / long-text | Los dos wordmarks `VivaGuest` | n/a | Cadena fija de nueve caracteres escrita en el código, en los dos sitios. No la teclea nadie y no viene de la base |
 | **movimiento reducido** | El panel con `prefers-reduced-motion: reduce` | 🧪 backstop | Playwright con `contextOptions: { reducedMotion: 'reduce' }` (**corregido en ejecución 10-01**: `test.use({ reducedMotion })` no compila en `@playwright/test@1.62.1`, la opción vive en `BrowserContextOptions`, no en `PlaywrightTestOptions`): el `background-color` computado del panel resuelve a `--anuncio-1` y su `animation-duration` es `0s`, **y** el spinner del botón sigue con duración distinta de cero |
-| **percepción del fundido** | Que el paso de 1.115:1 se vea de verdad | 🧪 backstop | Ningún test automático puede juzgar si un paso de contraste se percibe. Visto por un humano a 1440px, con el ciclo corriendo 20 segundos completos, antes de aprobar la fase |
+| **contraste del wordmark blanco** | Si se distingue sobre los cuatro grises mientras el fondo siga siendo el placeholder | 🧪 backstop | El contraste está **calculado** (1.27:1 sobre el gris más claro) y la infracción está aceptada y registrada en §10.4 con su condición de salida. Lo que ningún instrumento puede decir es si la palabra se LEE durante los cuatro pasos del ciclo. El COLOR no se reabre: está decidido. Si se pierde, la salida es un velo detrás del wordmark, nunca oscurecer §6.1 |
+| **percepción del fundido** | Que el paso de 1.115:1 se vea de verdad, ahora a sangre completa | 🧪 backstop · **SUPERADO Y REABIERTO 2026-09-26** | Ningún test automático puede juzgar si un paso de contraste se percibe. El juicio que 10-03 dejó pendiente queda **superado**: la superficie cambió de forma y de tamaño (casi el doble que la tarjeta que reemplaza), así que se vuelve a tomar contra la pantalla nueva en el checkpoint de 10-04. Y trae **una pregunta nueva que no existía**: a sangre completa el marco que evitaba que el gris se leyera como esqueleto de carga ya no está (§3.1 razón 2), así que hay que mirar si la mitad izquierda se lee como superficie o como algo cargando |
 
 ---
 
@@ -782,7 +1027,7 @@ No se declaró ningún registry de terceros, así que la compuerta de vetting (`
 
 Se documenta acá para que `gsd-ui-auditor` no la reporte como hallazgo nuevo.
 
-1. **El resto del dashboard sigue sin rediseñar.** El objetivo del ROADMAP para la Fase 10 es "que el dashboard del admin deje de verse como shadcn recién instalado". Esta fase entrega **una** pantalla, que es lo único que `10-CONTEXT.md` cerró. `/operacion`, `/apartamentos`, `/aseadores` y `/finanzas` siguen con el tema por defecto y el `baseColor: neutral` que D10-1 identificó como el problema real. **La fase no cierra el objetivo del ROADMAP y no debe declararse como si lo cerrara.**
+1. **El resto del dashboard sigue sin rediseñar, y sigue siendo la deuda más importante de las once.** El objetivo del ROADMAP para la Fase 10 es "que el dashboard del admin deje de verse como shadcn recién instalado". Esta fase entrega **una** pantalla, que es lo único que `10-CONTEXT.md` cerró. `/operacion`, `/apartamentos`, `/aseadores` y `/finanzas` siguen con el tema por defecto y el `baseColor: neutral` que D10-1 identificó como el problema real. **La fase no cierra el objetivo del ROADMAP y no debe declararse como si lo cerrara.**
 2. **`aria-hidden` en el panel caduca con el primer anuncio real.** Un anuncio con enlace dentro de un contenedor `aria-hidden` es una infracción de 4.1.2 y un enlace inalcanzable por teclado. Ese día el panel necesita nombre accesible y el enlace entra al orden de tabulación.
 3. **`display: none` no evita la descarga de una imagen.** Hoy no importa (no hay imagen). Cuando la haya, el panel necesita `<picture>` con atributo `media`, o pasa a ser frontera de cliente. Un teléfono descargando el creativo de un panel que nunca va a ver es coste directo sobre el plan de datos del aseador.
 4. **El formulario tiene controles de 32 y 28px en una pantalla que el aseador usa desde el teléfono.** El `Input` es `h-8` y el toggle de contraseña es `icon-sm`; el piso de 44px de `05-UI-SPEC` es exclusivo de `app/(cleaner)/` y `check-escala-movil.sh` no mira `app/(public)/`. No es alcance de esta fase (el formulario no se toca) pero es un hueco real del contrato de toque, y el `Input` a `text-base` debajo de `md:` es lo único que hoy evita el zoom automático de iOS en esa pantalla.
@@ -790,6 +1035,9 @@ Se documenta acá para que `gsd-ui-auditor` no la reporte como hallazgo nuevo.
 6. **Marcas ajenas.** Instagram y TikTok tienen guías de marca sobre uso, color y área de respeto de sus glifos. Se dibujan en `currentColor` monocromo a 16px, que es el uso más conservador posible, pero **nadie revisó las guías**. Queda dicho.
 7. **`revalidate = 3600` significa que el primer visitante después de medianoche del 1 de enero ve el año anterior.** ISR regenera con la primera petición pasada la ventana: ese visitante recibe el HTML viejo y dispara la regeneración; el siguiente ya ve el año correcto. Es un año en un pie de página, una vez al año, y el precio de la alternativa (`force-dynamic`) es perder el HTML estático en todas las demás visitas.
 8. **La pregunta abierta 1 de `10-CONTEXT.md` sigue sin responder:** quien entra por esta pantalla es el admin, no un propietario. Si la publicidad se va a vender dirigida a propietarios, el login es la pantalla equivocada. **Esta fase construye el slot igual**, porque construirlo es reversible y cuesta un `<div>`; lo que no se debe hacer es vender el espacio antes de responder eso.
+9. **El recorte del creativo a sangre completa.** Era la razón 1 de la §3.1 derogada, y al invertirse la decisión pasa a ser deuda: un creativo real en un panel pegado a los cuatro bordes se recorta con `object-fit: cover` (y cortarle el logo a un anunciante es el único modo de fallo que no perdona) o deja franjas contra el borde desnudo del navegador, que se lee como defecto de maquetación. La tarjeta derogada permitía `object-contain` con las franjas sobre una superficie que se leía como marco. Se perdió a cambio del diseño que el dueño escogió el 2026-09-26, y queda escrito para que nadie lo redescubra cuando llegue el primer anunciante.
+10. **El color del wordmark del panel es blanco por decisión del dueño, con 1.27:1 sobre el gris más claro.** La entrada completa, con su etiqueta correcta (infracción aceptada, no exención) y su condición de salida, vive en **§10.4**. Esta deuda **remite ahí y no la repite a propósito**: una infracción registrada en dos sitios se cierra en uno solo y sobrevive en el otro.
+11. **El wordmark se anuncia dos veces al lector de pantalla.** El `<h1>` del formulario y el `<p>` del panel dicen los dos "VivaGuest". Es **redundancia aceptada, no barrera**: la alternativa (ponerle `aria-hidden` al del panel) volvería inútil todo el trabajo de sacarlo del subárbol `aria-hidden` del panel, que es exactamente lo que este contrato defiende en §10.1.
 
 ---
 

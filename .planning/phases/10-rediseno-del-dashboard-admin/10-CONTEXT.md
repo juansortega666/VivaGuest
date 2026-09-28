@@ -5,6 +5,11 @@
 >
 > **Todas estas decisiones están CERRADAS. No se vuelven a preguntar.**
 >
+> **SALVO DOS, DEROGADAS EL 2026-09-26: D10-2 y D10-3.** El dueño miró la
+> pantalla que entregaron 10-01 a 10-03, la rechazó, y escogió otra referencia.
+> Cada una lleva su nota abajo. Las otras cinco (D10-1, D10-4, D10-5, D10-6 y
+> D10-7) siguen cerradas y no se reabren.
+>
 > El alcance cerrado hoy es **solo `/login`**. El resto del dashboard entra
 > después, cuando el dueño lo defina pantalla por pantalla.
 
@@ -23,6 +28,14 @@ que ya están en el repo.
 
 ## D10-2 · El login es una pantalla partida, con la publicidad a la izquierda
 
+> **DEROGADA 2026-09-26, en parte.** El dueño escogió como referencia nueva la
+> pantalla de acceso de Runway y derogó **el reparto** (que pasa a 50/50 sin
+> canal) y **la posición del pie** (que deja de ser full-width y se muda dentro
+> de la columna del login). **Sobrevive lo que dice qué va en cada lado:**
+> publicidad izquierda, login derecha, pie abajo. Las medidas de la referencia
+> están en el bloque `DEROGACIÓN 2026-09-26` de `10-UI-SPEC.md`. El texto de
+> abajo se conserva sin tocar, como registro de lo que se decidió el 2026-09-18.
+
 Cita literal: *"este login debe ser de una pantalla dividida en dos en desktop
 donde al lado izquierda hayan imágenes tipo carrousel porque ahí quiero vender
 publicidad"*.
@@ -34,6 +47,15 @@ publicidad"*.
 | Abajo, full-width | footer |
 
 ## D10-3 · La proporción es 45/45, NO 75/25
+
+> **DEROGADA 2026-09-26.** Quedan derogados **el número (45/45, que pasa a
+> 50/50) y la referencia (GlossGenius, que pasa a Runway)**. **Sobrevive su razón
+> de fondo, y es justamente la que hace admisible el 50%:** un formulario de
+> login necesita de 360 a 440px para no verse apretado, y a 1280px el 50% son
+> 640px, de sobra. El techo del 51% que se midió en el corpus tampoco se rompe.
+> Las medidas de la referencia nueva están en el bloque `DEROGACIÓN 2026-09-26`
+> de `10-UI-SPEC.md`. El texto de abajo se conserva sin tocar, con su cita
+> literal, como registro de lo que se decidió el 2026-09-18.
 
 El dueño pidió de entrada *"3/4 para el espacio publicitario y 1/4 para el
 login"*. Se buscaron en Refero cuatro consultas distintas sobre ~1.300 logins:
@@ -100,6 +122,19 @@ Fase 2 (§3, actualización del 2026-09-01). No se reabre.
    login es la pantalla equivocada, porque los propietarios no tienen cuenta en
    el sistema. Planteado al dueño, sin responder.
 2. **El formato del slot cuando haya anunciantes reales:** relación de aspecto
-   fija, conteo de impresiones, y qué se muestra cuando no hay anunciante.
+   fija, conteo de impresiones, y qué se muestra cuando no hay anunciante. Desde
+   el 2026-09-26, además, el recorte: el panel va a sangre completa, así que un
+   creativo real o se recorta o deja franjas contra el borde del navegador
+   (deuda 9 de `10-UI-SPEC.md` §15).
+
+   **Y ESTA PREGUNTA HEREDA UNA OBLIGACIÓN CONCRETA, que no es genérica y tiene
+   dueño: quien la responda tiene que volver a medir el contraste del wordmark
+   blanco del panel contra el creativo real.** Hoy el wordmark da **1.27:1**
+   sobre el gris más claro, contra un umbral de 3:1, y eso es una infracción de
+   WCAG 1.4.3 conocida y **aceptada por el dueño el 2026-09-26** con una premisa
+   explícita: los cuatro grises son placeholder, no el fondo final. La entrada
+   completa, con su etiqueta correcta (infracción aceptada, **no** exención), está
+   en `10-UI-SPEC.md` §10.4, y esta línea es el otro extremo de ese enlace. Si el
+   primer creativo es claro, el wordmark necesita velo o cambia de color.
 3. **El resto del dashboard.** Esta fase abre con el login; las demás pantallas
    se definen después.
