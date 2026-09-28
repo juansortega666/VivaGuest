@@ -66,3 +66,7 @@ public/swe-worker*
 
 # Lock de sesion de GSD: efimero, por sesion y por PID.
 .planning/milestone.lock
+
+# Salida del MCP de Playwright: capturas y snapshots de sesion.
+# Ademas, el watcher de next dev los ve y recompila en bucle.
+.playwright-mcp/
