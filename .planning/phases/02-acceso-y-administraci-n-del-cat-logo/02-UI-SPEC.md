@@ -235,6 +235,15 @@ Esta es la condición dura del brief. Se implementa así, **después** del `init
 }
 ```
 
+> **DEROGADO 2026-09-28 (solo las dos líneas del anillo).** El bloque de arriba se
+> conserva como registro, pero las líneas `--ring: var(--brand);` y
+> `--sidebar-ring: var(--brand);` ya no describen `app/globals.css`: el anillo de foco
+> se mudó al bloque de estados operativos y deriva de `--status-progress`. Motivo
+> medido: el anillo salía de `--brand` (#d1382c) y el borde de error sale de
+> `--destructive` (#9f1239), **1.65:1 entre sí** (sus anillos, 1.53:1), o sea un solo
+> objeto a la vista. El resto del bloque sigue vigente y el swap de marca sigue siendo
+> de esas mismas líneas de `--brand`.
+
 **Regla verificable en CI (grep, igual que el guardarraíl de `service_role`):** ningún archivo bajo `app/` o `components/` puede contener un hex literal ni una clase arbitraria de color (`bg-[#`, `text-[#`, `border-[#`, `#FF5A5F`, `#D7373F`). Si el grep encuentra uno, el swap de marca ya dejó de ser de dos líneas.
 
 ### 4.4 Lista cerrada de dónde se usa el acento
@@ -246,6 +255,16 @@ Esta es la condición dura del brief. Se implementa así, **después** del `init
 3. Anillo de foco (`--ring`) de cualquier control.
 4. Barra de progreso del banner de montaje (§9.1).
 5. Checkbox y switch en estado marcado.
+
+> **DEROGADO 2026-09-28 — el punto 3 sale de esta lista.** El anillo de foco ya no es
+> `--primary`: `--ring` deriva de `--status-progress` (azul) desde el rescate
+> `260928-lqd`. La razón está medida en el navegador el 2026-09-22: el anillo de marca
+> (#d1382c) y el borde de error (`--destructive`, #9f1239) dan **1.65:1 entre sí**, y
+> por debajo de 3:1 un campo enfocado y un campo con error son el mismo objeto a la
+> vista. El punto se conserva numerado para no mover la numeración de los otros cuatro
+> ni las referencias que apuntan a ellos; lo que cambia es que **el acento son cuatro
+> usos, no cinco**. Ver la nota de §4.3 y el bloque `FOCO — 2026-09-28` de
+> `app/globals.css`.
 
 **Prohibido explícitamente:** como color de estado, como tinte de fila, en badges, en iconos de tabla, en el wordmark, en links de texto, en encabezados. El wordmark "VivaGuest" va en `--foreground`: pintarlo del color placeholder es exactamente lo que haría doloroso el rebrand.
 

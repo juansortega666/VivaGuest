@@ -183,9 +183,7 @@
   /* Todo lo que es "de marca" deriva. Nunca al revés. */
   --primary:            var(--brand);
   --primary-foreground: var(--brand-foreground);
-  --ring:               var(--brand);
   --sidebar-primary:    var(--brand);
-  --sidebar-ring:       var(--brand);
 
   /* Estados operativos: NO son de marca y NO cambian con el rebrand. */
   --status-ok:   oklch(0.5273 0.1371 150.07);
@@ -201,6 +199,30 @@
      que no colisiona con --primary (hue 29) ni con --destructive (hue 13.7), que
      es el choque declarado en 02-UI-SPEC.md §4.6. */
   --status-progress: oklch(0.4882 0.2172 264.38);
+
+  /* FOCO — 2026-09-28. El anillo DEJA DE SER de marca y se muda aqui, al bloque
+   * de estados operativos, desde el bloque de MARCA donde vivia.
+   *
+   * POR QUE CAMBIA EL VALOR: el anillo salia de --brand (#d1382c) y el borde de
+   * error sale de --destructive (#9f1239). Medidos en el navegador el 2026-09-22,
+   * los dos rojos dan 1.65:1 entre si (sus anillos, 1.53:1). Por debajo de 3:1 no
+   * son dos estados distintos: un campo enfocado y un campo con error son el mismo
+   * objeto a la vista. --status-progress ya venia medido el 2026-09-03 (6.70:1
+   * sobre --background, 6.25:1 sobre --canvas) y es azul, asi que no colisiona ni
+   * con el hue 29 de --primary ni con el hue 13.7 de --destructive, que es el
+   * choque declarado en 02-UI-SPEC.md §4.6.
+   *
+   * POR QUE VIVE AQUI Y NO ARRIBA: el foco NO es identidad. Un rebrand cambia
+   * --brand, --brand-identity y --brand-gold, y el indicador de foco tiene que
+   * sobrevivir a ese cambio sin tocarse, igual que los cinco estados operativos
+   * que este mismo archivo declara ajenos al rebrand. Devolverlo a var(--brand)
+   * reabre el hallazgo 2 de la auditoria del 2026-09-22.
+   *
+   * POR QUE `--sidebar-ring` SIGUE A `--ring`: es el mismo indicador en otra
+   * superficie, no un segundo token con vida propia. */
+  --ring:         var(--status-progress);
+  --sidebar-ring: var(--ring);
+
   --surface-ok:   oklch(0.9788 0.0221 160.24);
   --surface-warn: oklch(0.9810 0.0187 83.06);
   --surface-destructive: oklch(0.9708 0.0130 11.54);
@@ -714,6 +736,88 @@
   transition-property: color, background-color, border-color, opacity;
   transition-timing-function: ease-out;
   transition-duration: 120ms;
+}
+
+/* ── Fase 10: los cuatro grises del slot publicitario — 10-UI-SPEC.md §6.1 ───
+   D10-4: el placeholder del anuncio hace cross-fade entre cuatro grises. NO se
+   pueden reciclar los neutros que ya existen: --canvas contra --muted da
+   1.037:1, un paso que en un fundido de 600ms sobre 600px de ancho no se ve, y
+   la paleta actual solo alcanza para tres grises.
+
+   Estos cuatro tienen paso adyacente >= 1.11:1 y los cuatro quedan MAS OSCUROS
+   que --canvas (#F6F7F8), que es el fondo de la pagina: el paso mas claro
+   conserva 1.181:1 contra ella, asi que el borde de la tarjeta no se disuelve en
+   ningun momento del ciclo. De referencia, el borde que hoy separa una tabla de
+   la pagina (--canvas contra --border) es 1.168:1: el momento mas tenue del
+   panel sigue siendo mas visible que eso.
+
+   NO son de marca, NO cambian con el rebrand, y --brand-identity y --brand-gold
+   NO entran aca: un placeholder con el dorado de la identidad se leeria como una
+   pieza de diseno terminada, y el dorado da 1.69:1.                           */
+:root {
+  --anuncio-1: oklch(0.9200 0.0045 250);  /* #E2E5E7 */
+  --anuncio-2: oklch(0.8850 0.0060 250);  /* #D6D9DD */
+  --anuncio-3: oklch(0.8500 0.0075 250);  /* #CACED3 */
+  --anuncio-4: oklch(0.8150 0.0090 250);  /* #BEC3C8 */
+}
+
+@theme inline {
+  --color-anuncio-1: var(--anuncio-1);
+  --color-anuncio-2: var(--anuncio-2);
+  --color-anuncio-3: var(--anuncio-3);
+  --color-anuncio-4: var(--anuncio-4);
+}
+
+/* ── Fase 10: el ciclo del placeholder publicitario — 10-UI-SPEC.md §7 ───────
+   D10-4: cuatro grises, 5s por paso, 600ms de transicion. 4 x 5s = 20s de ciclo,
+   asi que el reposo de cada paso son 22% (4.4s) y el fundido 3% (0.6s).
+
+   `linear` y no `ease-out`: `ease-out` sobre un fundido de 600ms entre dos grises
+   a 1.115:1 arranca de golpe y se lee como un parpadeo. Un cross-fade entre dos
+   colores planos es lineal por definicion. El `ease-out` de 120ms del @utility
+   `transicion` sigue siendo la regla para TODO lo demas; esto es una animacion,
+   no una transicion de estado.
+
+   Se apaga con el bloque de prefers-reduced-motion que ya existe mas abajo en
+   este archivo. NO se anade una segunda regla: el sitio donde se apaga el
+   movimiento de este producto es uno solo, y el elemento cae a su propio
+   `background-color` (ver 10-UI-SPEC.md §7.3).                                */
+@theme {
+  --animate-anuncio: ciclo-anuncio 20s linear infinite;
+
+  @keyframes ciclo-anuncio {
+    0%,  22% { background-color: var(--anuncio-1); }
+    25%, 47% { background-color: var(--anuncio-2); }
+    50%, 72% { background-color: var(--anuncio-3); }
+    75%, 97% { background-color: var(--anuncio-4); }
+    100%     { background-color: var(--anuncio-1); }
+  }
+}
+
+/* ── Fase 10: la rejilla de /login — 10-UI-SPEC.md §2 ────────────────────────
+   50% publicidad · 50% login, sin canal entre las dos.
+
+   DEROGACION 2026-09-26, decidida por el dueno contra una referencia medida: la
+   pantalla de acceso de Runway, cuyo corte del split es el **50.3%** del ancho y
+   cuyas dos columnas se tocan, sin hueco. Eso DEROGA D10-2 (el reparto y el pie
+   full-width) y D10-3 (el 45/45 con GlossGenius como referencia). Lo que
+   sobrevive de D10-3 es su razon de fondo, y es la que hace admisible el 50%: un
+   formulario de login necesita de 360 a 440px para no verse apretado, y a 1280px
+   el 50% son 640px. El techo del 51% medido en el corpus de logins tampoco se
+   rompe.
+
+   YA NO HAY PISTA VACIA: el login se coloca en la columna 2, con
+   `lg:col-start-2`. La version derogada ponia un canal del 10% en el medio y
+   mandaba el login a la tercera pista.
+
+   Lo que NO cambia: el reparto vive como @utility y no como valor arbitrario en
+   el JSX, por la misma razon por la que los 120ms de movimiento viven en
+   `@utility transicion`. Es el contrato de la pantalla y tiene que estar en UN
+   sitio, con su razon al lado. Tailwind v4 no tiene namespace de plantilla de
+   rejilla, asi que un token no es posible; una utilidad si, y acepta variantes
+   (`lg:rejilla-login`).                                                       */
+@utility rejilla-login {
+  grid-template-columns: 50% 50%;
 }
 
 @layer base {

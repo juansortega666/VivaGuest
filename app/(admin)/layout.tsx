@@ -60,7 +60,7 @@ export default async function AdminLayout({
   const nombre = perfil?.full_name ?? user.email ?? 'Administrador';
 
   return (
-    <div className="min-h-svh bg-canvas">
+    <div className="min-h-[calc(100svh-var(--alto-barra-pruebas,0px))] bg-canvas">
       <TopNav nombre={nombre} />
 
       {/* Contenedor de contenido de §6.2: 1440px, centrado, 24px de padding

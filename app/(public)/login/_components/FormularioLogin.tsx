@@ -31,7 +31,21 @@ function BotonEntrar() {
       // su ancho no depende del contenido y el cambio de label no puede hacerlo
       // saltar. Poner un `min-w-[…]` seria ademas un valor arbitrario de
       // espaciado, que §2 prohibe fuera de la escala de tokens.
-      className="w-full"
+      //
+      // `ring-ring/70` es el HALLAZGO 4 de la auditoria del 2026-09-22, rescatado
+      // el 2026-09-28. Sube de /50 a /70 por medicion y no por gusto: el anillo se
+      // pinta FUERA del borde, y lo que decide si el foco se ve es el contraste de
+      // esos MISMOS pixeles entre el estado con foco y el estado sin el (WCAG 2.2
+      // SC 2.4.13, que pide 3:1). Medido sobre la superficie clara del login:
+      //     /50 -> #8ea6eb, 2.39:1   (no llega)
+      //     /65 -> #6c8ce6, 3.22:1   (justo en el umbral)
+      //     /70 -> #6083e4, 3.58:1   (elegida; sobre el producto, 3.57:1)
+      // Quien desplaza el /50 de la primitiva NO es la cascada, es `cn()`: las dos
+      // clases caen en el mismo grupo de `tailwind-merge` con el mismo modificador,
+      // asi que la local gana y la de la primitiva desaparece del DOM.
+      // La primitiva se queda en /50 para todo el producto: la decision del dueno
+      // del 2026-09-22 es no tocarla, y esta pantalla es la que se audito.
+      className="w-full focus-visible:ring-ring/70"
     >
       {pending ? (
         <>
@@ -88,6 +102,34 @@ export function FormularioLogin() {
           required
           aria-invalid={errorDeEmail || undefined}
           aria-describedby={errorDeEmail ? `${idError}-email` : undefined}
+          // Parche local (rescatado el 2026-09-28) de un defecto de cascada de
+          // `components/ui/input.tsx`. Alli `aria-invalid:ring-destructive/20` va
+          // DESPUES de `focus-visible:ring-ring/50` en la misma cadena y con la
+          // misma especificidad, asi que gana la ultima: un campo con error NO
+          // cambia NADA al recibir el foco, que es exactamente el estado en que
+          // queda el formulario despues de un login fallido. Medido el 2026-09-22
+          // en el navegador: invalido-sin-foco e invalido-con-foco pintaban el
+          // mismo anillo #ecd0d7, delta-E OKLab entre los dos estados = 0,
+          // literalmente el mismo pixel.
+          //
+          // Por que el parche esta AQUI y no en la primitiva: decision del dueno
+          // del 2026-09-22, `components/ui/input.tsx` no se toca.
+          //
+          // Por que funciona: `aria-invalid` mas `focus-visible` suma una
+          // pseudo-clase sobre la cadena de la primitiva, asi que gana por
+          // ESPECIFICIDAD y no por orden, y no cambia nada fuera de esta pantalla.
+          //
+          // El borde se queda en `--destructive`, porque lo que se recupera es el
+          // FOCO, no el error: el error lo siguen comunicando el borde rojo y el
+          // texto del `FieldError`. Un parche que pintara el campo entero del color
+          // del foco perderia el estado de error.
+          //
+          // Y el /70 es el HALLAZGO 4, medido el 2026-09-22: a /50 el anillo daba
+          // 2.39:1 (#8ea6eb), por debajo del 3:1 de WCAG 2.2 SC 2.4.13; a /65,
+          // 3.22:1 (#6c8ce6); a /70, 3.58:1 (#6083e4). La salida alternativa
+          // —darlo por cumplido porque el borde ya cambia— queda descartada CON
+          // numero: el borde pasa de #858d9a a #1d4ed8, que son 2:1 entre si.
+          className="focus-visible:ring-ring/70 aria-invalid:focus-visible:ring-ring/70"
         />
         {errorDeEmail && <FieldError id={`${idError}-email`}>{estado.error}</FieldError>}
       </Field>
@@ -103,7 +145,10 @@ export function FormularioLogin() {
             required
             aria-invalid={errorDePassword || undefined}
             aria-describedby={errorDePassword ? `${idError}-password` : undefined}
-            className="pr-9"
+            // Mismo parche local del campo de email y mismo /70 del hallazgo 4,
+            // por las mismas razones: ver el comentario largo de arriba. `pr-9` es
+            // lo de siempre, el hueco del boton del ojo, y se queda.
+            className="pr-9 focus-visible:ring-ring/70 aria-invalid:focus-visible:ring-ring/70"
           />
           <Button
             type="button"
@@ -114,7 +159,11 @@ export function FormularioLogin() {
             aria-label={verContrasena ? 'Ocultar contraseña' : 'Mostrar contraseña'}
             aria-pressed={verContrasena}
             onClick={() => setVerContrasena((v) => !v)}
-            className="absolute inset-y-0 right-1 my-auto"
+            // Mismo /70 del hallazgo 4: es un control enfocable mas de esta
+            // pantalla y su anillo se pinta sobre la misma superficie clara. No
+            // lleva la variante `aria-invalid:`, y no es un olvido: `aria-invalid`
+            // solo lo pone el formulario sobre los campos, nunca sobre un boton.
+            className="absolute inset-y-0 right-1 my-auto focus-visible:ring-ring/70"
           >
             {verContrasena ? (
               <EyeOff aria-hidden="true" />

@@ -1,5 +1,12 @@
 {
   "model_profile": "quality",
+  "model_profile_overrides": {
+    "claude": {
+      "opus": {
+        "model": "claude-opus-5"
+      }
+    }
+  },
   "commit_docs": true,
   "parallelization": true,
   "search_gitignored": false,

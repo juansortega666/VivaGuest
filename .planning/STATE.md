@@ -1,20 +1,20 @@
 ---
-gsd_state_version: 1.0
+gsd_state_version: "1.0"
 milestone: v1.0
-milestone_name: milestone
-current_phase: 09
-current_phase_name: el-producto-probado-de-punta-a-punta
-status: paused
-stopped_at: Fase 09 PARADA A PROPOSITO en 3/7 (09-01, 09-02, 09-04) por decision del dueno. El criterio 1 esta cumplido: el recorrido del Core Value existe y pasa. Quedan 09-05, 09-06, 09-07 y 09-03 (checkpoint humano con los 39 feeds reales)
-last_updated: "2026-09-18T06:00:00.000Z"
-last_activity: 2026-09-18
-last_activity_desc: "El recorrido del Core Value existe por primera vez: del .ics de Airbnb al recibo de la aseadora, un solo test, 75 aserciones, cero insert directo"
+current_phase: 10
+current_phase_name: Rediseño del dashboard admin
+status: executing
+stopped_at: "Quick 260928-lqd completo: el anillo de foco rescatado y e2e/login.spec.ts en 22. La FASE 10 sigue sin declararse cerrada: lo decide el verificador y el dueno tiene pendiente si sigue con mas pantallas del dashboard."
+last_updated: "2026-09-28T21:35:00.000Z"
+last_activity: 2026-09-28
+last_activity_desc: "Quick 260928-lqd: rescate de los tres arreglos de foco de /login"
+state_head: dc233720125bbada8b35b178ddb8310b934cc84c
 progress:
-  total_phases: 9
+  total_phases: 10
   completed_phases: 6
-  total_plans: 103
-  completed_plans: 99
-  percent: 96
+  total_plans: 113
+  completed_plans: 107
+milestone_name: milestone
 ---
 
 # Project State
@@ -24,14 +24,14 @@ progress:
 Ver: .planning/PROJECT.md (actualizado 2026-08-31)
 
 **Core value:** Que ningún aseo se pierda: todo checkout detectado en calendario termina en un aseo confirmado, asignado y ejecutado con evidencia, sin coordinación manual por WhatsApp.
-**Current focus:** Fase 5, notificaciones push e instalacion de la PWA. `discuss-phase 5` cerrado el 2026-09-10 con `05-CONTEXT.md`; siguiente paso `ui-phase 5`. Pendiente aparte y sin bloquear: el visto bueno humano sobre las tres verificaciones perceptuales del plan 04-14.
+**Current focus:** Phase 10 — Rediseño del dashboard admin
 
 ## Current Position
 
-Phase: 07 (financiero) — **CONSTRUIDA. Falta UN checkpoint humano.**
-Plan: 14 of 14 ejecutados. `07-13` esta parado en su `checkpoint:human-verify`.
-Status: **Lo unico que falta para cerrar la fase es el recorrido de nueve puntos en un iPhone real.** Todo lo automatizable esta en verde.
-Last activity: 2026-09-13 - las ocho waves ejecutadas; el filtro del Resumen arreglado tras el hallazgo de 07-14
+Phase: 10 (Rediseño del dashboard admin) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-09-28 — Phase 10 execution started
 
 ### Las cuatro suites, medidas con el arbol quieto y la base reseteada
 
@@ -391,8 +391,19 @@ Progress: [██████████] 100%
 | Phase 07 P11 | 75min | 2 tasks | 11 files |
 | Phase 07 P12 | 135min | 3 tasks | 13 files |
 | Phase 07 P14 | 4h30m | 4 tasks | 6 files |
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 10 P02 | 9m 22s | 3 tasks | 4 files |
+| Phase 10 P01 | 20min | 3 tasks | 4 files |
+| Phase 10 P04 | 1h 43m | 4 tasks | 10 files |
 
 ## Accumulated Context
+
+### Roadmap Evolution
+
+- Fase 10 agregada (2026-09-18): rediseño del dashboard admin, arrancando por `/login` como pantalla partida con panel de publicidad placeholder
 
 ### Decisions
 
@@ -470,6 +481,10 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Phase ?]: 07-14: la concurrencia del cierre se mide con dos procesos psql de verdad (docker exec al contenedor del stack local) sincronizados con pg_sleep_until, no con dos llamadas en paralelo a PostgREST. El test EXIGE que los intervalos de las dos sesiones se solapen: sin esa asercion, dos llamadas que se estorbaron por casualidad dejarian el mismo estado que dos simultaneas
 - [Phase ?]: 07-14: page.waitForURL y expect(page).toHaveURL NUNCA ven el cambio de URL de FiltroPeriodo, ni con 20 s de plazo, porque su sondeo corre dentro del documento y se traba con el commit de la transicion de React. Se sondea page.url() desde Node y la asercion sobre la URL se escribe despues
 - [Phase ?]: 07-14: app/(admin)/finanzas/loading.tsx cuelga el filtro de periodo. Aislado con ocho corridas: sin el archivo 4/4 en verde, con el archivo 6 fallos en 4. loading.tsx es el fallback de Suspense DEL SEGMENTO y tambien se aplica al cambio de parametros de la misma ruta. No se arregla desde 07-14 por alcance: afecta a cuatro rutas
+- [Phase 09]: El pie de login mide la ausencia de borde contra la clase del <footer>, no contra el markup completo: border-transparent de la clase base del Button hace de border-t un rojo permanente
+- [Phase 09]: Las aserciones de conteo usan .match(...) ?? [] para que el rojo nombre el conteo en vez de 'Target cannot be null or undefined'
+- [Phase 09]: El 10% que falta en /login es UN canal central (45/10/45 con la columna del medio vacia), no dos margenes exteriores: deja la pantalla con dos numeros en vez de tres blancos por viewport
+- [Phase 09]: test.use({ reducedMotion: 'reduce' }) no compila con @playwright/test@1.62.1; la emulacion se declara por contextOptions, y el senuelo 5 comprobo que llega al CSS
 
 ### Pending Todos
 
@@ -504,6 +519,7 @@ Ninguno.
 | 260918-a33 | RET-07: el admin ve el consumo de Storage y la alerta salta al 70%. Lo unico que avisa antes de llenarse, porque el dueno decidio que nada se borra nunca | 2026-09-18 | e4de15a | [260918-a33-alerta-de-storage](./quick/260918-a33-alerta-de-storage/) |
 | 260918-h47 | Fuera el asistente de instalacion entero: 1842 lineas de una isla muerta, los cuatro enlaces rotos y el item del menu. El dueno instala cada telefono a mano | 2026-09-18 | c471318 | [260918-h47-fuera-el-asistente-de-instalacion](./quick/260918-h47-fuera-el-asistente-de-instalacion/) |
 | 260918-h47 | Fuera el asistente de instalacion, entero: la isla muerta de `/instalar`, los cuatro enlaces del banner que caian en 404 y el link del menu del admin. `BotonActivarAvisos` y toda la deteccion de instalacion se conservan | 2026-09-18 | 793091b | [260918-h47-fuera-el-asistente-de-instalacion](./quick/260918-h47-fuera-el-asistente-de-instalacion/) |
+| 260928-lqd | Rescate de los tres arreglos de foco de `/login` de la rama paralela que se borra: `--ring` deja el bloque de marca y pasa a `--status-progress` (los dos rojos median 1.65:1 entre si), el campo invalido recupera su foco por parche local (los dos estados eran el mismo pixel, delta-E 0) y el anillo sube de /50 a /70 (2.39:1 -> 3.58:1, WCAG 2.2 SC 2.4.13). `e2e/login.spec.ts` 19 -> 22, cero borrados. El boton `Entrar` sigue rojo | 2026-09-28 | d9142f9 | [260928-lqd-rescate-foco-login](./quick/260928-lqd-rescate-foco-login/) |
 
 ## Consecuencias de la Fase 1 para fases posteriores
 
@@ -567,11 +583,12 @@ Registradas por el plan 07-14 el 2026-09-13 al cerrar la fase. **Los planners de
 | Calendario | Integración con Booking.com | Fuera de MVP | 2026-08-31 |
 | Calendario | Google Calendar como fuente (es suscriptor del mismo .ics) | Descartado | 2026-08-31 |
 | Piloto | Métrica de éxito del piloto sin definir | Abierto | 2026-08-31 |
+| Accesibilidad | El anillo de foco no llega a 3:1 contra el relleno del botón primario (2.04:1 a /50, 1.36:1 a /70, bajando). Choque de luminancias entre `--ring` y `--primary`: solo se cierra decidiendo el valor de marca, nunca subiendo la opacidad. Detalle en `deferred-items.md` de la Fase 10, entrada 4 | Abierto, necesita decisión del dueño | 2026-09-28 |
 
 ## Session Continuity
 
-Last session: 2026-09-14T02:29:36.832Z
-Stopped at: Completado 07-14-PLAN.md. Fase 07 ejecutada entera salvo el checkpoint humano de 07-13.
+Last session: 2026-09-28T21:35:00.000Z
+Stopped at: Quick 260928-lqd completo (3 commits, `e2e/login.spec.ts` de 19 a 22 en verde). La FASE 10 sigue sin declararse cerrada: lo decide el verificador y el dueno tiene pendiente si sigue con mas pantallas del dashboard.
 
 **Abiertos:** (1) el checkpoint humano de **07-13**, el recorrido de nueve puntos en un iPhone real; sin el, la Fase 7 no cierra y 07-13 no tiene SUMMARY a proposito. (2) el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real, con sus cinco criterios de fallo en `06-10-SUMMARY.md`.
 

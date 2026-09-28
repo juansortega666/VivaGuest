@@ -326,6 +326,7 @@ Plans:
 **Plans**: 14 plans, en 7 waves
 
 Plans:
+
 - [x] 08-01-PLAN.md — Wave 0: la migración 28 (el detalle de aseo con guarda de admin) y el bloque P de pgTAP, con sus cuatro señuelos
 - [x] 08-02-PLAN.md — Wave 0: el spike que mide si el filtro y el scroll sobreviven a abrir un panel, y el barrido de aserciones que el portal deja vacías
 - [x] 08-03-PLAN.md — Wave 0: los dos módulos de dominio que el UI-SPEC daba por existentes y no existen (checkouts y salud del feed)
@@ -382,6 +383,7 @@ que se construya. Está en `.planning/ESTRATEGIA-DE-PRUEBAS.md` con su cita.
 **Plans**: 7 plans, en 4 waves
 
 Plans:
+
 - [ ] 09-01-PLAN.md — Wave 1: el arnés del recorrido (proveedor `.ics` local, sembrador y worker por HTTP) y el tramo del `.ics` al aseo visible en `/operacion`
 - [ ] 09-02-PLAN.md — Wave 1: los dos rojos del instrumento que ya traen su arreglo escrito, para que el criterio 5 sea medible
 - [ ] 09-03-PLAN.md — Wave 1: la carga de los 39 apartamentos reales, con su auditor de catálogo y su checkpoint del dueño
@@ -434,6 +436,31 @@ Fases con patrón ya documentado en el research (se puede saltar):
 ## Cobertura de requisitos
 
 83 de 83 requisitos v1 mapeados, cada uno a exactamente una fase. Sin huérfanos ni duplicados. Ver la tabla de trazabilidad en `.planning/REQUIREMENTS.md`.
+
+### Phase 10: Rediseño del dashboard admin
+
+**Goal:** Que el dashboard del admin deje de verse como shadcn recién instalado y se vuelva un producto. El primer entregable, y el único alcance cerrado hoy, es `/login`: pantalla partida **50/50** sin canal entre las columnas, con el slot publicitario **a sangre completa** en la mitad izquierda (placeholder animado entre cuatro grises, pegado a los cuatro bordes, con el wordmark en blanco arriba a la izquierda) y el bloque de login **sin tarjeta** centrado en la mitad derecha, con el pie **dentro de esa misma columna**: copyright de año dinámico e iconos de Instagram y TikTok en disabled. Debajo de 1024px el panel de publicidad desaparece y queda el login centrado actual con el pie apilado. Se conservan el wordmark Poppins, los 400px del formulario y los tokens del UI-SPEC vigente. Referencia: la pantalla de acceso de Runway, escogida por el dueño el 2026-09-26, que **deroga D10-2 y D10-3** (el 45/45 con canal del 10% y el footer full-width, con GlossGenius como referencia).
+**Requirements**: — (ninguno nuevo; PLAT-01 y PLAT-02 ya están entregados y esta fase no cambia su comportamiento)
+**Depends on:** Phase 9
+**Plans:** 4/4 plans executed
+
+Plans:
+**Wave 1**
+
+- [x] 10-01-PLAN.md — El trazador: la rejilla 45/10/45, el panel publicitario y su ciclo de cuatro grises (wave 1)
+- [x] 10-02-PLAN.md — El pie de página y sus dos glifos de marca, probados sin navegador (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 10-03-PLAN.md — El año de Bogotá, el pie cableado, y la suite completa como regresión (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 10-04-PLAN.md — El rediseño contra la referencia de Runway: 50/50, panel a sangre completa, login sin tarjeta, dos wordmarks y el pie dentro de la columna. Deroga D10-2 y D10-3 (wave 3)
+
+**Cross-cutting constraints:**
+
+- Las aserciones nuevas se vieron en rojo con un señuelo antes de darse por buenas
 
 ---
 *Roadmap creado: 2026-08-31. Resecuenciado para equipo de dos, con el job de borrado movido después del piloto. Google Calendar descartado como fuente: es otro suscriptor del mismo `.ics` de Airbnb.*

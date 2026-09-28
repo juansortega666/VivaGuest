@@ -1,91 +1,111 @@
-# RETOMAR — punto de pausa del 2026-09-18
+# RETOMAR — punto de pausa del 2026-09-22
 
 > Escribe **`RETOMAR`** en una sesión nueva, parada en la raíz del repo.
 > Este archivo primero. Después `.planning/STATE.md`.
 
 ---
 
+## LO PRIMERO: LA PREGUNTA DEL 18-SEP YA TIENE RESPUESTA
+
+El punto de pausa anterior decía que lo más valioso que faltaba era saber qué
+quiso decir el dueño con *"la app es inusable"*, preguntado cuatro veces sin
+contestar.
+
+**Se respondió solo, sin volver a preguntar:**
+
+- 19-sep: *"¿qué biblioteca de componentes estamos usando? porque los que veo
+  actualmente están espantosos"*
+- 22-sep: *"lo que me preocupa es el diseño que estamos haciendo, está
+  espantoso"* — y se fue a instalar skills de UI y producto
+
+**Es diseño, no funcionalidad.** Y está medido que **no es la biblioteca**: es
+shadcn/ui 4.19.1 estilo `base-nova` sobre `@base-ui/react@1.7.0`, 26 componentes
+copiados en `components/ui/` y editables uno por uno. Lo que se ve genérico es
+el **tema**: `baseColor: neutral` y los tokens sin tocar en `app/globals.css`.
+Cambiar de biblioteca no arregla nada.
+
+**Lo que esto NO responde:** las otras tres sospechas de
+`.planning/codebase/CONCERNS.md` siguen abiertas, y la primera pesa: **la cola
+offline nunca se construyó**, aunque `PROJECT.md` la declara como constraint
+desde el día uno.
+
+---
+
 ## DÓNDE ESTÁ EL PROYECTO
 
-**Las 83 funciones del alcance v1 están construidas.** No falta ninguna por
-desarrollar. Lo que sigue **no es construir features**: es hacer que el producto
-sirva.
+Las 83 funciones del alcance v1 están construidas. Las fases 1 a 8 completas y
+mergeadas; la 9 parada a propósito en 3/7 por decisión del dueño.
 
-| Fase | Estado |
+**La Fase 10 nació el 19-sep y está a medias**: rediseño del dashboard admin,
+empezando por `/login`.
+
+### Rama `gsd/phase-10-rediseno-del-dashboard-admin`, sin subir
+
+| | Estado |
 |---|---|
-| 1 a 8 | completas y mergeadas |
-| 9 (producto probado) | **parada a propósito en 3/7**, por decisión del dueño |
+| `10-CONTEXT.md` | 7 decisiones del dueño, CERRADAS (D10-1 a D10-7) |
+| `10-UI-SPEC.md` | aprobado 7/7 por el checker |
+| `10-01`, `10-02` | ejecutados, wave 1 |
+| `10-03` | 3 de 4 tareas. **Task 4 es un checkpoint humano y sigue abierto** |
 
-**Suites:** unit 1236 · pgTAP 389 · integración 205 · E2E 160 colectados, 159
-verdes, 1 saltado, **cero rojos**.
+### Lo que se construyó
 
-`main` está en GitHub, árbol limpio, nada sin subir.
+Pantalla partida 45/10/45 a partir de 1024px: panel de publicidad a la
+izquierda, login a la derecha, footer full-width con año dinámico de Bogotá y
+dos iconos deshabilitados (Instagram y TikTok, dibujados a mano porque
+`lucide-react@1.39.0` no trae iconos de marca).
 
----
+Después, dos cosas más, ya commiteadas:
 
-## LO PRIMERO: LA PREGUNTA QUE SIGUE SIN RESPUESTA
-
-El 2026-09-18 el dueño dijo, textual:
-
-> *"realmente la app es inusable y seguramente para allá vamos a mover nuestros
-> esfuerzos"*
-
-**Se le preguntó cuatro veces qué vio. No contestó.**
-
-Es el dato más valioso que falta. Las 83 funciones existen y las cuatro suites
-están verdes, así que "inusable" **no significa que falte una función**:
-significa que algo del uso real no se sostiene.
-
-**Pregúntaselo antes de proponer nada.** Si no contesta, las pistas están en
-`.planning/codebase/CONCERNS.md`, 14 puntos ordenados por impacto operativo. Los
-tres candidatos:
-
-1. el filtro de periodo de `/finanzas` colgándose al cambiar de rango
-2. los huecos de contrato de los paneles laterales (§17 de `08-UI-SPEC.md`)
-3. **la cola offline NUNCA se construyó**, aunque `PROJECT.md` la declara como
-   constraint desde el día uno
-
-Y uno ya arreglado que tenía exactamente esa textura: el toast de cancelar un
-aseo no aparecía **1 de cada 3 veces**. Hacías la acción, funcionaba, y la app no
-te decía nada.
+- `e578b28` — **la tarjeta del anuncio tiene forma propia**. La primera versión
+  usaba `size-full` y se estiraba a todo el alto de la columna, así que su
+  proporción la decidía la ventana: 0.68, y el dueño lo llamó desproporcionado
+  al verlo. Ahora `aspect-[0.93]`, la misma de la referencia, medida en tres
+  viewports.
+- `675629b` — **la barra de ambiente de pruebas**, 48px, en el layout raíz, o
+  sea en los tres productos. Se muestra siempre salvo que el despliegue se
+  declare de producción con `NEXT_PUBLIC_VIVAGUEST_ENTORNO=produccion`, y esa
+  polaridad es deliberada: el olvido debe producir una barra de más en
+  producción, no una de menos en pruebas.
 
 ---
 
-## LO QUE SE HIZO EL 2026-09-18, Y POR QUÉ IMPORTA
+## LO QUE NO SE DEBE DAR POR BUENO
 
-**GSD actualizado de 1.6.1 a 1.14.0.** Respaldo del viejo en
-`~/.claude/gsd-core.bak-1.6.1`. Un parche local quedó en `gsd-local-patches/` sin
-re-aplicar (es de `complete-milestone.md`, workflow que nunca se ha corrido).
+1. **La suite E2E no se ha corrido desde la barra de pruebas.** Varias pruebas
+   miden posiciones y todo bajó 48px. Es probable que haya rojos. La última
+   corrida verde completa fue antes de ese commit: 171 pasaron, 1 saltado.
+2. **El checkpoint visual de `10-03` Task 4 sigue abierto.** Son dos juicios que
+   ninguna prueba puede emitir: si el fundido entre los cuatro grises se percibe
+   de verdad, y si los dos glifos deshabilitados se leen a 16px.
+3. **El dueño sigue diciendo que el diseño está espantoso**, después de todo lo
+   anterior. Lo del `/login` resolvió la geometría, no el gusto.
 
-**El código mapeado por primera vez**, 4 agentes en paralelo → 7 documentos en
-`.planning/codebase/`, 1211 líneas. **Léelos antes de planear cualquier cosa.**
+---
 
-**`CLAUDE.md` mentía en 4 puntos del stack** y se corrigió. Ese archivo se carga
-como instrucciones vinculantes en cada sesión, así que cualquier agente que
-arrancara planeaba contra un stack inexistente.
+## LA MÁQUINA NO TIENE MEMORIA, Y ESO BLOQUEA TRABAJO REAL
 
-**El recorrido del Core Value existe por primera vez** (`e2e/`, plan `09-04`): un
-solo test que va del `.ics` de Airbnb al recibo que abre la aseadora, cruzando
-sync, confirmación, asignación, push, checklist, foto real subida al bucket,
-margen y cierre de periodo. **75 aserciones, cero `insert` directo sobre
-`cleanings`.**
+El 19-sep el servidor de `next start` **murió tres veces**, cada una por
+`system is running low on memory`. Medido: entre 13 y 50 MB libres.
 
-Antes había 159 pruebas que decían *"esta pantalla funciona"* y **ninguna** que
-dijera *"el producto funciona"*.
+Docker y su VM se llevan casi un giga, y es donde corre Supabase local. Para
+mirar `/login` no hace falta: esa página no consulta la base.
+
+**Antes de levantar un servidor o correr E2E, mira `vm_stat`.** Con menos de
+~200 MB libres, va a morir. No relanzar en bucle.
 
 ---
 
 ## LAS DECISIONES DEL DUEÑO QUE NO SE REABREN
 
-1. **Nada se borra nunca.** Ni fotos a los 30 días ni aseos a los 6 meses. El
-   espacio se resuelve pagando Supabase Pro. De los 7 requisitos RET quedó
-   RET-07 (alerta al 70%), ya hecho. Los demás en `BACKLOG.md`.
-2. **El asistente de instalación se eliminó entero** (1842 líneas). La PWA se
-   instala a mano, teléfono por teléfono. **Sobrevive el botón de activar
-   avisos**, porque el permiso de push no se puede conceder desde fuera de la
-   app.
+1. **Nada se borra nunca.** Ni fotos a los 30 días ni aseos a los 6 meses.
+2. **El asistente de instalación se eliminó entero.** Sobrevive el botón de
+   activar avisos.
 3. **Los paneles laterales** son para mostrar información de algo seleccionado.
    Crear y editar siguen siendo páginas.
+4. **El login va 45/45, no 75/25** (D10-3). Pidió 3/4 de publicidad; medidos
+   ~1.300 logins en Refero, ninguno llega ahí, y el techo del corpus es 51%.
+   Escogió la proporción de GlossGenius invertida.
 
 ---
 
@@ -93,38 +113,38 @@ dijera *"el producto funciona"*.
 
 | Qué | Quién |
 |---|---|
-| **Los 39 apartamentos reales sin cargar** (plan `09-03`, preparación lista) | el dueño, los links de iCal no están en el repo |
+| El diseño, que es donde está su preocupación hoy | conversar con él, va a traer skills de UI |
+| Checkpoint visual de `10-03` Task 4 | el dueño |
+| E2E completa tras la barra de pruebas | agente, cuando haya memoria |
+| Los 39 apartamentos reales sin cargar (plan `09-03`) | el dueño, los links no están en el repo |
 | `07-13`, el recorrido de 9 puntos en un iPhone real | el dueño |
 | `05-17`, la verificación de la Fase 5, nunca se corrió | agente |
-| `09-05`, `09-06`, `09-07` de la Fase 9 | agente |
-
-**Nada de esto bloquea empezar a trabajar en el producto.**
-
----
-
-## ANTES DE TOCAR CÓDIGO
-
-```bash
-npx supabase start
-npm run db:reset
-```
-
-Y lee `COMO-CORRER-PRUEBAS.md` en la raíz. Tiene tres trampas que **parecen bugs
-y no lo son**, y cada una cuesta una hora de diagnóstico si nadie te las contó.
-La peor: sin `PLAYWRIGHT_PORT=3210` la suite corre contra la aplicación de otro
-proyecto y da 14 rojos falsos.
+| `09-05`, `09-06`, `09-07` | agente |
 
 ---
 
 ## EL MÉTODO DE ESTE PROYECTO
 
 **Ninguna aserción cuenta hasta haberla visto en rojo.** Se mete el defecto a
-propósito, se comprueba que la prueba lo atrapa, se anota, y se quita.
+propósito, se comprueba que la prueba lo atrapa, se anota el mensaje literal, y
+se quita.
 
-No es ceremonia. En esta última sesión, **tres señuelos no pusieron nada en
-rojo**, y cada uno destapó una prueba que llevaba tiempo sin comprobar nada. Uno
-de ellos dejó un caso en verde dos veces seguidas: la fuga de datos estaba en una
-pantalla que la prueba no miraba.
+En la Fase 10 eso pagó tres veces: un señuelo dejó el panel **transparente** con
+los otros 11 casos en verde; otro demostró que `toBeDisabled()` de Playwright
+pasa en verde sobre una trampa de foco real; y tres señuelos caían por una
+aserción distinta de la prevista, o sea que la del contrato no estaba midiendo
+nada hasta que se aislaron.
 
 **Y lo conversado va antes que lo ejecutado:** definir y analizar huecos hablando
 con el dueño **antes** de lanzar cualquier comando GSD.
+
+---
+
+## UNA LECCIÓN DE ESTA TANDA, PARA NO REPETIRLA
+
+Cuando el dueño dijo que el panel se veía desproporcionado, señalé el canal
+central como culpable y le propuse dos opciones para cambiarlo. **Medida la
+referencia que él mismo había escogido, su canal es 8.5% contra nuestro 10%:
+prácticamente igual, y no era el problema.** Era la proporción de la tarjeta.
+
+Medir la referencia antes de proponer el cambio habría ahorrado la vuelta.
