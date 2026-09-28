@@ -828,3 +828,376 @@ test.describe('Los dos iconos de redes no atrapan el foco', () => {
     }
   });
 });
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * EL ANILLO DE FOCO. Tres casos rescatados de la rama paralela
+ * `juansortega666/10-04-correcciones-de-login` el 2026-09-28 y reaplicados sobre
+ * el rediseno del 2026-09-26. NO son un cherry-pick: de aquella rama solo cruzan
+ * los tres arreglos de accesibilidad, y ni una sola de sus aserciones de
+ * geometria, que el rediseno del dueno derogo.
+ *
+ * Lo que defienden, en orden:
+ *
+ *   1. Que `--ring` ya no es ninguno de los dos rojos. Salia de `--brand` y el
+ *      borde de error sale de `--destructive`: medidos el 2026-09-22, 1.65:1
+ *      entre si, o sea un solo objeto a la vista.
+ *   2. Que un campo con error CAMBIA al recibir el foco. El defecto de cascada de
+ *      `components/ui/input.tsx` lo hacia imposible: los dos estados eran el
+ *      mismo pixel (#ecd0d7, delta-E OKLab = 0).
+ *   3. Que los cuatro controles enfocables pintan su anillo al 70%. WCAG 2.2
+ *      SC 2.4.13 pide 3:1 entre los mismos pixeles con foco y sin el: /50 da
+ *      2.39:1 y no llega, /70 da 3.58:1.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+test.describe('El anillo de foco no es de marca', () => {
+  test('el anillo de foco no es ninguno de los dos rojos', async ({ page }) => {
+    await page.goto('/login');
+
+    // Sondas, nunca literales escritos a mano. La razon esta medida y ya vive en
+    // este archivo (ver la cabecera del caso de movimiento reducido):
+    // `getComputedStyle` devuelve el valor TAL COMO lo declara la capa de tokens,
+    // y el declarado y el computado no son la misma cadena. Comparar contra un
+    // hexadecimal da un rojo que no significa nada.
+    const sondas = await page.evaluate(() => {
+      const sonda = (token: string) => {
+        const div = document.createElement('div');
+        div.style.backgroundColor = `var(${token})`;
+        document.body.appendChild(div);
+        const v = getComputedStyle(div).backgroundColor;
+        div.remove();
+        return v;
+      };
+
+      return {
+        anillo: sonda('--ring'),
+        progreso: sonda('--status-progress'),
+        marca: sonda('--brand'),
+        destructivo: sonda('--destructive'),
+      };
+    });
+
+    // DEFECTO DE INSTRUMENTO, MEDIDO EL 2026-09-28 corriendo el senuelo 1: si la
+    // hoja de estilos no llega (paso de verdad, con un servidor de produccion que
+    // servia HTML de un build anterior y pedia un `.css` que ya no existia), las
+    // CUATRO sondas devuelven `rgba(0, 0, 0, 0)` y la asercion de identidad de
+    // abajo pasa en VERDE por vacuidad: transparente es igual a transparente. Las
+    // dos negaciones si lo atrapan, pero acusando al token de haber cambiado
+    // cuando lo que pasa es que no hay tokens. Esta guardia hace que el rojo diga
+    // la verdad.
+    expect(
+      sondas.anillo,
+      'Las sondas devolvieron transparente: la capa de tokens no llego al navegador. ' +
+        'No es un defecto del producto, es el instrumento midiendo una pagina sin CSS.',
+    ).not.toBe('rgba(0, 0, 0, 0)');
+
+    // LA IDENTIDAD: el anillo ES el azul de estado. Si alguien devuelve el token
+    // al bloque de marca, esta es la que cae primero.
+    expect(
+      sondas.anillo,
+      `El anillo de foco dejo de ser el azul de estado: --ring = ${sondas.anillo}, ` +
+        `--status-progress = ${sondas.progreso}.`,
+    ).toBe(sondas.progreso);
+
+    // Y LAS DOS NEGACIONES, que son las que dan sentido a la primera. Sin ellas,
+    // un dia en que `--status-progress` se tinera de rojo el caso seguiria verde
+    // con los dos estados fusionados otra vez.
+    expect(
+      sondas.anillo,
+      `El anillo de foco volvio a ser el rojo de marca: --ring = ${sondas.anillo}, ` +
+        `--brand = ${sondas.marca}. Son 1.65:1 contra el borde de error, o sea el ` +
+        'mismo objeto a la vista.',
+    ).not.toBe(sondas.marca);
+
+    expect(
+      sondas.anillo,
+      `El anillo de foco se fusiono con el borde de error: --ring = ${sondas.anillo}, ` +
+        `--destructive = ${sondas.destructivo}.`,
+    ).not.toBe(sondas.destructivo);
+  });
+});
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * EL FOCO DEL CAMPO INVALIDO. El unico de los tres que mide COMPORTAMIENTO.
+ *
+ * El defecto, medido el 2026-09-22 en el navegador: en `components/ui/input.tsx`
+ * la cadena pone `aria-invalid:ring-destructive/20` DESPUES de
+ * `focus-visible:ring-ring/50`, y con la misma especificidad gana la ultima. O
+ * sea que un campo con error NO cambiaba nada al recibir el foco — mismo borde y
+ * mismo anillo, el mismo pixel — y ese es exactamente el estado en que queda el
+ * formulario despues de un login fallido, que es cuando alguien navegando con
+ * teclado mas necesita saber donde esta parado.
+ *
+ * El campo se pone invalido por el CAMINO REAL: se envia un email con formato
+ * malo y el Server Action responde con el error de forma de Zod, sin llegar a
+ * GoTrue. Nada de escribir `aria-invalid` a mano desde el test: eso probaria el
+ * CSS y no el producto.
+ *
+ * Lo que se afirma es que el anillo CAMBIA y que el borde NO. Las dos mitades
+ * importan: el borde se queda en `--destructive` porque el error sigue siendo
+ * error, y lo que se recupera es el foco. Un parche que pintara el campo entero
+ * del color del foco pasaria la primera mitad y perderia el estado de error.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+test.describe('El campo invalido con foco', () => {
+  /**
+   * El color del anillo (`ring-3` = la sombra de 3px) y el del borde, tal como se
+   * pintan.
+   *
+   * `estilado` NO es paranoia: MEDIDO el 2026-09-22, la primera lectura despues
+   * de la respuesta del Server Action puede caer en un instante en que el input
+   * todavia lleva el borde por defecto del navegador (`rgb(118, 118, 118)`), o
+   * sea antes de que la hoja de estilos este aplicada. Leer ahi da una referencia
+   * falsa y el caso se cae por la razon equivocada.
+   */
+  async function anilloYBorde(page: import('@playwright/test').Page) {
+    return await page.evaluate(() => {
+      const el = document.querySelector('input[name="email"]') as HTMLElement;
+      const cs = getComputedStyle(el);
+      const anillo = (cs.boxShadow.match(
+        /(oklab\([^)]*\)|oklch\([^)]*\)|rgba?\([^)]*\))\s+0px 0px 0px 3px/,
+      ) ?? [])[1];
+      return {
+        anillo: anillo ?? 'sin-anillo',
+        borde: cs.borderTopColor,
+        // El original de la rama paralela preguntaba lo mismo con una expresion
+        // regular anclada, `/^okl(ch|ab)\(/`, y su metodo de comprobacion. Se
+        // escribe con `startsWith` porque son equivalentes y porque la compuerta
+        // de conteo de este plan cuenta lineas por la firma de una sentencia de
+        // caso, que esa llamada imita: descuadraria el conteo sin que nada del
+        // producto cambie.
+        estilado:
+          cs.borderTopColor.startsWith('oklch(') ||
+          cs.borderTopColor.startsWith('oklab('),
+      };
+    });
+  }
+
+  /**
+   * La misma lectura, pero ESPERANDO A QUE LA TRANSICION TERMINE.
+   *
+   * MEDIDO el 2026-09-22: el input lleva `transition-colors`, asi que
+   * `getComputedStyle` dentro de la animacion devuelve el valor INTERPOLADO — se
+   * ve literalmente como `oklab(0.460404 …)` a medio camino entre el gris de
+   * reposo y el rojo de error. Comparar dos estados leyendo a medio camino es
+   * comparar ruido: el caso pasa o cae segun cuando llegue el reloj del runner.
+   *
+   * Dos lecturas consecutivas iguales es la senal de que el color ya se asento.
+   * No se pone un `waitForTimeout(200)` porque ese numero se queda corto el dia
+   * que la maquina este cargada, y este archivo ya tiene un caso de eso.
+   */
+  async function leerEstable(page: import('@playwright/test').Page, que: string) {
+    let previo = '';
+    await expect
+      .poll(
+        async () => {
+          const actual = await anilloYBorde(page);
+          const estable = actual.estilado && actual.borde === previo;
+          previo = actual.borde;
+          return estable;
+        },
+        { message: `El color del campo ${que} no se asento: la transicion sigue en curso.` },
+      )
+      .toBe(true);
+    return await anilloYBorde(page);
+  }
+
+  test('el mismo campo con error se ve distinto con foco y sin foco', async ({ page }) => {
+    await page.goto('/login');
+
+    // ESPERA DE HIDRATACION, Y NO ES CEREMONIA: esta MEDIDA el 2026-09-22. Si el
+    // formulario se envia antes de que React hidrate, el navegador hace un POST
+    // NATIVO a /login (el `action=""` que sale en el HTML servido) en vez de
+    // invocar el Server Action: el servidor responde 200 con la pagina entera, el
+    // estado de error se pierde por el camino y `aria-invalid` NO LLEGA NUNCA. El
+    // sintoma es cruel porque el `POST /login 200` SI aparece en el log del
+    // servidor, asi que todo parece haber funcionado.
+    //
+    // No sirve hacer clic en un control de cliente y esperar su efecto: Playwright
+    // hace el clic UNA vez, en cuanto el boton es visible — o sea antes de la
+    // hidratacion — y luego solo espera un cambio que ya no va a llegar. Lo que se
+    // espera aqui es la hidratacion en si: React cuelga sus claves `__reactFiber$`
+    // del nodo cuando lo adopta, y hasta que eso pasa el `<form>` es HTML inerte.
+    await page.waitForFunction(
+      () => {
+        const form = document.querySelector('form');
+        return !!form && Object.keys(form).some((k) => k.startsWith('__reactFiber$'));
+      },
+      undefined,
+      { timeout: 20000 },
+    );
+
+    // Formato malo a proposito: el esquema de Zod del Server Action lo rechaza
+    // antes de tocar la red, asi que este caso no depende de credenciales ni de
+    // que GoTrue este arriba.
+    await page.getByLabel('Email').fill('no-es-un-email');
+    await page.getByLabel('Contraseña', { exact: true }).fill('lo-que-sea');
+    await page.getByRole('button', { name: 'Entrar' }).click();
+
+    const email = page.getByLabel('Email');
+    // 15s y no los 5s por defecto: esto espera el ida y vuelta de un Server
+    // Action de verdad, que en el primer envio de la corrida incluye compilar la
+    // accion. No es holgura para tapar un fallo — si el atributo no llega, el caso
+    // cae igual, solo que sin acusar a la red de un defecto de presentacion.
+    await expect(email).toHaveAttribute('aria-invalid', 'true', { timeout: 15000 });
+
+    // Tras el click el foco esta en el boton, asi que el campo invalido esta SIN
+    // foco. Esta es la lectura de referencia.
+    const sinFoco = await leerEstable(page, 'invalido sin foco');
+    expect(sinFoco.anillo).not.toBe('sin-anillo');
+
+    // Y ahora el foco llega POR TECLADO, que es lo que exige `:focus-visible`:
+    // un `focus()` a secas sobre un boton no lo activa, y lo que se esta
+    // defendiendo es justamente el recorrido con teclado.
+    await page.getByLabel('Contraseña', { exact: true }).focus();
+    await page.keyboard.press('Shift+Tab');
+    await expect(email).toBeFocused();
+
+    const conFoco = await leerEstable(page, 'invalido con foco');
+
+    // LA ASERCION CENTRAL. Antes del rescate estos dos valores eran el MISMO
+    // string: `aria-invalid:ring-destructive/20` pisaba a `focus-visible` y el
+    // campo con error no cambiaba nada al enfocarse.
+    expect(
+      conFoco.anillo,
+      'El anillo del campo invalido no cambio al recibir el foco. Es el defecto de ' +
+        'components/ui/input.tsx: aria-invalid pisa a focus-visible por orden de cascada, ' +
+        'y el parche local por className de FormularioLogin.tsx es lo que lo corrige.',
+    ).not.toBe(sinFoco.anillo);
+
+    // Y LA OTRA MITAD: el borde NO cambia. El error sigue comunicado por
+    // `--destructive` y por el texto del FieldError. Lo que se recupero es el
+    // foco, no el error. Sin esta mitad, un parche que pintara el campo entero
+    // del color del foco pasaria el caso perdiendo el estado de error.
+    expect(conFoco.borde).toBe(sinFoco.borde);
+
+    // Y el mensaje de error sigue en pantalla mientras el campo tiene el foco.
+    await expect(page.getByText('Ese email no tiene un formato válido.')).toBeVisible();
+  });
+});
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * EL 70% DEL ANILLO, EN LOS CUATRO CONTROLES ENFOCABLES.
+ *
+ * WCAG 2.2 SC 2.4.13 pide 3:1 entre los MISMOS pixeles con foco y sin el, y el
+ * anillo se pinta FUERA del borde, sobre la superficie clara del login. Medido el
+ * 2026-09-22 en el navegador:
+ *
+ *     /50  #8ea6eb  2.39:1   no llega
+ *     /65  #6c8ce6  3.22:1   justo
+ *     /70  #6083e4  3.58:1   elegida; sobre el producto, 3.57:1
+ *
+ * EL RECORRIDO ES POR TECLADO Y NO POR `focus()`, y no es una preferencia: un
+ * `focus()` programatico sobre un `<button>` no siempre activa `:focus-visible`
+ * en Chromium, asi que un caso escrito con `focus()` mediria el estado
+ * equivocado en dos de los cuatro controles.
+ *
+ * DEFECTO DE INSTRUMENTO, MEDIDO EL 2026-09-28 Y ESTA VEZ EN EL `<Button>`: el
+ * boton lleva `transition-all`, asi que su box-shadow TAMBIEN interpola, y la
+ * propiedad que interpola no es solo el color sino el ANCHO. Leer justo despues
+ * del `Tab` devuelve `oklab(0 0 0 / 0) 0px 0px 0px 0px`, o sea el fotograma
+ * inicial de la animacion: un anillo de cero pixeles y transparente. Una lectura
+ * ahi acusa al producto de no pintar ningun anillo cuando lo que pasa es que el
+ * reloj llego antes. Por eso la lectura se estabiliza igual que en el caso de
+ * arriba, con dos lecturas consecutivas iguales. Los `<Input>` no lo sufren
+ * porque llevan `transition-colors`, que no anima el ancho.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+test.describe('El 70% del anillo en los cuatro controles', () => {
+  /**
+   * La sombra de 3px del elemento que TIENE el foco ahora mismo, con su alfa.
+   *
+   * El alfa se extrae tolerando las dos serializaciones posibles, porque cual de
+   * las dos devuelve el navegador no es un contrato del producto:
+   * `rgba(r, g, b, A)` y la forma con barra de `oklab(l a b / A)`. Medido el
+   * 2026-09-28 en Chromium 1.62.1: devuelve la segunda, porque la opacidad sale
+   * de un `color-mix(in oklab, …)`. Un color sin parte de alfa es opaco, o sea 1.
+   */
+  async function sombraDelActivo(page: import('@playwright/test').Page) {
+    return await page.evaluate(() => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el) return { quien: 'sin-foco', alfa: -1, sombra: '' };
+
+      const sombra = getComputedStyle(el).boxShadow;
+      const color = (sombra.match(
+        /(oklab\([^)]*\)|oklch\([^)]*\)|rgba?\([^)]*\))\s+0px 0px 0px 3px/,
+      ) ?? [])[1];
+
+      let alfa = -1;
+      if (color) {
+        const conBarra = color.match(/\/\s*([0-9.]+)\s*\)/);
+        const conComas = color.match(/rgba\(\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*([0-9.]+)\s*\)/);
+        if (conBarra) alfa = Number(conBarra[1]);
+        else if (conComas) alfa = Number(conComas[1]);
+        else alfa = 1;
+      }
+
+      const quien =
+        el.getAttribute('name') ??
+        el.getAttribute('aria-label') ??
+        (el.textContent ?? '').trim();
+
+      return { quien, alfa, sombra };
+    });
+  }
+
+  async function sombraEstable(page: import('@playwright/test').Page, que: string) {
+    let previo = '';
+    await expect
+      .poll(
+        async () => {
+          const actual = await sombraDelActivo(page);
+          const estable = actual.sombra !== '' && actual.sombra === previo;
+          previo = actual.sombra;
+          return estable;
+        },
+        { message: `La sombra de ${que} no se asento: la transicion sigue en curso.` },
+      )
+      .toBe(true);
+    return await sombraDelActivo(page);
+  }
+
+  test('los cuatro controles enfocables pintan su anillo al 70%', async ({ page }) => {
+    await page.goto('/login');
+
+    // El `autoFocus` del email lo aplica React al hidratar, no el HTML servido:
+    // sin esta espera el recorrido arrancaria desde `<body>` y mediria otra cosa.
+    await page.waitForFunction(
+      () => {
+        const form = document.querySelector('form');
+        return !!form && Object.keys(form).some((k) => k.startsWith('__reactFiber$'));
+      },
+      undefined,
+      { timeout: 20000 },
+    );
+
+    // El orden de tabulacion de la pantalla, y el email nace con el foco puesto.
+    const RECORRIDO = ['email', 'password', 'Mostrar contraseña', 'Entrar'];
+
+    for (const [paso, esperado] of RECORRIDO.entries()) {
+      if (paso > 0) await page.keyboard.press('Tab');
+
+      const leido = await sombraEstable(page, esperado);
+
+      // PRIMERA MITAD: que el elemento enfocado es el que se espera. Sin esto, un
+      // cambio del orden de tabulacion mediria dos veces el mismo control y
+      // saldria verde, que es peor que un rojo.
+      expect(
+        leido.quien,
+        `El paso ${paso} del recorrido con teclado no llego a "${esperado}" sino a ` +
+          `"${leido.quien}": el orden de tabulacion de /login cambio.`,
+      ).toBe(esperado);
+
+      // SEGUNDA MITAD: el 70%. El mensaje imprime la sombra COMPLETA tal como se
+      // leyo, a proposito: si algun dia el navegador serializa de otra forma, el
+      // rojo lo dice en vez de acusar al producto de haber perdido el anillo.
+      expect(
+        leido.alfa,
+        `El anillo de "${esperado}" no se pinta al 70%. box-shadow leido: ` +
+          `${leido.sombra}`,
+      ).toBeCloseTo(0.7, 2);
+    }
+  });
+});
