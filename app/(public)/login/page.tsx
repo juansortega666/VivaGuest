@@ -88,8 +88,91 @@ export default function LoginPage() {
       data-slot="pantalla-login"
     >
       <div className="flex flex-1 lg:grid lg:rejilla-login">
-        {/* COLUMNA 1 */}
-        <PanelPublicidad />
+        {/*
+          * COLUMNA 1. El envoltorio hace tres cosas y ninguna es decorativa:
+          *
+          * 1. DECLARA EL CORTE DE `lg:` EN UN SOLO SITIO. Antes lo llevaba la
+          *    raiz de `PanelPublicidad`; se muda aqui porque el wordmark tiene
+          *    que desaparecer con el panel, y dos declaraciones del mismo corte
+          *    en dos sitios se desincronizan a la primera. Sigue siendo CSS y no
+          *    renderizado condicional (§2.4): sin salto tras la primera pintura.
+          *
+          * 2. ES EL ANCLA DEL WORDMARK. `relative` aqui y `absolute` en el
+          *    wordmark es lo que lo pone ENCIMA del panel sin meterlo DENTRO.
+          *
+          * 3. SACA AL WORDMARK DEL SUBARBOL `aria-hidden`, Y ESTA ES LA TRAMPA.
+          *    La raiz de `PanelPublicidad` lleva `aria-hidden="true"`, asi que un
+          *    wordmark renderizado dentro del panel desaparece del arbol de
+          *    accesibilidad **sin que la pantalla cambie ni un pixel**. Es hermano
+          *    y no hijo justamente por eso, y el E2E lo defiende con un `closest`
+          *    y no con un localizador de texto: los localizadores de texto de
+          *    Playwright no filtran subarboles `aria-hidden` y darian verde con el
+          *    defecto puesto.
+        */}
+        <div className="relative hidden lg:block" data-slot="columna-anuncio">
+          <PanelPublicidad />
+
+          {/*
+            * EL SEGUNDO WORDMARK. A 32px (`2xl`) de los dos bordes del panel,
+            * como en la referencia de Runway. Es un `<p>` y no un `<h1>`, y la
+            * alternativa se descarto con razones: mudar el `<h1>` aqui dejaria al
+            * `<main>` sin encabezado y pondria el unico encabezado de nivel 1 de
+            * la pagina flotando sobre una region decorativa. La pagina sigue
+            * teniendo exactamente un `<h1>`, y sigue estando sobre el formulario.
+            *
+            * NO lleva `aria-hidden`: un lector de pantalla lee la marca dos
+            * veces. Eso es redundancia, no barrera, y es el precio de que el
+            * wordmark exista de verdad para quien no ve la pantalla.
+            *
+            * EL COLOR ES BLANCO, POR DECISION DEL DUENO DEL 2026-09-26, Y LA
+            * INFRACCION DE CONTRASTE ESTA MEDIDA Y ACEPTADA. Las cifras, con la
+            * formula de WCAG 2.1 sobre los cuatro grises de §6.1:
+            *
+            *      gris           blanco encima     `--foreground` encima
+            *      --anuncio-1      1.27:1              14.0:1
+            *      --anuncio-4      1.77:1              10.0:1
+            *
+            * El wordmark es texto grande (24px, peso 600), cuyo umbral de WCAG
+            * 1.4.3 es 3:1. El contraste real de hoy es **1.27:1** sobre el gris
+            * mas claro. Estas cifras NO justifican el color: documentan el tamano
+            * de la infraccion que se esta aceptando. Tres cosas que les dan
+            * sentido, y las tres importan:
+            *
+            *   - LA PREMISA DEL DUENO, y es correcta: los cuatro grises son el
+            *     marcador de posicion de un creativo que todavia no existe. No
+            *     son el fondo final. El blanco es lo correcto contra la imagen
+            *     que algun dia ocupe ese espacio; lo que no es correcto es el
+            *     fondo de hoy.
+            *   - ESTO NO ES UNA EXENCION DE WCAG 1.4.3. La del producto (los dos
+            *     iconos inactivos del pie a 2.09:1, §10.4) SI es legitima, porque
+            *     la norma excluye expresamente los componentes inactivos. Aca no
+            *     hay exclusion que aplique: es texto sobre una superficie
+            *     decorativa. Se registra como infraccion conocida y aceptada, con
+            *     esa etiqueta y no con otra, porque un auditor tiene que poder
+            *     distinguir las dos.
+            *   - LA CONDICION DE SALIDA: el dia que entre el primer creativo real
+            *     hay que volver a medir el wordmark contra ESE fondo, y si es
+            *     claro, ponerle velo o cambiarle el color. La obligacion esta
+            *     escrita en §10.4 y la hereda quien cierre la pregunta abierta 2
+            *     de `10-CONTEXT.md`.
+            *
+            * LO QUE NO SE HACE, Y ES DELIBERADO: no se oscurecen los cuatro
+            * grises de §6.1 y no se le mete un velo al panel. Las dos cosas son
+            * parches contra un fondo provisional y las dos reabririan el juicio
+            * del fundido. Quien quiera cambiar este color tiene que borrar antes
+            * la entrada de §10.4, no al reves.
+            *
+            * Y la clase es la utilidad de blanco del preset, sin token propio: un
+            * token sugeriria que el color se cambia desde la capa de tema, y es lo
+            * contrario, cambia con el creativo.
+          */}
+          <p
+            className="absolute left-2xl top-2xl font-brand text-display text-white"
+            data-slot="wordmark-panel"
+          >
+            VivaGuest
+          </p>
+        </div>
 
         {/*
           * COLUMNA 2. El envoltorio existe por dos razones, y ninguna es cosmetica:

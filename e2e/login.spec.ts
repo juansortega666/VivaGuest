@@ -222,28 +222,53 @@ test.describe('El split del login', () => {
 });
 
 /**
- * DEFIENDE D10-4: cuatro grises, 5s por paso, 600ms de fundido, sin un kilobyte
- * de JavaScript.
+ * DEFIENDE D10-4 (cuatro grises, 5s por paso, 600ms de fundido, sin un kilobyte
+ * de JavaScript) y EL SANGRADO COMPLETO decidido el 2026-09-26.
  *
  * La aritmetica de `10-UI-SPEC.md` §7.2: 4 pasos x 5s = 20s de ciclo. El
  * `linear` no es intercambiable por `ease-out` — un fundido de 600ms entre dos
  * grises a 1.115:1 con `ease-out` arranca de golpe y se lee como un parpadeo.
+ * Ese contrato NO cambia con el rediseno: cambia la superficie sobre la que
+ * corre, que ahora es la mitad de la pantalla en vez de una tarjeta insertada.
  *
  * Con el movimiento NORMAL no se afirma el color computado: en cualquier
  * instante del ciclo es cualquiera de los cuatro grises o una interpolacion
  * entre dos, asi que afirmar uno concreto seria una asercion que pasa por suerte.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * EL SANGRADO SE MIDE CONTRA `[data-slot="pantalla-login"]`, NUNCA CONTRA EL
+ * VIEWPORT, Y ESTO NO ES NEGOCIABLE.
+ *
+ * `app/layout.tsx` pinta una barra de ambiente de pruebas de **48px** en todo
+ * entorno cuyo `NEXT_PUBLIC_VIVAGUEST_ENTORNO` no sea `produccion`, y la suite
+ * E2E corre justamente ahi. El contenedor de `/login` es
+ * `min-h-[calc(100svh-var(--alto-barra-pruebas,0px))]`, asi que en esta corrida
+ * **empieza en `y = 48`**. Una asercion escrita como `expect(panel.y).toBe(0)`
+ * saldria ROJA contra el codigo CORRECTO, que es el peor tipo de rojo: el que
+ * hace que alguien "arregle" el producto para complacer al instrumento.
+ *
+ * La asercion que mata de una vez el recuadro de 24px, la relacion de aspecto y
+ * el `max-h-full` de la tarjeta derogada es la IGUALDAD DE CAJAS entre el panel
+ * y el elemento animado: si el anuncio ocupa exactamente la misma caja que su
+ * panel, no le queda sitio a ningun marco.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 test.describe('El contrato de la animacion del placeholder', () => {
-  test('la tarjeta del anuncio corre `ciclo-anuncio 20s linear infinite`', async ({ page }) => {
+  test('el anuncio corre `ciclo-anuncio 20s linear infinite` y va a sangre completa', async ({
+    page,
+  }) => {
     await page.goto('/login');
 
-    const animacion = await page.locator('[data-slot="anuncio"]').evaluate((el) => {
+    const anuncio = page.locator('[data-slot="anuncio"]');
+
+    const animacion = await anuncio.evaluate((el) => {
       const estilo = getComputedStyle(el);
       return {
         nombre: estilo.animationName,
         duracion: estilo.animationDuration,
         curva: estilo.animationTimingFunction,
         repeticiones: estilo.animationIterationCount,
+        radio: estilo.borderRadius,
       };
     });
 
@@ -251,6 +276,145 @@ test.describe('El contrato de la animacion del placeholder', () => {
     expect(animacion.duracion).toBe('20s');
     expect(animacion.curva).toBe('linear');
     expect(animacion.repeticiones).toBe('infinite');
+
+    // Sin radio: la tarjeta insertada tenia `rounded-2xl` = 10.8px.
+    expect(animacion.radio).toBe('0px');
+
+    const cajaPantalla = await page.locator('[data-slot="pantalla-login"]').boundingBox();
+    const cajaPanel = await page.locator('[data-slot="panel-publicidad"]').boundingBox();
+    const cajaAnuncio = await anuncio.boundingBox();
+    if (!cajaPantalla || !cajaPanel || !cajaAnuncio) {
+      throw new Error('No se pudo medir el sangrado del panel.');
+    }
+
+    // El panel arranca en la esquina del CONTENEDOR DE LA PANTALLA, no del
+    // viewport: la barra de pruebas de 48px esta por encima de los dos.
+    expect(Math.abs(cajaPanel.x - cajaPantalla.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(cajaPanel.y - cajaPantalla.y)).toBeLessThanOrEqual(1);
+
+    // LA ASERCION QUE MATA EL RECUADRO. Misma `x`, misma `y`, mismo ancho y
+    // mismo alto: el elemento animado ocupa EXACTAMENTE la caja de su panel.
+    expect(Math.abs(cajaAnuncio.x - cajaPanel.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(cajaAnuncio.y - cajaPanel.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs(cajaAnuncio.width - cajaPanel.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(cajaAnuncio.height - cajaPanel.height)).toBeLessThanOrEqual(1);
+
+    // Y LA PANTALLA NO CRECE. Una relacion de aspecto devuelta al elemento
+    // animado empuja la fila de la rejilla hacia abajo y la pantalla se pone a
+    // hacer scroll: MEDIDO con el senuelo 2b de este plan, 744px de contenedor
+    // contra 672 de region a 1280x720. En una pantalla de acceso eso es el boton
+    // `Entrar` por debajo del pliegue.
+    const recorrido1280 = await page.evaluate(() => ({
+      alto: document.documentElement.scrollHeight,
+      visible: document.documentElement.clientHeight,
+    }));
+    expect(recorrido1280.alto).toBeLessThanOrEqual(recorrido1280.visible);
+  });
+
+  test('el sangrado tambien se cumple a 1024, el viewport mas apretado', async ({ page }) => {
+    // POR QUE ESTE SEGUNDO VIEWPORT NO ES REDUNDANTE, y esta MEDIDO: a 1280 la
+    // columna es de 640 sobre una region de 672, o sea una proporcion de 0.952.
+    // Una `aspect-[0.93]` devuelta al elemento animado da 688 de alto ahi, y
+    // `max-h-full` lo recorta contra un contenedor que a su vez crece: la caja
+    // del anuncio sigue siendo IGUAL a la de su panel y la igualdad de cajas de
+    // arriba pasa en VERDE contra el defecto. A 1024x768 la columna es de 512
+    // sobre 720, la proporcion es 0.711, y la relacion de aspecto deja el
+    // anuncio en 550 de alto contra 720 de panel: 170px de diferencia.
+    //
+    // O sea que la igualdad de cajas solo tiene dientes contra la tarjeta
+    // derogada en el viewport apretado. Sin este caso, el senuelo 2 no pone
+    // nada en rojo por el lado de la forma.
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await page.goto('/login');
+
+    const cajaPanel = await page.locator('[data-slot="panel-publicidad"]').boundingBox();
+    const cajaAnuncio = await page.locator('[data-slot="anuncio"]').boundingBox();
+    if (!cajaPanel || !cajaAnuncio) throw new Error('No se pudo medir el sangrado a 1024.');
+
+    expect(Math.abs(cajaAnuncio.width - cajaPanel.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(cajaAnuncio.height - cajaPanel.height)).toBeLessThanOrEqual(1);
+  });
+});
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * LOS DOS WORDMARKS, Y EL QUE SE CAE DENTRO DE UN SUBARBOL `aria-hidden`.
+ *
+ * Desde el 2026-09-26 la pantalla tiene dos: el de siempre, centrado encima del
+ * formulario y dentro del `<main>`, que sigue siendo el UNICO `<h1>` de la
+ * pagina; y uno nuevo, en blanco, sobre el panel, arriba a la izquierda a 32px
+ * de los dos bordes, como en la referencia de Runway.
+ *
+ * POR QUE LA COMPUERTA ES UN `closest` Y NO UN `getByText('VivaGuest')`. La raiz
+ * de `PanelPublicidad` lleva `aria-hidden="true"`. Un wordmark renderizado DENTRO
+ * del panel se ve **exactamente igual** y desaparece del arbol de accesibilidad.
+ * Los localizadores de texto de Playwright no filtran subarboles `aria-hidden`,
+ * asi que un `getByText` daria VERDE con el defecto puesto: es el mismo hallazgo
+ * de clase que el `toBeDisabled()` medido en 10-03, un matcher que no distingue
+ * el caso correcto del prohibido. El senuelo 4 de este plan lo midio.
+ *
+ * EL COLOR SE AFIRMA CON SONDAS, NUNCA CONTRA UNA CADENA LITERAL, por la razon
+ * medida en `e2e/calendario.spec.ts:333-356`: el valor computado y el declarado
+ * no son la misma cadena. Dos mitades: que ES el blanco de una sonda que declara
+ * blanco, y que NO ES el de la sonda de `--foreground`, que es el color que el
+ * plan descarto tras la decision del dueno. Sin la segunda mitad, un color
+ * equivocado que casualmente normalizara igual pasaria.
+ *
+ * Declarar blanco dentro de la sonda del test es legitimo: el guardarrail 6 mira
+ * `app/` y `components/`, no `e2e/`.
+ *
+ * ESTE CASO NO JUZGA EL CONTRASTE. El blanco da 1.27:1 sobre el gris mas claro y
+ * es una infraccion de WCAG 1.4.3 conocida, aceptada por el dueno el 2026-09-26 y
+ * registrada en `10-UI-SPEC.md` §10.4 con su condicion de salida. Lo que se
+ * defiende aqui es que el color sea el que se decidio, no que sea legible.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+test.describe('Los dos wordmarks', () => {
+  test('el del panel dice VivaGuest, va en blanco, a 32px, y NO esta bajo aria-hidden', async ({
+    page,
+  }) => {
+    await page.goto('/login');
+
+    const wordmark = page.locator('[data-slot="wordmark-panel"]');
+    await expect(wordmark).toHaveText('VivaGuest');
+
+    // El `<h1>` sigue siendo uno y sigue viviendo en el `<main>`: el wordmark
+    // del panel es un `<p>`, no un segundo encabezado de nivel 1.
+    await expect(page.locator('h1')).toHaveCount(1);
+    await expect(page.locator('main h1')).toHaveText('VivaGuest');
+
+    const sondas = await wordmark.evaluate((el) => {
+      const sonda = (declarado: string) => {
+        const div = document.createElement('div');
+        div.style.color = declarado;
+        document.body.appendChild(div);
+        const v = getComputedStyle(div).color;
+        div.remove();
+        return v;
+      };
+
+      return {
+        color: getComputedStyle(el).color,
+        blanco: sonda('#ffffff'),
+        foreground: sonda('var(--foreground)'),
+        bajoAriaHidden: el.closest('[aria-hidden="true"]') !== null,
+      };
+    });
+
+    // Las dos mitades del color.
+    expect(sondas.color).toBe(sondas.blanco);
+    expect(sondas.color).not.toBe(sondas.foreground);
+
+    // LA COMPUERTA DE VERDAD: el wordmark existe en el arbol de accesibilidad.
+    expect(sondas.bajoAriaHidden).toBe(false);
+
+    const cajaPanel = await page.locator('[data-slot="panel-publicidad"]').boundingBox();
+    const cajaWordmark = await wordmark.boundingBox();
+    if (!cajaPanel || !cajaWordmark) throw new Error('No se pudo medir el wordmark del panel.');
+
+    // 32px es el token `2xl`, no un valor arbitrario.
+    expect(Math.round(cajaWordmark.x - cajaPanel.x)).toBe(32);
+    expect(Math.round(cajaWordmark.y - cajaPanel.y)).toBe(32);
   });
 });
 
@@ -265,6 +429,14 @@ test.describe('El contrato de la animacion del placeholder', () => {
  * que el elemento cae a su propio `background-color`. Por eso `bg-anuncio-1` en
  * la clase base NO es redundante: es el estado de movimiento reducido, y es la
  * clase que la primera limpieza borra por "duplicada" (trampa 3 de §11.5).
+ *
+ * LA PROPIEDAD QUE DEFIENDE ESTE CASO NO CAMBIA NI UN APICE CON EL REDISENO DEL
+ * 2026-09-26, y por eso su cuerpo se queda como estaba. Lo que cambia es el
+ * tamano de lo que se mide: el elemento ya no es una tarjeta insertada con radio
+ * y recuadro, es la mitad izquierda entera de la pantalla, casi el doble de
+ * superficie. Eso importa porque es justo lo que vuelve a abrir el juicio humano
+ * del fundido: un paso de 1.115:1 sobre 640x672 no se percibe igual que sobre
+ * una tarjeta de 528x596.
  *
  * Los colores se comparan con una SONDA y nunca contra un literal escrito a
  * mano. Esta medido en `e2e/calendario.spec.ts:333-356`: `getComputedStyle` no
@@ -481,8 +653,7 @@ test.describe('El pie del login a partir de lg:', () => {
 
     const cajaPie = await pie.boundingBox();
     const cajaCopyright = await pie.locator('p').boundingBox();
-    const cajaAnuncio = await page.locator('[data-slot="anuncio"]').boundingBox();
-    if (!cajaPie || !cajaCopyright || !cajaAnuncio) {
+    if (!cajaPie || !cajaCopyright) {
       throw new Error('No se pudo medir el pie del login a 1280.');
     }
 
@@ -490,10 +661,12 @@ test.describe('El pie del login a partir de lg:', () => {
     // fijada por clase, no una altura derivada del texto.
     expect(Math.round(cajaPie.height)).toBe(56);
 
-    // Los 24px de `lg:px-xl`, y que son LOS MISMOS 24px de la tarjeta del
-    // anuncio. La segunda mitad es la que convierte un numero en una alineacion.
+    // Los 24px de `lg:px-xl`. La segunda mitad de esta asercion (que eran LOS
+    // MISMOS 24px de la tarjeta del anuncio) murio con la tarjeta: el panel va a
+    // sangre completa desde el 2026-09-26 y su borde izquierdo es el de la
+    // pantalla. La alineacion que reemplaza a aquella se mide contra la columna
+    // del login, no contra el anuncio.
     expect(Math.round(cajaCopyright.x)).toBe(24);
-    expect(Math.abs(cajaCopyright.x - cajaAnuncio.x)).toBeLessThanOrEqual(1);
   });
 });
 
