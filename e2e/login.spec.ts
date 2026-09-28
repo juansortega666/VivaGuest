@@ -139,21 +139,30 @@ test.describe('Errores de credenciales', () => {
  */
 
 /**
- * DEFIENDE D10-3 (el reparto 45/10/45 y el canal central) y D10-6 (debajo de
- * 1024px el panel no existe).
+ * DEFIENDE EL REPARTO 50/50 SIN CANAL, decidido por el dueno el 2026-09-26
+ * contra la pantalla de acceso de Runway (corte medido: 50.3%), y D10-6 (debajo
+ * de 1024px el panel no existe).
+ *
+ * **ESTO DEROGA D10-2 Y D10-3.** La version anterior de este `describe` media un
+ * reparto de 45/10/45 con un canal central de 128px a 1280 y el login en la
+ * tercera pista. Ese diseno se entrego en 10-01 a 10-03 y el dueno lo rechazo:
+ * no fue un defecto de implementacion, fue un cambio de decision. Las medidas de
+ * la referencia nueva estan en el bloque `DEROGACION 2026-09-26` de
+ * `10-UI-SPEC.md`.
  *
  * Las cifras salen de `10-UI-SPEC.md` §2.2 y son aritmetica, no gusto:
- *   - 1280 x 0.45 = 576  → ancho de la columna del anuncio y de la del login
- *   - 1280 x 0.10 = 128  → el canal central, que es el unico hueco de la pantalla
- *   - la columna 3 arranca en 1280 x 0.55 = 704, o sea en la mitad DERECHA
- *   - 24 = `p-xl`, el recuadro de la tarjeta insertada (§3.1)
+ *   - 1280 x 0.50 = 640  → ancho de la columna del anuncio y de la del login
+ *   - el hueco entre las dos es CERO: ya no hay pista vacia que repartir
+ *   - la columna 2 arranca en 640, o sea en la mitad DERECHA exacta
+ *   - el bloque del login conserva sus 400px (`max-w-login`, D10-7) y pierde la
+ *     superficie: ya no hay `[data-slot="card"]` en esta pantalla
  *
  * El localizador es `data-slot` y no `data-testid` porque el repo no usa
  * `data-testid` en ningun sitio, y porque el panel es `aria-hidden`, sin texto y
  * sin rol: no hay forma de alcanzarlo por rol ni por contenido.
  */
 test.describe('El split del login', () => {
-  test('a 1280 la pantalla esta partida 45/10/45 y el login vive en la columna 3', async ({
+  test('a 1280 la pantalla esta partida 50/50 sin canal y el login vive en la columna 2', async ({
     page,
   }) => {
     // 1280x720 es el viewport del proyecto: no se cambia a proposito, para que
@@ -161,41 +170,39 @@ test.describe('El split del login', () => {
     await page.goto('/login');
 
     const panel = page.locator('[data-slot="panel-publicidad"]');
-    const principal = page.getByRole('main');
-    const tarjetaAnuncio = page.locator('[data-slot="anuncio"]');
-    const tarjetaLogin = page.locator('[data-slot="card"]');
+    const columnaLogin = page.locator('[data-slot="columna-login"]');
+    const bloqueLogin = page.locator('[data-slot="bloque-login"]');
 
     await expect(panel).toBeVisible();
 
+    // LA COMPUERTA DE "LA TARJETA NO VUELVE". Va antes de las medidas porque es
+    // la que se pone roja el dia que alguien reenvuelva el formulario "porque se
+    // ve desnudo", y con la tarjeta puesta los anchos seguirian cuadrando.
+    await expect(page.locator('[data-slot="card"]')).toHaveCount(0);
+
     const cajaPanel = await panel.boundingBox();
-    const cajaPrincipal = await principal.boundingBox();
-    const cajaAnuncio = await tarjetaAnuncio.boundingBox();
-    const cajaLogin = await tarjetaLogin.boundingBox();
-    if (!cajaPanel || !cajaPrincipal || !cajaAnuncio || !cajaLogin) {
+    const cajaColumna = await columnaLogin.boundingBox();
+    const cajaBloque = await bloqueLogin.boundingBox();
+    if (!cajaPanel || !cajaColumna || !cajaBloque) {
       throw new Error('No se pudo medir la pantalla partida.');
     }
 
-    // 45% y 45%: las dos columnas miden lo mismo.
-    expect(Math.round(cajaPanel.width)).toBe(576);
-    expect(Math.round(cajaPrincipal.width)).toBe(576);
+    // 50% y 50%: las dos columnas miden lo mismo y se reparten la pantalla entera.
+    expect(Math.round(cajaPanel.width)).toBe(640);
+    expect(Math.round(cajaColumna.width)).toBe(640);
 
-    // El 10% que falta es UN canal central, no dos margenes exteriores (§2.1).
-    expect(Math.round(cajaPrincipal.x - (cajaPanel.x + cajaPanel.width))).toBe(128);
+    // CERO. El borde derecho del panel y el borde izquierdo de la columna del
+    // login son el mismo pixel. Esta es la asercion que se pone roja el dia que
+    // alguien restaure el canal central que D10-2 pedia. Tolerancia de 1px por
+    // reparto de subpixeles.
+    expect(Math.abs(cajaColumna.x - (cajaPanel.x + cajaPanel.width))).toBeLessThanOrEqual(1);
 
-    // Los 400px del contrato (D10-7) siguen intactos, y la Card cae en la mitad
-    // derecha de la pantalla: es lo que prueba que `lg:col-start-3` existe. Sin
-    // esta asercion la prueba de anchos pasaria igual con el formulario ENCIMA
-    // del panel.
-    expect(Math.round(cajaLogin.width)).toBe(400);
-    expect(cajaLogin.x).toBeGreaterThanOrEqual(640);
-
-    // El recuadro de 24px de la tarjeta insertada, y que su `size-full` se
-    // resolvio contra un alto de verdad en vez de colapsar a cero. El alto
-    // exacto NO se afirma a proposito: cambia cuando el pie de pagina aterrice
-    // en 10-03, y una asercion que el plan siguiente tiene que editar es una
-    // asercion que no defiende nada.
-    expect(Math.round(cajaAnuncio.x)).toBe(24);
-    expect(cajaAnuncio.height).toBeGreaterThan(500);
+    // Los 400px del contrato (D10-7) siguen intactos, y el bloque cae en la mitad
+    // derecha de la pantalla: es lo que prueba que `lg:col-start-2` coloca de
+    // verdad. Sin esta asercion la prueba de anchos pasaria igual con el
+    // formulario ENCIMA del panel.
+    expect(Math.round(cajaBloque.width)).toBe(400);
+    expect(cajaBloque.x).toBeGreaterThanOrEqual(640);
   });
 
   test('a 390 el panel no existe y el login se ve como siempre', async ({ page }) => {
@@ -206,8 +213,10 @@ test.describe('El split del login', () => {
     // producir un salto despues de la primera pintura.
     await expect(page.locator('[data-slot="panel-publicidad"]')).toBeHidden();
 
-    // Y lo demas es exactamente la pantalla de hoy.
-    await expect(page.locator('[data-slot="card"]')).toBeVisible();
+    // Y lo demas es exactamente la pantalla de hoy. El localizador cambio de la
+    // tarjeta al bloque porque la tarjeta dejo de existir el 2026-09-26; la
+    // propiedad que mide este caso no cambio ni un apice.
+    await expect(page.locator('[data-slot="bloque-login"]')).toBeVisible();
     await expect(page.getByLabel('Email')).toBeVisible();
   });
 });
@@ -358,17 +367,18 @@ test.describe('El arranque del split y la holgura vertical', () => {
     await expect(page.locator('[data-slot="panel-publicidad"]')).toBeVisible();
 
     const cajaPrincipal = await page.getByRole('main').boundingBox();
-    const cajaLogin = await page.locator('[data-slot="card"]').boundingBox();
+    const cajaLogin = await page.locator('[data-slot="bloque-login"]').boundingBox();
     if (!cajaPrincipal || !cajaLogin) throw new Error('No se pudo medir el login a 1024.');
 
-    // 400 y no menos: si el 45% hubiera empezado a comerse el padding, la Card
-    // se encogeria, y ese es exactamente el modo de fallo que el piso de 995.6px
-    // predice.
+    // 400 y no menos: si el reparto hubiera empezado a comerse el padding, el
+    // bloque se encogeria, y ese es exactamente el modo de fallo que el piso
+    // aritmetico predice.
     expect(Math.round(cajaLogin.width)).toBe(400);
 
-    // 24 de `lg:p-xl` + 6.4 de holgura = 30.4. Con tolerancia de 2px porque el
-    // 45% de 1024 es 460.8 y el navegador reparte subpixeles.
-    expect(cajaLogin.x - cajaPrincipal.x).toBeCloseTo(30.4, 0);
+    // (512 - 400) / 2 = 56. Con el 50/50 la columna mide 512 a 1024 y el bloque
+    // de 400 queda centrado con 56 de aire a cada lado, muy por encima de los 24
+    // de `lg:p-xl`. Con tolerancia de 2px por reparto de subpixeles.
+    expect(cajaLogin.x - cajaPrincipal.x).toBeCloseTo(56, 0);
   });
 
   test('a 1023, un pixel por debajo del corte, el panel no existe', async ({ page }) => {
@@ -377,8 +387,8 @@ test.describe('El arranque del split y la holgura vertical', () => {
 
     await expect(page.locator('[data-slot="panel-publicidad"]')).toBeHidden();
 
-    const cajaLogin = await page.locator('[data-slot="card"]').boundingBox();
-    if (!cajaLogin) throw new Error('No se pudo medir la Card a 1023.');
+    const cajaLogin = await page.locator('[data-slot="bloque-login"]').boundingBox();
+    if (!cajaLogin) throw new Error('No se pudo medir el bloque del login a 1023.');
     expect(Math.round(cajaLogin.width)).toBe(400);
   });
 

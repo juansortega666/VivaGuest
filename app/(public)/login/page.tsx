@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 
-import { Card, CardContent } from '@/components/ui/card';
 import { hoyBog } from '@/lib/domain/dates';
 
 import { FormularioLogin } from './_components/FormularioLogin';
@@ -30,11 +29,25 @@ export const revalidate = 3600;
  * manda a su raiz a quien ya tenga sesion valida. Duplicar la comprobacion aqui
  * seria una segunda tabla de ruteo que mantener sincronizada.
  *
- * FASE 10 (10-UI-SPEC.md §2 y §10.1, D10-2/D10-3/D10-6): la pantalla esta
- * partida 45% publicidad · 10% de canal · 45% login a partir de `lg:` (1024px).
- * El reparto vive ENTERO en `@utility rejilla-login` de `app/globals.css`: aqui
- * no hay ni un porcentaje. Debajo de 1024px el panel desaparece por CSS y lo
- * que queda es exactamente la pantalla de antes.
+ * FASE 10, REDISENO DEL 2026-09-26 (10-UI-SPEC.md §2 y §10.1): la pantalla esta
+ * partida **50% publicidad · 50% login** a partir de `lg:` (1024px), sin hueco
+ * entre las dos columnas. El reparto vive ENTERO en `@utility rejilla-login` de
+ * `app/globals.css`: aqui no hay ni un porcentaje. Debajo de 1024px el panel
+ * desaparece por CSS y lo que queda es exactamente la pantalla de antes.
+ *
+ * ESTO DEROGA D10-2 Y D10-3, decididas el 2026-09-18 y superadas el 2026-09-26
+ * por el dueno contra la referencia de Runway. La version derogada repartia
+ * 45% de publicidad, un canal vacio del 10% en el medio y 45% de login, y
+ * colocaba el formulario en la tercera pista con `lg:col-start-3`. Hoy hay dos
+ * pistas y el login va en la segunda. Las medidas de la referencia estan en el
+ * bloque `DEROGACION 2026-09-26` de `10-UI-SPEC.md`.
+ *
+ * Y con el reparto cayo la superficie: el formulario ya NO se envuelve en las
+ * primitivas `Card` y `CardContent` de `@/components/ui/card`. Las tres estan
+ * escritas aqui con su forma literal a proposito, que es la unica documentacion
+ * util de una prohibicion: la que evita que alguien la reintroduzca por no saber
+ * que existe. Las primitivas siguen vivas para otras pantallas; lo que no vuelve
+ * es su uso en esta.
  *
  * Esta pagina NO lee sesion, ni cookies, ni cabeceras, ni la base (T-10-02). Con
  * `revalidate` la ruta pasa a ISR, o sea UN HTML generado una vez y servido a
@@ -54,41 +67,68 @@ export const revalidate = 3600;
  * Y ese `new Date().getFullYear()` de ahi arriba es, ademas, lo que hace que el
  * filtro de lineas de comentario de `page.contrato.test.ts` sea necesario: sobre
  * el archivo crudo la prohibicion se dispararia contra su propia documentacion.
+ * Desde el rediseno pasa lo mismo con `lg:col-start-3`, que este comentario
+ * nombra dos veces para que nadie lo reintroduzca sin saber que esta prohibido.
  */
 export default function LoginPage() {
   return (
-    // El fondo se queda en `--canvas` y NO pasa a blanco: es lo que le da borde
-    // visible a la `Card` blanca debajo de 1024px, que es literalmente la
-    // pantalla de hoy (§6.4). Se muda aqui desde el `<main>` porque ahora hay
-    // dos columnas que compartirlo.
-    <div className="flex min-h-[calc(100svh-var(--alto-barra-pruebas,0px))] flex-col bg-canvas">
+    // `data-slot="pantalla-login"` es el MARCO DE REFERENCIA de las aserciones
+    // de sangrado del E2E, y existe por una razon medida: `app/layout.tsx` pinta
+    // una barra de ambiente de pruebas de 48px en todo entorno que no se declare
+    // de produccion, y la suite E2E corre justamente ahi. Por eso este contenedor
+    // es `min-h-[calc(100svh-var(--alto-barra-pruebas,0px))]` y **no empieza en
+    // el borde del viewport**. Medir el sangrado contra el viewport daria un rojo
+    // contra el codigo CORRECTO, que es el peor tipo de rojo: el que hace que
+    // alguien "arregle" el producto para complacer al instrumento.
+    //
+    // El fondo se queda en `--canvas` y NO pasa a blanco (§6.4). Vive aqui y no
+    // en el `<main>` porque hay dos columnas que compartirlo.
+    <div
+      className="flex min-h-[calc(100svh-var(--alto-barra-pruebas,0px))] flex-col bg-canvas"
+      data-slot="pantalla-login"
+    >
       <div className="flex flex-1 lg:grid lg:rejilla-login">
         {/* COLUMNA 1 */}
         <PanelPublicidad />
 
-        {/* COLUMNA 2: pista vacia de la rejilla, SIN elemento. Un div espaciador
-            seria un nodo mas en el arbol de accesibilidad que no separa nada
-            (§10.1); el login se coloca con `lg:col-start-3`. */}
+        {/*
+          * COLUMNA 2. El envoltorio existe por dos razones, y ninguna es cosmetica:
+          * 1. lleva la colocacion de columna que antes vivia en el `<main>`, asi
+          *    que el `<main>` solo se ocupa de centrar su contenido;
+          * 2. es el sitio donde el pie va a vivir como HERMANO del `<main>`:
+          *    dentro de la columna y FUERA del `<main>`, que es lo unico que
+          *    conserva su rol `contentinfo` (medido en 10-03, senuelo 4).
+          *
+          * Las lineas de este bloque empiezan por `*` a proposito: el filtro de
+          * `page.contrato.test.ts` descarta lineas que EMPIEZAN por comentario, y
+          * los nombres prohibidos escritos de otra forma llegarian al codigo.
+        */}
+        <div className="flex flex-1 flex-col lg:col-start-2" data-slot="columna-login">
+          <main className="flex flex-1 flex-col items-center justify-center p-lg lg:p-xl">
+            {/*
+              El wordmark va en `--foreground`, NO en el color de marca. El coral de la
+              identidad (`--brand-identity`) da 2.64:1 contra blanco y no llega al 4.5:1
+              que WCAG exige para texto; su sitio son el logo y las areas grandes, no una
+              palabra de 24px. Poppins si es la tipografia de marca y el login es uno de
+              los tres sitios donde vive (UI-SPEC §3, ACTUALIZACION 2026-09-01).
+            */}
+            <h1 className="mb-2xl font-brand text-display text-foreground">VivaGuest</h1>
 
-        {/* COLUMNA 3 */}
-        <main className="flex flex-1 flex-col items-center justify-center p-lg lg:col-start-3 lg:p-xl">
-          {/*
-            El wordmark va en `--foreground`, NO en el color de marca. El coral de la
-            identidad (`--brand-identity`) da 2.64:1 contra blanco y no llega al 4.5:1
-            que WCAG exige para texto; su sitio son el logo y las areas grandes, no una
-            palabra de 24px. Poppins si es la tipografia de marca y el login es uno de
-            los tres sitios donde vive (UI-SPEC §3, ACTUALIZACION 2026-09-01).
-          */}
-          <h1 className="mb-2xl font-brand text-display text-foreground">VivaGuest</h1>
-
-          {/* 400px es la medida del contrato. `w-full` debajo de esa anchura para que
-              en un telefono no se salga de la pantalla. */}
-          <Card className="w-full max-w-login">
-            <CardContent>
+            {/*
+              * 400px es la medida del contrato (D10-7) y se conserva; `w-full` debajo
+              * de esa anchura para que en un telefono no se salga de la pantalla.
+              *
+              * LO QUE DESAPARECIO EL 2026-09-26 ES LA SUPERFICIE, no la medida: el
+              * bloque ya no vive dentro de una tarjeta. Sin borde, sin sombra y sin
+              * padding propio. La referencia de Runway no encierra el formulario en
+              * ninguna superficie, y los unicos bordes que le quedan al bloque son los
+              * de los propios `Input`.
+            */}
+            <div className="w-full max-w-login" data-slot="bloque-login">
               <FormularioLogin />
-            </CardContent>
-          </Card>
-        </main>
+            </div>
+          </main>
+        </div>
       </div>
 
       {/* HERMANO de la region del split y ULTIMO hijo del contenedor de la

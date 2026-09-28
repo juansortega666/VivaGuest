@@ -772,20 +772,30 @@
   }
 }
 
-/* ── Fase 10: la rejilla de /login — 10-UI-SPEC.md §2.1 ──────────────────────
-   45% publicidad · 10% canal · 45% login (D10-3). Va como @utility y no como
-   `grid-cols-[45%_10%_45%]` en el JSX por la misma razon por la que los 120ms
-   de movimiento viven en `@utility transicion`: el reparto es el contrato de la
-   pantalla y tiene que estar en UN sitio, con su razon al lado.
+/* ── Fase 10: la rejilla de /login — 10-UI-SPEC.md §2 ────────────────────────
+   50% publicidad · 50% login, sin canal entre las dos.
 
-   Tailwind v4 no tiene namespace de plantilla de rejilla, asi que un token no es
-   posible; una utilidad si, y acepta variantes (`lg:rejilla-login`).
+   DEROGACION 2026-09-26, decidida por el dueno contra una referencia medida: la
+   pantalla de acceso de Runway, cuyo corte del split es el **50.3%** del ancho y
+   cuyas dos columnas se tocan, sin hueco. Eso DEROGA D10-2 (el reparto y el pie
+   full-width) y D10-3 (el 45/45 con GlossGenius como referencia). Lo que
+   sobrevive de D10-3 es su razon de fondo, y es la que hace admisible el 50%: un
+   formulario de login necesita de 360 a 440px para no verse apretado, y a 1280px
+   el 50% son 640px. El techo del 51% medido en el corpus de logins tampoco se
+   rompe.
 
-   La columna del medio NO lleva elemento: es una pista vacia. El login se
-   coloca con `lg:col-start-3`. Un div espaciador seria un nodo en el arbol de
-   accesibilidad que no separa nada.                                          */
+   YA NO HAY PISTA VACIA: el login se coloca en la columna 2, con
+   `lg:col-start-2`. La version derogada ponia un canal del 10% en el medio y
+   mandaba el login a la tercera pista.
+
+   Lo que NO cambia: el reparto vive como @utility y no como valor arbitrario en
+   el JSX, por la misma razon por la que los 120ms de movimiento viven en
+   `@utility transicion`. Es el contrato de la pantalla y tiene que estar en UN
+   sitio, con su razon al lado. Tailwind v4 no tiene namespace de plantilla de
+   rejilla, asi que un token no es posible; una utilidad si, y acepta variantes
+   (`lg:rejilla-login`).                                                       */
 @utility rejilla-login {
-  grid-template-columns: 45% 10% 45%;
+  grid-template-columns: 50% 50%;
 }
 
 @layer base {

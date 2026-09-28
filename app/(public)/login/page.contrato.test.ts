@@ -122,3 +122,58 @@ describe('page.tsx no lee sesion: su HTML es cacheado y compartido entre visitan
     expect(CODIGO).not.toMatch(/export\s+const\s+dynamic\s*=/);
   });
 });
+
+/**
+ * LA GEOMETRIA DEL REDISENO DEL 2026-09-26, y por que se defiende desde aca.
+ *
+ * El dueno derogo D10-2 y D10-3 y la pantalla paso a 50/50 sin canal, con el
+ * formulario SIN tarjeta alrededor. Los dos defectos que persigue este `describe`
+ * son los dos que un rediseno revierte solo: que alguien devuelva la `Card`
+ * "porque el formulario se ve desnudo", y que alguien devuelva el login a la
+ * tercera pista copiando el codigo viejo de otra rama. El E2E los mide en el
+ * navegador; esta compuerta los caza en el codigo fuente, que es donde aparecen
+ * primero y sin levantar un servidor.
+ *
+ * EL FILTRO DE LINEAS DE COMENTARIO ES LOAD-BEARING PARA LOS DOS CASOS, y esto
+ * no se afirma: se MIDE, igual que lo midio 10-03 para el reloj del proceso.
+ * `page.tsx` documenta las dos prohibiciones con su forma literal — nombra
+ * `lg:col-start-3` en el bloque de la derogacion y nombra `Card`, `CardContent` y
+ * la ruta de su modulo en el parrafo que explica que la superficie desaparecio —
+ * asi que sobre el archivo CRUDO las cuatro busquedas dan `true` y las dos
+ * aserciones de abajo serian ROJO PERMANENTE contra el archivo CORRECTO.
+ * Medicion del 2026-09-28, con el filtro puesto y quitado:
+ *
+ *   SIN filtro, col-start-3          presente: true
+ *   CON filtro, col-start-3          presente: false
+ *   SIN filtro, CardContent          presente: true
+ *   CON filtro, CardContent          presente: false
+ *   SIN filtro, @/components/ui/card presente: true
+ *   CON filtro, @/components/ui/card presente: false
+ *   SIN filtro, Card                 presente: true
+ *   CON filtro, Card                 presente: false
+ *
+ * Y la regla de edicion de este archivo sigue en pie, ahora con dos nombres mas:
+ * los nombres prohibidos van en lineas que EMPIEZAN por marca de comentario (la
+ * de linea, la de bloque, el asterisco de continuacion o la de bloque en JSX),
+ * NUNCA detras de codigo y nunca en una linea de continuacion que empiece por
+ * texto. Un nombre prohibido escrito de otra forma llega al codigo filtrado y
+ * pone esto rojo sin que nada este roto.
+ */
+describe('page.tsx coloca el login con la geometria del rediseno', () => {
+  it('no vuelve a encerrar el formulario en una tarjeta', () => {
+    // Las tres mitades. La del import es la que de verdad cierra la puerta: sin
+    // el modulo no hay forma de usar la primitiva. Las otras dos cazan el caso
+    // de que alguien la traiga por otra ruta o la reexporte.
+    expect(CODIGO).not.toContain('@/components/ui/card');
+    expect(CODIGO).not.toContain('CardContent');
+    expect(CODIGO).not.toContain('Card');
+  });
+
+  it('coloca el login en la columna 2, y la columna 3 ya no existe', () => {
+    // Con dos pistas del 50% la tercera columna no existe: un `col-start-3`
+    // superviviente deja el bloque sin colocar. Las dos mitades, porque la
+    // primera sola pasaria con las dos clases puestas a la vez.
+    expect(CODIGO).toContain('lg:col-start-2');
+    expect(CODIGO).not.toContain('col-start-3');
+  });
+});
