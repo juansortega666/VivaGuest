@@ -126,3 +126,43 @@ playwright test` reporta **171 pasados · 2 fallados · 1 saltado** (174 en tota
 **Los dos son reproducibles, no intermitentes** (se volvieron a correr aislados y
 volvieron a caer). Quedan para quien tenga el alcance de `/operacion` y del carril
 de push.
+
+---
+
+## 4. El anillo de foco no llega a 3:1 contra el relleno del botón primario (2026-09-28)
+
+**Encontrado al ejecutar el quick `260928-lqd`** (rescate de los tres arreglos de
+foco de `/login`). No lo causó ese quick: lo destapó.
+
+**Estado:** deuda abierta, con número. Contra la superficie clara del login el
+anillo al 70% da **3.58:1** y cumple WCAG 2.2 SC 2.4.13. Contra el **relleno del
+botón `Entrar`** (`--primary`, #d1382c) no lo cumple ninguna opacidad:
+
+| Opacidad del anillo | Contraste contra `--primary` |
+|---|---|
+| `/50` | **2.04:1** |
+| `/70` | **1.36:1** |
+| cualquier valor mayor | sigue **bajando** |
+
+Subir la opacidad **empeora** la medida, porque acerca el anillo a su color pleno
+y el color pleno de `--ring` (azul) y el de `--primary` (rojo de marca) tienen
+luminancias demasiado parecidas. El 3:1 no se alcanza por esta vía en ningún punto
+del recorrido.
+
+**Por qué no es un defecto del parche.** El parche local de
+`FormularioLogin.tsx` hace lo único que puede hacer sin salirse de su alcance:
+subir la opacidad. Lo que falla es un **choque de luminancias entre `--ring` y
+`--primary`**, o sea entre dos tokens, y arreglarlo exige mover el valor de un
+token de marca.
+
+**Por qué no se arregla aquí.** El quick `260928-lqd` declara los tokens de marca
+(`--brand`, `--brand-identity`, `--brand-gold`, `--primary`, `--sidebar-primary`)
+explícitamente fuera de alcance, y tiene un gate por diff (`MARCA-INTACTA`) que lo
+hace cumplir: el botón `Entrar` sigue rojo y eso es una decisión del dueño, no una
+omisión.
+
+**Condición de salida — y no es "subir más la opacidad".** Se cierra cuando
+alguien **decida el valor de marca**: o `--primary` se mueve a una luminancia que
+deje sitio al anillo azul, o el anillo del botón primario pasa a un token propio
+con contraste medido contra su propio relleno. Cualquier intento de cerrarlo
+tocando solo la opacidad está descartado con los tres números de la tabla.
