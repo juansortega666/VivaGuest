@@ -445,11 +445,22 @@ Fases con patrón ya documentado en el research (se puede saltar):
 **Plans:** 3/4 plans executed
 
 Plans:
+**Wave 1**
 
 - [x] 10-01-PLAN.md — El trazador: la rejilla 45/10/45, el panel publicitario y su ciclo de cuatro grises (wave 1)
 - [x] 10-02-PLAN.md — El pie de página y sus dos glifos de marca, probados sin navegador (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 10-03-PLAN.md — El año de Bogotá, el pie cableado, y la suite completa como regresión (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 10-04-PLAN.md — El rediseño contra la referencia de Runway: 50/50, panel a sangre completa, login sin tarjeta, dos wordmarks y el pie dentro de la columna. Deroga D10-2 y D10-3 (wave 3)
+
+**Cross-cutting constraints:**
+
+- Las aserciones nuevas se vieron en rojo con un señuelo antes de darse por buenas
 
 ---
 *Roadmap creado: 2026-08-31. Resecuenciado para equipo de dos, con el job de borrado movido después del piloto. Google Calendar descartado como fuente: es otro suscriptor del mismo `.ics` de Airbnb.*
