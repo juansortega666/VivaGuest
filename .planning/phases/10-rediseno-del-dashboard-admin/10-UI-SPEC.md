@@ -528,7 +528,16 @@ Y conviene decir cuál era el modo de fallo evidente: **teñir el panel de 423,6
 
 ### 6.3 La lista cerrada del acento no se amplía
 
-`--primary` sigue en los cinco usos de `02-UI-SPEC` §4.4. En esta pantalla aparece en **dos**: el botón `Entrar` (uso 1) y el anillo de foco de los controles (uso 3).
+`--primary` sigue en los cinco usos de `02-UI-SPEC` §4.4. En esta pantalla aparece en **uno**: el botón `Entrar` (uso 1).
+
+> **DEROGADO 2026-09-28.** Esta línea decía **dos** usos, y el segundo era el anillo de
+> foco de los controles (uso 3 de la lista cerrada). Ya no: `--ring` dejó de derivar de
+> `--brand` y ahora deriva de `--status-progress`, que es azul y no es de marca. Motivo
+> medido el 2026-09-22 en el navegador: el anillo de marca (#d1382c) y el borde de error
+> (`--destructive`, #9f1239) dan **1.65:1 entre sí**, o sea que un campo enfocado y un
+> campo con error eran indistinguibles. Consecuencia sobre §6.2: el acento de esta
+> pantalla se queda en el botón `Entrar` y su proporción no sube. Ver la derogación
+> gemela en `02-UI-SPEC` §4.3 y §4.4.
 
 **Prohibido explícitamente en esta fase:** `--primary`, `--brand-identity` y `--brand-gold` en el panel del anuncio, en el footer, en los iconos de redes y en el wordmark. El panel es neutro; el footer es neutro; los iconos deshabilitados son neutros.
 

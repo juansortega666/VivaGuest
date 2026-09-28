@@ -183,9 +183,7 @@
   /* Todo lo que es "de marca" deriva. Nunca al revés. */
   --primary:            var(--brand);
   --primary-foreground: var(--brand-foreground);
-  --ring:               var(--brand);
   --sidebar-primary:    var(--brand);
-  --sidebar-ring:       var(--brand);
 
   /* Estados operativos: NO son de marca y NO cambian con el rebrand. */
   --status-ok:   oklch(0.5273 0.1371 150.07);
@@ -201,6 +199,30 @@
      que no colisiona con --primary (hue 29) ni con --destructive (hue 13.7), que
      es el choque declarado en 02-UI-SPEC.md §4.6. */
   --status-progress: oklch(0.4882 0.2172 264.38);
+
+  /* FOCO — 2026-09-28. El anillo DEJA DE SER de marca y se muda aqui, al bloque
+   * de estados operativos, desde el bloque de MARCA donde vivia.
+   *
+   * POR QUE CAMBIA EL VALOR: el anillo salia de --brand (#d1382c) y el borde de
+   * error sale de --destructive (#9f1239). Medidos en el navegador el 2026-09-22,
+   * los dos rojos dan 1.65:1 entre si (sus anillos, 1.53:1). Por debajo de 3:1 no
+   * son dos estados distintos: un campo enfocado y un campo con error son el mismo
+   * objeto a la vista. --status-progress ya venia medido el 2026-09-03 (6.70:1
+   * sobre --background, 6.25:1 sobre --canvas) y es azul, asi que no colisiona ni
+   * con el hue 29 de --primary ni con el hue 13.7 de --destructive, que es el
+   * choque declarado en 02-UI-SPEC.md §4.6.
+   *
+   * POR QUE VIVE AQUI Y NO ARRIBA: el foco NO es identidad. Un rebrand cambia
+   * --brand, --brand-identity y --brand-gold, y el indicador de foco tiene que
+   * sobrevivir a ese cambio sin tocarse, igual que los cinco estados operativos
+   * que este mismo archivo declara ajenos al rebrand. Devolverlo a var(--brand)
+   * reabre el hallazgo 2 de la auditoria del 2026-09-22.
+   *
+   * POR QUE `--sidebar-ring` SIGUE A `--ring`: es el mismo indicador en otra
+   * superficie, no un segundo token con vida propia. */
+  --ring:         var(--status-progress);
+  --sidebar-ring: var(--ring);
+
   --surface-ok:   oklch(0.9788 0.0221 160.24);
   --surface-warn: oklch(0.9810 0.0187 83.06);
   --surface-destructive: oklch(0.9708 0.0130 11.54);
