@@ -442,7 +442,7 @@ Fases con patrón ya documentado en el research (se puede saltar):
 **Goal:** Que el dashboard del admin deje de verse como shadcn recién instalado y se vuelva un producto. La fase entrega **DOS pantallas**. (1) **`/login`**, la de entrada, tal como quedó tras 10-04: pantalla partida **50/50** sin canal, slot publicitario a sangre completa en la mitad izquierda (placeholder animado entre cuatro grises, wordmark blanco arriba a la izquierda), login sin tarjeta en la mitad derecha y el pie dentro de esa misma columna (copyright de año dinámico, Instagram y TikTok en disabled); debajo de 1024px el panel desaparece y queda el login centrado con el pie apilado. Referencia: la pantalla de acceso de Runway, escogida por el dueño el 2026-09-26, que **deroga D10-2 y D10-3**. (2) **`/operacion`**, la pantalla de trabajo del admin, cuyo rediseño decidió el dueño el **2026-09-28**: un selector de día que gobierna la pantalla entera, un vistazo de cuatro métricas del día seleccionado sin cromo de tarjeta, dos columnas desde 1280px (la lista de tarjetas del día al 30% y el detalle del aseo al 70%, las dos con scroll propio) y las alertas mudadas a una campana de la barra superior. **La fase NO cierra este objetivo:** `/apartamentos`, `/aseadores` y `/finanzas` siguen con el tema por defecto, y eso es la deuda 1 de `10-UI-SPEC.md` §15.
 **Requirements**: — (ninguno nuevo; PLAT-01 y PLAT-02 ya están entregados y esta fase no cambia su comportamiento)
 **Depends on:** Phase 9
-**Plans:** 4/5 plans executed
+**Plans:** 4/5 plans executed (10-05 con su checkpoint humano abierto)
 
 Plans:
 **Wave 1**
@@ -460,7 +460,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 10-05-PLAN.md — El rediseño de `/operacion`: selector de día, vistazo de cuatro métricas, dos columnas al 30 y al 70 con la lista del día y el detalle inline, el sin confirmar como estado de la tarjeta y las alertas mudadas a una campana de la barra superior (wave 4)
+- [ ] 10-05-PLAN.md — El rediseño de `/operacion`: selector de día, vistazo de cuatro métricas, dos columnas al 30 y al 70 con la lista del día y el detalle inline, el sin confirmar como estado de la tarjeta y las alertas mudadas a una campana de la barra superior (wave 4). **Tasks 1 a 6 completas y commiteadas; la Task 7 es un `checkpoint:human-verify` BLOQUEANTE y sigue abierto**
 
 **Cross-cutting constraints:**
 

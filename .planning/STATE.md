@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 10
 current_phase_name: Rediseño del dashboard admin
 status: executing
-stopped_at: "Quick 260928-lqd completo: el anillo de foco rescatado y e2e/login.spec.ts en 22. La FASE 10 sigue sin declararse cerrada: lo decide el verificador y el dueno tiene pendiente si sigue con mas pantallas del dashboard."
-last_updated: "2026-09-28T21:35:00.000Z"
+stopped_at: "10-05 Task 7: checkpoint humano BLOQUEANTE abierto (las Tasks 1 a 6 estan completas y commiteadas)"
+last_updated: "2026-09-29T07:08:29.591Z"
 last_activity: 2026-09-28
 last_activity_desc: "Quick 260928-lqd: rescate de los tres arreglos de foco de /login"
-state_head: dc233720125bbada8b35b178ddb8310b934cc84c
+state_head: 7f27628043f6cdcbfc24c4f54ca59823e775118e
 progress:
   total_phases: 10
   completed_phases: 6
-  total_plans: 113
-  completed_plans: 107
+  total_plans: 114
+  completed_plans: 108
 milestone_name: milestone
 ---
 
@@ -398,6 +398,7 @@ Progress: [██████████] 100%
 | Phase 10 P02 | 9m 22s | 3 tasks | 4 files |
 | Phase 10 P01 | 20min | 3 tasks | 4 files |
 | Phase 10 P04 | 1h 43m | 4 tasks | 10 files |
+| Phase 10 P05 | 2h 10m | 6 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -485,6 +486,8 @@ Las decisiones se registran en la tabla Key Decisions de PROJECT.md. Las que má
 - [Phase 09]: Las aserciones de conteo usan .match(...) ?? [] para que el rojo nombre el conteo en vez de 'Target cannot be null or undefined'
 - [Phase 09]: El 10% que falta en /login es UN canal central (45/10/45 con la columna del medio vacia), no dos margenes exteriores: deja la pantalla con dos numeros en vez de tres blancos por viewport
 - [Phase 09]: test.use({ reducedMotion: 'reduce' }) no compila con @playwright/test@1.62.1; la emulacion se declara por contextOptions, y el senuelo 5 comprobo que llega al CSS
+- [Phase 10]: 10-05: `Crear aseo` vuelve a la cabecera de /operacion. El detalle del aseo sustituye a `InfoDelDia` entero, asi que con un aseo abierto el boton dejaba de existir; la copia dentro del detalle se descarto porque dejaria dos controles con el mismo nombre accesible
+- [Phase 10]: 10-05: el detalle del aseo es INLINE y no un dialogo. Sin trampa de foco, sin tecla de escape y sin superposicion, con una asercion que cuenta cero dialogos como compuerta. `PanelLectura.tsx` no se doblo: se construyo un armazon al lado
 
 ### Pending Todos
 
@@ -587,8 +590,8 @@ Registradas por el plan 07-14 el 2026-09-13 al cerrar la fase. **Los planners de
 
 ## Session Continuity
 
-Last session: 2026-09-28T21:35:00.000Z
-Stopped at: Quick 260928-lqd completo (3 commits, `e2e/login.spec.ts` de 19 a 22 en verde). La FASE 10 sigue sin declararse cerrada: lo decide el verificador y el dueno tiene pendiente si sigue con mas pantallas del dashboard.
+Last session: 2026-09-29T07:08:23.052Z
+Stopped at: 10-05 Task 7: checkpoint humano BLOQUEANTE abierto (las Tasks 1 a 6 estan completas y commiteadas)
 
 **Abiertos:** (1) el checkpoint humano de **07-13**, el recorrido de nueve puntos en un iPhone real; sin el, la Fase 7 no cierra y 07-13 no tiene SUMMARY a proposito. (2) el checkpoint humano de 06-10 tarea 3, el recorrido en un telefono real, con sus cinco criterios de fallo en `06-10-SUMMARY.md`.
 
@@ -635,4 +638,4 @@ migracion 15 esta aplicada y las tres suites estan en verde: `test:unit` **29 ar
    segundos, `db:test` 2,3 s y la integracion completa 9,7 s.
 
 Siguiente: cerrar el checkpoint humano de la Fase 6 en un telefono real, o arrancar la Fase 7 (Financiero), que es la que consume el `monto` entero que esta fase empezo a capturar.
-Resume file: None
+Resume file: .planning/phases/10-rediseno-del-dashboard-admin/10-05-PLAN.md
