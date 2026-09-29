@@ -442,6 +442,136 @@ export function filasDelDia(filas: FilaDeOperacion[], dia: string): FilaDeOperac
   return filas.filter((f) => f.scheduled_date === dia);
 }
 
+/** Lo que la métrica de gastos necesita. `null` en los dos cuando la lectura falló. */
+export interface GastosDelDia {
+  conteo: number | null;
+  /** Pesos enteros. `bigint` en la base, número acá: no hay subunidad en COP. */
+  total: number | null;
+}
+
+/**
+ * LAS CINCO CIFRAS DEL VISTAZO DEL DÍA SELECCIONADO (plan 10-05).
+ *
+ * Son cinco y no cuatro porque `Sin confirmar` lleva dos: la del día y la del resto
+ * de la ventana. Ver el campo.
+ */
+export interface ResumenDeDia {
+  /**
+   * Aseos GESTIONADOS y NO cancelados del día.
+   *
+   * ── INCLUYE LOS TERMINADOS, AL REVÉS QUE `ESTADOS_VIVOS`, Y ES A PROPÓSITO ──
+   *
+   * `cargaPorAseador` cuenta solo `pendiente` y `en_curso`, porque responde "cuánto
+   * le queda por hacer a esta persona hoy". Esta cifra responde otra pregunta:
+   * **cuántos aseos TIENE este día**, que es la que se lee en cinco segundos para
+   * dimensionar la jornada. Un aseo terminado a las nueve de la mañana sigue siendo
+   * uno de los aseos de hoy, y descontarlo haría que el número bajara solo a lo
+   * largo del día sin que nada hubiera cambiado en el calendario.
+   *
+   * LAS UNIDADES DE GESTIÓN EXTERNA NO CUENTAN, por la misma razón por la que
+   * `cargaPorAseador` las excluye: no son trabajo que VivaGuest hace, así que
+   * sumarlas al número con el que el admin dimensiona su día lo haría decidir sobre
+   * trabajo que no es suyo. Siguen saliendo en la LISTA del día (DASH-07); lo que
+   * no hacen es contar acá.
+   */
+  activos: number;
+  /** Sin confirmar del día seleccionado. Mismo predicado que la bandeja. */
+  sinConfirmar: number;
+  /**
+   * SIN CONFIRMAR EN LOS **OTROS** DÍAS DE LA VENTANA, Y ESTO ES LO QUE SALVA EL
+   * CRITERIO 1 (D-05-7).
+   *
+   * Hasta este plan la bandeja del carril contaba TODOS los sin confirmar de los
+   * catorce días, vengan del día que vengan: uno de dentro de tres días se veía hoy,
+   * sin navegar. Con la pantalla por día eso se pierde, **y perderlo es una
+   * regresión contra "que ningún aseo se pierda"**, que es el core value del
+   * producto y no una preferencia de diseño.
+   *
+   * Así que la métrica lleva dos cifras: la del día, grande, y esta debajo en micro
+   * como `+N en otros días`. Se calcula con el MISMO `bandejaSinConfirmar()` que
+   * alimentaba la bandeja, sobre la ventana entera menos el día, así que **no hay
+   * ningún predicado nuevo** y sus unitarias siguen valiendo sin tocarse.
+   */
+  sinConfirmarEnOtrosDias: number;
+  /**
+   * URGENTES DEL DÍA, Y **`null` NO ES UN DESCUIDO** (D-05-3).
+   *
+   * `null` cuando el día es ANTERIOR a hoy, y la pantalla lo pinta como el guion con
+   * `no aplica`, no como un cero. Nulo y cero son cosas distintas: cero dice "no hay
+   * ninguno", nulo dice "esta pregunta no tiene respuesta para este día".
+   *
+   * ── POR QUÉ NO SE RECALCULA, QUE ES LA PREGUNTA OBVIA ──────────────────────
+   *
+   * `cleanings.is_urgent` la mantienen los RPC de sincronización, y **el `where` de
+   * ese update solo toca `origin = 'ical'`, `is_managed`, estado distinto de
+   * cancelada y `scheduled_date >= public.today_bog()`**. O sea que en un día pasado
+   * el valor está CONGELADO: es lo que era la última vez que ese día fue futuro.
+   *
+   * Recalcularlo al leer es posible (`calendar_reservations` tiene grant de select y
+   * policy de admin) y **se descarta**: sería una SEGUNDA VERDAD sobre la urgencia,
+   * con un predicado parecido pero no idéntico al del SQL, y este repo ya tiene
+   * escrito cuatro veces qué pasa con dos verdades sobre el mismo dato.
+   *
+   * Lo que se hace es lo que el propio dominio ya decidió: `alertasComputadas()`
+   * acota la alerta de urgencia a `scheduled_date >= hoy` **con esta razón literal**,
+   * que su significado es "entra huésped el mismo día" y pasada la fecha ya no hay
+   * nada que apurar. La métrica sigue esa misma regla, y por eso el predicado de
+   * abajo es el MISMO `vivo` de esa función y no uno paralelo: la cifra del vistazo y
+   * la alerta de la campana no pueden contradecirse dentro del mismo render.
+   *
+   * ── DEUDA DECLARADA, CON SU CAUSA ─────────────────────────────────────────
+   *
+   * Un `repaso` o una `emergencia` creados a mano NUNCA se marcan urgentes, porque el
+   * update solo toca `origin = 'ical'`. **La métrica subcuenta ahí**, y arreglarlo es
+   * una decisión del dominio de sincronización, no de una pantalla.
+   */
+  urgentes: number | null;
+  /** Conteo y total de los gastos reportados sobre los aseos del día (D-05-4). */
+  gastos: GastosDelDia;
+}
+
+/**
+ * EL VISTAZO DEL DÍA, COMO PROYECCIÓN PURA.
+ *
+ * Recibe la VENTANA ENTERA y no el día ya filtrado, y eso no es un descuido: la
+ * cifra de desbordamiento de `Sin confirmar` se calcula sobre la ventana completa
+ * menos el día, así que una entrada ya recortada la haría imposible. Es el mismo
+ * argumento que la cabecera de `filasDelDia` hace por el otro lado.
+ *
+ * @param hoy El día de negocio de Bogotá, el mismo de la ventana. Decide si la
+ *   cifra de urgentes tiene sentido para el día pedido.
+ * @param gastos Ya leídos, porque son OTRA tabla y no una proyección de estas filas.
+ */
+export function resumenDelDia(
+  filas: FilaDeOperacion[],
+  dia: string,
+  hoy: string,
+  gastos: GastosDelDia,
+): ResumenDeDia {
+  const delDia = filasDelDia(filas, dia);
+
+  const activos = delDia.filter((f) => f.is_managed && f.state !== 'cancelada').length;
+
+  // El MISMO predicado que la bandeja, llamándolo y no reescribiéndolo: es lo que
+  // hace que el conteo del vistazo y el de la tanda de confirmación sean el mismo
+  // conteo. Un `filter` propio acá sería la cuarta verdad sobre `sin_confirmar`.
+  const sinConfirmar = bandejaSinConfirmar(delDia).length;
+  const sinConfirmarEnOtrosDias = bandejaSinConfirmar(filas).length - sinConfirmar;
+
+  const urgentes =
+    dia < hoy
+      ? null
+      : delDia.filter(
+          (f) =>
+            f.is_urgent &&
+            f.is_managed &&
+            f.state !== null &&
+            ESTADOS_VIVOS.has(f.state),
+        ).length;
+
+  return { activos, sinConfirmar, sinConfirmarEnOtrosDias, urgentes, gastos };
+}
+
 /**
  * Los tres bloques del carril ancho (DASH-01), sobre las filas ya traídas.
  *
@@ -847,6 +977,69 @@ export async function leerAseadoresActivos(
   if (error) throw new Error(error.message);
 
   return data ?? [];
+}
+
+/**
+ * LOS GASTOS REPORTADOS SOBRE LOS ASEOS DE UN DÍA (D-05-4).
+ *
+ * ── SE FILTRA POR IDENTIFICADOR DE ASEO, Y ESO NO ES UN RODEO ──────────────
+ *
+ * `public.expenses` NO TIENE DÍA DE NEGOCIO: sus columnas de tiempo son
+ * `created_at` y nada más. Su único índice es `expenses_cleaning_idx on
+ * (cleaning_id)`, así que preguntar por la lista de aseos del día es exactamente lo
+ * que ese índice cubre. La RLS no estorba: `expenses_admin_all for all to
+ * authenticated using (private.is_admin())`, con grant de tabla y sin grants por
+ * columna.
+ *
+ * ── POR QUÉ NO SE USA NINGUNA DE LAS CUATRO FUNCIONES DEFINER DE `/finanzas` ──
+ *
+ * `resumen_financiero`, `costo_por_aseadora`, `gastos_de_aseadora` y
+ * `rentabilidad_aseos` reciben un rango `p_desde`/`p_hasta` y agrupan por el día de
+ * CIERRE del aseo, o sea `public.dia_bog(cleanings.finished_at)`. **Ese es justo el
+ * otro criterio**, y reutilizarlas daría la cifra de la otra pantalla con el rótulo
+ * de esta. Ninguna agrupa por día ni es una vista.
+ *
+ * ── LA DIVERGENCIA CON `/finanzas` ES DELIBERADA Y SE DICE EN PANTALLA ─────
+ *
+ * El proyecto ya decidió, por escrito y en tres migraciones, que un gasto pertenece
+ * al día en que el aseo se CERRÓ. La decisión del dueño del 2026-09-28 para esta
+ * pantalla es la contraria: los gastos del día son los de los aseos PROGRAMADOS ese
+ * día, porque pidió que las cuatro métricas salgan de la fecha del selector sin
+ * excepción. Consecuencia real: un aseo programado el 28 y cerrado a las 00:20 pone
+ * su gasto el 29 para `/finanzas` y el 28 acá. **Las dos cifras pueden no coincidir y
+ * eso NO es un defecto**, así que tiene que ser legible sin abrir el código: el
+ * `title` de la métrica lleva la frase completa. Sin ella, esto vuelve como reporte
+ * de bug en un mes.
+ *
+ * ── SE DEGRADA, NO TUMBA LA PANTALLA ──────────────────────────────────────
+ *
+ * Misma regla y misma razón literal que `marcarSinEvidencia`: si falla, devuelve
+ * conteo y total nulos y la pantalla se pinta igual. Tumbar `/operacion` —la pantalla
+ * desde la que el admin confirma y reasigna— por una métrica accesoria sería cambiar
+ * un dato que falta por una jornada sin herramienta. Y el nulo **no se pinta como
+ * cero**: cero dice que no hubo gastos y nulo dice que no se pudieron leer.
+ *
+ * Con lista vacía no pregunta nada y devuelve ceros, también igual que
+ * `marcarSinEvidencia`: un día sin aseos no tiene gastos, y eso es un hecho, no un
+ * fallo de lectura.
+ */
+export async function leerGastosDelDia(
+  supabase: SupabaseClient<Database>,
+  idsDeAseos: string[],
+): Promise<GastosDelDia> {
+  if (idsDeAseos.length === 0) return { conteo: 0, total: 0 };
+
+  const { data, error } = await supabase
+    .from('expenses')
+    .select('monto')
+    .in('cleaning_id', idsDeAseos);
+
+  if (error || !data) return { conteo: null, total: null };
+
+  return {
+    conteo: data.length,
+    total: data.reduce((suma, gasto) => suma + gasto.monto, 0),
+  };
 }
 
 /** El nombre del apartamento, o cadena vacía si la RLS no dejó resolver el embed. */

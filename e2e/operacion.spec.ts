@@ -472,6 +472,344 @@ test('un ?dia invalido renderiza hoy Y el parametro sigue en la direccion', asyn
 });
 
 // ───────────────────────────────────────────────────────────────────────────
+// 1.c EL VISTAZO DE CUATRO METRICAS Y LA SENAL DE CALENDARIO — plan 10-05
+//
+// ── QUE MIDE ESTE BLOQUE ──────────────────────────────────────────────────
+//
+// La regla que el dueno enuncio el 2026-09-28: las cuatro metricas salen del dia
+// del selector SIN EXCEPCION. Y las dos cifras con trampa: los urgentes de un dia
+// pasado, cuyo `is_urgent` esta congelado en la base, y los gastos, que vienen de
+// otra tabla y por otro criterio de dia que `/finanzas`.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** La METRICA entera (rotulo + cifra + leyenda), por su clave estable. */
+function metrica(p: Page, clave: string) {
+  return p.locator(`[data-slot="metrica-dia"][data-metrica="${clave}"]`);
+}
+
+/** Siembra un gasto sobre un aseo. No hay fixture compartido: es una fila y media. */
+async function sembrarGasto(
+  idAseo: string,
+  propiedad: string,
+  reportadoPor: string,
+  monto: number,
+  concepto: string,
+): Promise<void> {
+  const { error } = await servicio.from('expenses').insert({
+    cleaning_id: idAseo,
+    property_id: propiedad,
+    concepto,
+    monto,
+    reported_by: reportadoPor,
+  });
+  if (error) throw new Error(`No se pudo sembrar el gasto: ${error.message}`);
+}
+
+test('LAS CUATRO metricas cambian al navegar de dia, no una', async ({ paginaAdmin }) => {
+  const { gestionada, segunda, tercera, aseadoraA, fechas } = escenario;
+
+  // HOY: tres activos, dos sin confirmar, uno urgente, un gasto.
+  // AYER: uno activo, uno sin confirmar, urgentes NO APLICA, cero gastos.
+  //
+  // Los cuatro pares de cifras son distintos a proposito: con una sola metrica
+  // cambiando, un bug que dejara las otras tres ancladas a hoy pasaria el test.
+  const [deHoyUno] = await sembrarAseos(servicio, [
+    { propiedad: gestionada.id, fecha: fechas.hoy, urgente: true },
+    { propiedad: segunda.id, fecha: fechas.hoy },
+    { propiedad: tercera.id, fecha: fechas.hoy, confirmado: true, aseador: aseadoraA.id },
+    { propiedad: gestionada.id, fecha: fechas.ayer },
+  ]);
+  await sembrarGasto(deHoyUno, gestionada.id, aseadoraA.id, 180_000, 'Jabon y guantes');
+
+  await paginaAdmin.goto('/operacion');
+
+  await expect(cifraDeMetrica(paginaAdmin, 'activos')).toHaveText('3');
+  await expect(cifraDeMetrica(paginaAdmin, 'sin-confirmar')).toHaveText('2');
+  await expect(cifraDeMetrica(paginaAdmin, 'urgentes')).toHaveText('1');
+  // `4 · $ 180K` es la forma que el dueno pidio: conteo y total abreviado. Con un
+  // solo gasto, `1 · $ 180K`.
+  await expect(cifraDeMetrica(paginaAdmin, 'gastos')).toHaveText(/^1 · \$.180K$/);
+
+  // La leyenda del desbordamiento: el sin confirmar de AYER se ve desde HOY sin
+  // navegar, que es lo que conserva la promesa del criterio 1 (D-05-7).
+  await expect(metrica(paginaAdmin, 'sin-confirmar')).toContainText('+1 en otros días');
+
+  const anterior = selectorDeDia(paginaAdmin).getByRole('link', { name: /día anterior/ });
+  await pulsarHastaNavegar(paginaAdmin, anterior, /[?&]dia=/);
+
+  await expect(cifraDeMetrica(paginaAdmin, 'activos')).toHaveText('1');
+  await expect(cifraDeMetrica(paginaAdmin, 'sin-confirmar')).toHaveText('1');
+  // El gasto vive en un aseo de HOY, asi que en ayer el conteo es cero y se pinta el
+  // cero SOLO: la mitad de dinero de un conteo en cero es siempre cero.
+  await expect(cifraDeMetrica(paginaAdmin, 'gastos')).toHaveText('0');
+  // Y la cuarta: en un dia pasado NO es una cifra. Ver el caso siguiente.
+  //
+  // El patron y NO `toHaveText('—')`: el `textContent` del nodo incluye el texto
+  // accesible, asi que la igualdad exacta recibe `"—no aplica"`. Medido.
+  await expect(cifraDeMetrica(paginaAdmin, 'urgentes')).toHaveText(/^—/);
+});
+
+test('en un dia PASADO con un aseo urgente sembrado, urgentes NO dice una cifra', async ({
+  paginaAdmin,
+}) => {
+  const { gestionada, fechas } = escenario;
+
+  // D-05-3. `is_urgent` solo se mantiene para `scheduled_date >= today_bog()`, asi
+  // que aca se siembra un valor CONGELADO: la fila dice urgente y el predicado del
+  // SQL ya no lo mantendria. Pintarlo seria afirmar algo que la base no sostiene.
+  await sembrarAseos(servicio, [
+    { propiedad: gestionada.id, fecha: fechas.ayer, urgente: true },
+  ]);
+
+  await paginaAdmin.goto(`/operacion?dia=${fechas.ayer}`);
+
+  const cifra = cifraDeMetrica(paginaAdmin, 'urgentes');
+  await expect(cifra).toHaveText(/^—/);
+
+  // La asercion fuerte, y la que el plan pide literal: NO dice una cifra. Ninguna,
+  // no solo el `1` sembrado. Un `not.toHaveText('1')` pasaria con un `0` pintado, y
+  // cero es justo la respuesta equivocada: cero dice "no hay ninguno" y aca la
+  // verdad es "esta pregunta no tiene respuesta para este dia".
+  expect(await cifra.textContent()).not.toMatch(/\d/);
+
+  // Y el guion SOLO no dice nada en un lector de pantalla: el motivo va en texto
+  // accesible, misma regla que `SinDato` de la fila de aseo.
+  await expect(metrica(paginaAdmin, 'urgentes')).toContainText('no aplica');
+});
+
+test('el title de gastos lleva la cifra EXACTA y la frase de la divergencia con Finanzas', async ({
+  paginaAdmin,
+}) => {
+  const { gestionada, aseadoraA, fechas } = escenario;
+
+  // 180.400 es el caso que hace visible el problema: abreviado es `$ 180K`, y quien
+  // abra el detalle va a ver 180.400 y a leerlo como un error de cuadre.
+  const [idAseo] = await sembrarAseos(servicio, [
+    { propiedad: gestionada.id, fecha: fechas.hoy },
+  ]);
+  await sembrarGasto(idAseo, gestionada.id, aseadoraA.id, 180_400, 'Jabon');
+
+  await paginaAdmin.goto('/operacion');
+
+  const titulo = await metrica(paginaAdmin, 'gastos').getAttribute('title');
+  expect(titulo).not.toBeNull();
+
+  // La cifra exacta, porque la abreviatura redondea.
+  expect(titulo?.replace(/\s/g, ' ')).toContain('$ 180.400');
+  // Y la frase de la divergencia: `/finanzas` agrupa por el dia en que el aseo se
+  // CERRO y esta pantalla por el dia en que estaba PROGRAMADO. Las dos cifras pueden
+  // no coincidir y eso NO es un defecto; sin esta frase vuelve como reporte de bug.
+  expect(titulo).toContain('programados el');
+  expect(titulo).toContain('se cerró');
+  expect(titulo).toContain('pueden no coincidir');
+});
+
+test('un gasto de un aseo de AYER reportado HOY cuenta en AYER, no en hoy', async ({
+  paginaAdmin,
+}) => {
+  const { gestionada, segunda, aseadoraA, fechas } = escenario;
+
+  /**
+   * ── EL CASO QUE SEPARA LOS DOS CRITERIOS DE DIA (D-05-4 y la trampa 2) ─────
+   *
+   * `public.expenses` NO TIENE dia de negocio: sus columnas de tiempo son
+   * `created_at` y nada mas. Asi que hay dos formas de agrupar y solo una es la que
+   * el dueno pidio:
+   *
+   *   - por `created_at`  -> el gasto cae en HOY, porque se reporto hoy
+   *   - por el `scheduled_date` del aseo -> cae en AYER, que es lo correcto aca
+   *
+   * El aseo se siembra en AYER y el gasto se inserta SIN `created_at` explicito, o
+   * sea con el `now()` del default: es exactamente el caso real de la aseadora que
+   * cierra un aseo de ayer y reporta el gasto esta manana.
+   */
+  const [deAyer] = await sembrarAseos(servicio, [
+    { propiedad: gestionada.id, fecha: fechas.ayer },
+    { propiedad: segunda.id, fecha: fechas.hoy },
+  ]);
+  await sembrarGasto(deAyer, gestionada.id, aseadoraA.id, 45_000, 'Detergente');
+
+  // En AYER: el gasto esta.
+  await paginaAdmin.goto(`/operacion?dia=${fechas.ayer}`);
+  await expect(cifraDeMetrica(paginaAdmin, 'gastos')).toHaveText(/^1 · \$.45K$/);
+
+  // En HOY: cero, aunque el gasto se haya CREADO hoy.
+  await paginaAdmin.goto('/operacion');
+  await expect(cifraDeMetrica(paginaAdmin, 'gastos')).toHaveText('0');
+});
+
+test('la senal de calendario PRECEDE al selector en el orden del DOM', async ({ paginaAdmin }) => {
+  await paginaAdmin.goto('/operacion');
+
+  // El dueno lo pidio literal el 2026-09-28: la senal inmediatamente a la IZQUIERDA
+  // del selector. Se mide sobre el orden del DOCUMENTO y no sobre coordenadas: una
+  // asercion de `boundingBox().x` pasaria igual con los dos en el orden inverso y
+  // `flex-row-reverse` puesto, que es precisamente el bug que esto tiene que ver.
+  //
+  // Y devuelve una CADENA y no un booleano: asi el rojo dice en que orden estan de
+  // verdad, en vez de `expected true, received false`. `Node` no existe en el
+  // proceso de Node del runner, solo dentro del `evaluate`, asi que la constante va
+  // por su valor numerico con su nombre al lado.
+  const relacion = await paginaAdmin.evaluate(() => {
+    const senal = document.querySelector('[data-slot="senal-calendario"]');
+    const selector = document.querySelector('[data-slot="selector-dia"]');
+    if (senal === null) return 'no hay senal de calendario';
+    if (selector === null) return 'no hay selector de dia';
+    if (selector.previousElementSibling === senal) return 'inmediatamente antes';
+    // 4 es `Node.DOCUMENT_POSITION_FOLLOWING`.
+    const sigue = (senal.compareDocumentPosition(selector) & 4) !== 0;
+    return sigue ? 'antes, pero no pegada' : 'despues del selector';
+  });
+
+  expect(relacion).toBe('inmediatamente antes');
+});
+
+test('con la sincronizacion SANA la senal no lleva color de aviso', async ({ paginaAdmin }) => {
+  const { gestionada, segunda, tercera, externa } = escenario;
+  await fijarSaludDeSync(servicio, gestionada.id, 'sana', [
+    segunda.id,
+    tercera.id,
+    externa.id,
+  ]);
+
+  await paginaAdmin.goto('/operacion');
+
+  const senal = paginaAdmin.locator('[data-slot="senal-calendario"]');
+  await expect(senal).toHaveAttribute('data-estado', 'sana');
+
+  // El icono de la rama sana es el de calendario CORRECTO. Se afirma la SILUETA por
+  // la clase que emite lucide y NO solo por el nombre accesible: ver la cabecera de
+  // `siluetaDeLaSenal`.
+  await expect(senal.getByRole('img', { name: 'Calendario sincronizando' })).toBeVisible();
+  await expect(siluetaDeLaSenal(paginaAdmin)).toHaveClass(/lucide-calendar-check/);
+
+  // Y el color NO es el de aviso: la senal no compite cuando todo va bien, que es la
+  // mitad de lo que el dueno pidio.
+  const colorSano = await senal.evaluate((el) => getComputedStyle(el).color);
+  const colorDeAviso = await colorDelTokenDeAviso(paginaAdmin);
+  expect(colorSano).not.toBe(colorDeAviso);
+});
+
+test('con la sincronizacion CAIDA cambia la silueta, el color Y aparece texto visible', async ({
+  paginaAdmin,
+}) => {
+  const { gestionada, segunda, tercera, externa } = escenario;
+  await fijarSaludDeSync(servicio, gestionada.id, 'caida', [
+    segunda.id,
+    tercera.id,
+    externa.id,
+  ]);
+
+  await paginaAdmin.goto('/operacion');
+
+  const senal = paginaAdmin.locator('[data-slot="senal-calendario"]');
+  await expect(senal).toHaveAttribute('data-estado', 'caida');
+
+  // LAS TRES COSAS, y las tres se afirman: 04-UI-SPEC §5 prohibe el color como UNICO
+  // canal, y un punto neutro contra un punto rojo se diferencian solo por el color.
+  //
+  // ── EL ORDEN DE LAS TRES NO ES NARRATIVO, ES PARA PODER MEDIR EL SENUELO ──
+  //
+  // El color va PRIMERO a proposito. El senuelo de "solo color" (dejar
+  // `CalendarCheck` en las dos ramas) tiene que dejar medido, EN LA MISMA CORRIDA,
+  // que el color sigue en verde y que lo que cae es la silueta. Con la silueta
+  // primero, la corrida se detiene ahi y del color no queda medicion: solo el
+  // razonamiento de que no deberia haber cambiado, que es justo lo que este plan no
+  // acepta como evidencia.
+  //
+  //   1. EL COLOR, que sale de `--status-warn` y no de `--destructive`: ese esta
+  //      reservado a acciones destructivas, y un tercer rojo pondria tres rojos en
+  //      una pantalla (D-05-5).
+  const colorCaido = await senal.evaluate((el) => getComputedStyle(el).color);
+  expect(colorCaido).toBe(await colorDelTokenDeAviso(paginaAdmin));
+
+  //   2. LA SILUETA. `CalendarX`, el mismo icono que la alerta `calendario_caido` ya
+  //      usa, asi que el admin lo aprende una vez. Y se afirma por la clase del glifo
+  //      y no por el nombre accesible: ver `siluetaDeLaSenal`.
+  await expect(senal.getByRole('img', { name: 'Calendario caído' })).toBeVisible();
+  await expect(siluetaDeLaSenal(paginaAdmin)).toHaveClass(/lucide-calendar-x/);
+  await expect(siluetaDeLaSenal(paginaAdmin)).not.toHaveClass(/lucide-calendar-check/);
+
+  //   3. EL TEXTO VISIBLE, que es el canal de mas ancho de banda que hay.
+  await expect(senal).toContainText('Calendario caído');
+});
+
+test('NINGUNA metrica del vistazo lleva borde, fondo ni sombra', async ({ paginaAdmin }) => {
+  const { gestionada, fechas } = escenario;
+  await sembrarAseos(servicio, [{ propiedad: gestionada.id, fecha: fechas.hoy }]);
+
+  await paginaAdmin.goto('/operacion');
+
+  // D-05-6 y el principio de DATA INK que el dueno enuncio: ni bordes, ni sombras,
+  // ni decoracion que no comunique nada. Es la divergencia DECLARADA con
+  // `TarjetaKPI` de `/finanzas`, que es una card con borde y fondo a proposito.
+  //
+  // Se mide sobre el ESTILO COMPUTADO y no sobre la lista de clases: una clase que no
+  // este en el archivo puede llegar de un `@apply` o de un ancestro.
+  const metricas = paginaAdmin.locator('[data-slot="metrica-dia"]');
+  await expect(metricas).toHaveCount(4);
+
+  const estilos = await metricas.evaluateAll((nodos) =>
+    nodos.map((n) => {
+      const s = getComputedStyle(n);
+      return {
+        anchoDeBorde: s.borderTopWidth,
+        sombra: s.boxShadow,
+        fondo: s.backgroundColor,
+      };
+    }),
+  );
+
+  for (const estilo of estilos) {
+    expect(estilo.anchoDeBorde).toBe('0px');
+    expect(estilo.sombra).toBe('none');
+    // `rgba(0, 0, 0, 0)` es el transparente que emite el motor cuando no hay fondo.
+    expect(estilo.fondo).toBe('rgba(0, 0, 0, 0)');
+  }
+});
+
+/**
+ * EL SVG DE LA SENAL DE CALENDARIO, PARA AFIRMAR SU **SILUETA**.
+ *
+ * ── POR QUE LA CLASE DE LUCIDE Y NO EL NOMBRE ACCESIBLE. MEDIDO ───────────
+ *
+ * El nombre accesible NO ES LA SILUETA. El senuelo 4 del plan (pintar la rama caida
+ * solo con color, dejando `CalendarCheck` en las dos ramas y cambiando unicamente el
+ * `aria-label`) **paso en VERDE** contra
+ * `getByRole('img', { name: 'Calendario caido' })`: el rol y el nombre casaban igual
+ * con el icono equivocado. Medido el 2026-09-28.
+ *
+ * `lucide-react` emite `class="lucide lucide-calendar-x …"`, y ese nombre ES la
+ * identidad del glifo. Es un detalle de implementacion de la libreria y se usa a
+ * sabiendas: es el unico gancho estable que distingue DOS DIBUJOS, que es lo que
+ * 04-UI-SPEC §5 exige cuando prohibe el color como unico canal. La alternativa,
+ * afirmar los `path` a mano, se rompe con cualquier retoque del glifo y no dice nada
+ * al leerla.
+ */
+function siluetaDeLaSenal(p: Page) {
+  return p.locator('[data-slot="senal-calendario"] svg');
+}
+
+/**
+ * El valor RESUELTO de `--status-warn`, leido del documento y no escrito a mano.
+ *
+ * Un hex literal en el test seria una segunda copia del token: el dia que el contrato
+ * de color mueva el valor, la asercion se pondria roja contra un codigo correcto. Se
+ * resuelve pintando el token en un elemento de sonda y leyendo su color computado,
+ * que es lo unico que devuelve la misma forma (`rgb(...)`) que `getComputedStyle`.
+ */
+async function colorDelTokenDeAviso(p: Page): Promise<string> {
+  return p.evaluate(() => {
+    const sonda = document.createElement('span');
+    sonda.style.color = 'var(--status-warn)';
+    document.body.append(sonda);
+    const color = getComputedStyle(sonda).color;
+    sonda.remove();
+    return color;
+  });
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // 2. EL FLUJO COMPLETO DEL CRITERIO 3, ENCADENADO SOBRE EL MISMO ASEO
 // ───────────────────────────────────────────────────────────────────────────
 

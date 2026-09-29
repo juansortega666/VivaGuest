@@ -213,3 +213,69 @@ archivo que manipula el reloj del sistema con `vi.useFakeTimers()` fuera de un
 **Condición de salida:** mover el `it` a hermano del anterior y comprobar que la
 cuenta del archivo SUBE en uno. Si al desanidarlo el caso sale rojo, es un
 hallazgo de segundo orden y hay que medirlo antes de tocar la consulta.
+
+---
+
+## 6. `next dev` en el 3100 CORROMPE el build de producción de la suite E2E (2026-09-28)
+
+**Encontrado al ejecutar la Task 2 de 10-05**, tras perder tres corridas enteras de
+`e2e/operacion.spec.ts` contra código correcto. No lo causa este plan: lo dispara
+cualquier plan que edite código y corra la suite en la misma sesión.
+
+**Síntoma, y se lee como "la suite está rota":** los 28 casos del spec caen a la
+vez, y el `[WebServer]` imprime
+
+```
+⨯ TypeError: Cannot read properties of undefined (reading 'call')
+    at Object.c [as require] (.next/server/webpack-runtime.js:1:143)
+  digest: '2600095951'
+```
+
+La pantalla responde 500, así que **todo localizador da `element(s) not found`** y
+el rojo apunta a la aserción, no a la causa. El mismo caso corrido aislado con
+`-g` pasa, que es lo que hace perder la tarde.
+
+**Causa, medida:** `next dev` y `next build` **comparten el directorio `.next`**.
+En esta máquina había un servidor de desarrollo vivo:
+
+```
+28483 node node_modules/.bin/next dev --port 3100
+74080  └─ next-server (v15.5.24)
+```
+
+El watcher de `next dev` recompila con cada edición de archivo y reescribe
+`.next/`. Cuando eso cae en medio del `npm run build && npm run start` que
+`playwright.config.ts` lanza como `webServer`, el servidor de producción queda con
+un manifiesto que apunta a chunks que ya no existen, y el runtime de webpack falla
+al resolverlos.
+
+**Y `reuseExistingServer: true` lo agrava**, porque es el default fuera de CI: si
+queda un `next start` vivo en el puerto de la corrida anterior, Playwright lo
+REUSA sin reconstruir y la suite mide el código de antes de la última edición.
+
+**La receta que sí funciona, medida**, antes de cada corrida de Playwright que
+venga después de editar código:
+
+```bash
+# 1. que no haya ningun `next dev` sobre este checkout
+lsof -tiTCP:3100 -sTCP:LISTEN | xargs -r kill
+# 2. que no quede un servidor de la corrida anterior
+lsof -tiTCP:3210 -sTCP:LISTEN | xargs -r kill
+# 3. build limpio, no incremental
+rm -rf .next && npm run build
+# 4. y ahora si
+npm run db:reset && PLAYWRIGHT_PORT=3210 npx playwright test e2e/operacion.spec.ts
+```
+
+**El servidor de desarrollo del 3100 quedó APAGADO** al terminar la Task 2 de este
+plan, porque no hay forma de correr la suite con él vivo. Se vuelve a levantar con
+`npm run dev -- --port 3100`.
+
+**Por qué no se arregla aquí.** El arreglo de verdad es darle a la corrida E2E un
+`distDir` propio (algo como `.next-e2e`), y eso se configura en
+`next.config.ts`, que este plan no toca y que afecta a todo el repo, no a una
+pantalla. Es un cambio de infraestructura de pruebas con su propia medición.
+
+**Condición de salida:** o un `distDir` separado para la corrida E2E, o la receta
+de arriba escrita en `COMO-CORRER-PRUEBAS.md`, que es donde el punto 2 de este
+mismo archivo ya pide que vivan las trampas del stack local.

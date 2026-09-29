@@ -25,10 +25,26 @@
  *
  * ── EL COLOR ES ESTADO, NUNCA DECORACIÓN ──────────────────────────────────
  *
- * Ninguna métrica lleva color de fondo, borde de color ni acento. `tono` existe
- * solo para el caso en que la CIFRA significa un estado que exige acción, y su
- * lista es cerrada: neutro o aviso. Ampliarla es ampliar la lista cerrada del
- * acento de 02-UI-SPEC §4.4, que este plan tiene prohibido por nombre.
+ * **LAS CUATRO CIFRAS VAN EN `--foreground`, LAS CUATRO, SIEMPRE.** Y esa decisión
+ * merece su párrafo, porque la tentación contraria es razonable: un `Sin confirmar`
+ * en tres y un `Urgentes` en dos SON estados que piden acción, así que pintarlos en
+ * `--status-warn` parecería justo lo que el dueño autorizó al reservar el color al
+ * estado.
+ *
+ * No se hace, por dos razones:
+ *
+ *   1. **Serían dos de cuatro cifras en ámbar casi todos los días.** Un vistazo con
+ *      la mitad de sus números en color de aviso deja de tener color de aviso: el ojo
+ *      se acostumbra en dos días y el día que importe no lo va a ver. Es el mismo
+ *      argumento que ya está escrito para `Atrasados · 0 aseos` y para la escala de
+ *      color por carga de `FranjaCarga`.
+ *   2. **Acá el color no aporta un canal que no esté.** La cifra ya dice cuántos
+ *      hay, y el rótulo ya dice de qué. Donde el color sí aporta es en la TARJETA de
+ *      un aseo concreto, que es donde hay que distinguir uno entre treinta de un
+ *      vistazo, y ahí lo lleva el estado del dominio.
+ *
+ * Si el dueño lo pide al ver la pantalla, es una clase por métrica y va en la lista
+ * del checkpoint. Lo que no se hace es adelantarlo sin que lo haya pedido.
  */
 export function MetricaDelDia({
   clave,
@@ -37,7 +53,6 @@ export function MetricaDelDia({
   textoAccesible,
   leyenda,
   title,
-  tono = 'neutro',
 }: {
   /**
    * La clave estable de la métrica. Va al DOM como `data-metrica` y es lo que
@@ -56,7 +71,6 @@ export function MetricaDelDia({
   textoAccesible?: string;
   leyenda?: string;
   title?: string;
-  tono?: 'neutro' | 'aviso';
 }) {
   return (
     <div data-slot="metrica-dia" data-metrica={clave} title={title} className="flex flex-col gap-xs">
@@ -74,14 +88,21 @@ export function MetricaDelDia({
         // entera se daría por satisfecho con un `12` de la leyenda. Va acá y no en
         // el contenedor para que la aserción mida LA CIFRA y no el rótulo.
         data-cifra="true"
-        className={
-          tono === 'aviso'
-            ? 'text-display tabular-nums text-status-warn'
-            : 'text-display tabular-nums text-foreground'
-        }
+        className="text-display tabular-nums text-foreground"
       >
-        {cifra}
-        {textoAccesible !== undefined && <span className="sr-only">{textoAccesible}</span>}
+        {/*
+          Con `textoAccesible` el glifo se OCULTA al lector y el motivo lo sustituye,
+          exactamente como hace `SinDato` de la fila de aseo: un guion suelto leído en
+          voz alta no dice nada, y leído JUNTO a "no aplica" dice dos veces lo mismo.
+        */}
+        {textoAccesible === undefined ? (
+          cifra
+        ) : (
+          <>
+            <span aria-hidden="true">{cifra}</span>
+            <span className="sr-only">{textoAccesible}</span>
+          </>
+        )}
       </span>
 
       {/*

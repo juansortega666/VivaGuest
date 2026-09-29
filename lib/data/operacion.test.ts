@@ -10,7 +10,9 @@ import {
   bandejaSinConfirmar,
   cargaPorAseador,
   filasDelDia,
+  leerGastosDelDia,
   leerOperacion,
+  resumenDelDia,
   type AseadorDeChip,
   type FilaDeOperacion,
 } from './operacion';
@@ -163,6 +165,224 @@ describe('filasDelDia', () => {
       externa.id,
       normal.id,
     ]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('resumenDelDia', () => {
+  /**
+   * EL VISTAZO DE CUATRO METRICAS (plan 10-05).
+   *
+   * Las dos cifras con trampa son urgentes en un dia pasado (nulo, no cero) y los
+   * gastos (que vienen de otra tabla y por otro criterio de dia que `/finanzas`).
+   */
+  const SIN_GASTOS = { conteo: 0, total: 0 };
+
+  it('activos cuenta los gestionados y NO cancelados del dia', () => {
+    const r = resumenDelDia(
+      [
+        fila(),
+        fila({ state: 'en_curso', confirmado_at: '2026-09-10T10:00:00+00:00' }),
+        fila({ state: 'cancelada' }),
+        fila({ scheduled_date: dia(1) }),
+      ],
+      HOY,
+      HOY,
+      SIN_GASTOS,
+    );
+
+    expect(r.activos).toBe(2);
+  });
+
+  it('activos INCLUYE los terminados, al reves que los chips de carga', () => {
+    // `cargaPorAseador` responde "cuanto le queda por hacer a esta persona hoy" y
+    // deja fuera lo completado. Esta cifra responde "cuantos aseos TIENE este dia", y
+    // descontar los terminados haria que el numero bajara solo a lo largo del dia sin
+    // que nada hubiera cambiado en el calendario.
+    const r = resumenDelDia(
+      [fila({ state: 'completada' }), fila()],
+      HOY,
+      HOY,
+      SIN_GASTOS,
+    );
+
+    expect(r.activos).toBe(2);
+  });
+
+  it('las unidades de GESTION EXTERNA no cuentan como activos', () => {
+    // Misma razon por la que `cargaPorAseador` las excluye: no son trabajo que
+    // VivaGuest hace, y sumarlas al numero con el que el admin dimensiona su dia lo
+    // haria decidir sobre trabajo que no es suyo.
+    const r = resumenDelDia([fila(), fila(), filaInerte()], HOY, HOY, SIN_GASTOS);
+
+    expect(r.activos).toBe(2);
+  });
+
+  it('sin confirmar del dia sale del MISMO predicado que la bandeja', () => {
+    /**
+     * ── LAS CUATRO FILAS ESTAN ELEGIDAS PARA QUE CADA TERMINO DEL PREDICADO
+     *    LO DEFIENDA UNA FILA PROPIA, Y ESO NO ES CELO ─────────────────────
+     *
+     * El predicado del indice parcial `cleanings_unconfirmed_idx` tiene TRES
+     * terminos (`is_managed`, `state = 'pendiente'`, `confirmado_at is null`) y el
+     * error facil es escribir un caso en el que un termino tape a otro: una fila con
+     * `is_managed: false` Y `state: null` no distingue si el filtro mira la gestion o
+     * el estado, porque falla los dos.
+     *
+     * **MEDIDO el 2026-09-28**: con la fila externa escrita asi, quitar el termino
+     * `is_managed` del filtro NO PONIA NADA EN ROJO. De ahi la tercera fila de abajo.
+     *
+     * Y su forma es ILEGAL en la base: `cl_unmanaged_is_inert` prohibe una unidad de
+     * gestion externa con estado. Se escribe igual, y es deliberado: esta es una
+     * proyeccion PURA y su contrato no puede depender de que su entrada venga legal.
+     * Es el mismo argumento que la cabecera de `filasDelDia` hace por el otro lado.
+     */
+    const r = resumenDelDia(
+      [
+        fila(), // gestionada, pendiente y sin confirmar: la unica que cuenta
+        fila({ confirmado_at: '2026-09-09T10:00:00+00:00' }), // ya confirmada
+        fila({ is_managed: false, state: 'pendiente', confirmado_at: null }), // externa
+        fila({ state: 'en_curso', confirmado_at: '2026-09-09T10:00:00+00:00' }),
+        fila({ state: 'cancelada', confirmado_at: null }), // cancelada sin confirmar
+        // Y esta defiende el termino del ESTADO por si sola: gestionada, sin
+        // confirmar y NO pendiente. Sin ella, cambiar `state = 'pendiente'` por
+        // `state <> 'cancelada'` NO ponia nada en rojo. Medido el 2026-09-28. Su
+        // forma tambien es ilegal (`cl_completada_shape` exige inicio y fin), y va
+        // por la misma razon que la externa de arriba.
+        fila({ state: 'completada', confirmado_at: null }),
+      ],
+      HOY,
+      HOY,
+      SIN_GASTOS,
+    );
+
+    expect(r.sinConfirmar).toBe(1);
+  });
+
+  it('sin confirmar en OTROS dias cuenta la ventana entera menos el dia', () => {
+    // D-05-7: es lo que conserva la promesa del criterio 1 al matar la bandeja
+    // lateral. Un sin confirmar de dentro de tres dias se ve HOY, sin navegar.
+    const r = resumenDelDia(
+      [fila(), fila({ scheduled_date: dia(3) }), fila({ scheduled_date: dia(-2) })],
+      HOY,
+      HOY,
+      SIN_GASTOS,
+    );
+
+    expect(r.sinConfirmar).toBe(1);
+    expect(r.sinConfirmarEnOtrosDias).toBe(2);
+  });
+
+  it('sin desbordamiento, la cifra de otros dias es cero', () => {
+    const r = resumenDelDia([fila()], HOY, HOY, SIN_GASTOS);
+
+    expect(r.sinConfirmarEnOtrosDias).toBe(0);
+  });
+
+  it('urgentes cuenta los vivos y urgentes de hoy', () => {
+    const r = resumenDelDia(
+      [
+        fila({ is_urgent: true }),
+        fila({ is_urgent: true, state: 'cancelada' }),
+        fila({ is_urgent: false }),
+      ],
+      HOY,
+      HOY,
+      SIN_GASTOS,
+    );
+
+    expect(r.urgentes).toBe(1);
+  });
+
+  it('urgentes es NULO, y no cero, en un dia ANTERIOR a hoy', () => {
+    // D-05-3. `is_urgent` solo se mantiene para `scheduled_date >= today_bog()`, asi
+    // que en un dia pasado el valor esta CONGELADO. Nulo y cero son cosas distintas y
+    // la pantalla los pinta distinto: cero dice "no hay ninguno", nulo dice "esta
+    // pregunta no tiene respuesta para este dia".
+    const r = resumenDelDia(
+      [fila({ scheduled_date: dia(-1), is_urgent: true })],
+      dia(-1),
+      HOY,
+      SIN_GASTOS,
+    );
+
+    expect(r.urgentes).toBeNull();
+    expect(r.urgentes).not.toBe(0);
+  });
+
+  it('urgentes SI se cuenta en hoy y en el futuro', () => {
+    expect(resumenDelDia([fila({ is_urgent: true })], HOY, HOY, SIN_GASTOS).urgentes).toBe(1);
+    expect(
+      resumenDelDia(
+        [fila({ scheduled_date: dia(2), is_urgent: true })],
+        dia(2),
+        HOY,
+        SIN_GASTOS,
+      ).urgentes,
+    ).toBe(1);
+  });
+
+  it('los gastos viajan tal cual, incluido el nulo de lectura fallida', () => {
+    // El nulo NO se convierte en cero: cero dice que no hubo gastos y nulo dice que no
+    // se pudieron leer.
+    const r = resumenDelDia([fila()], HOY, HOY, { conteo: null, total: null });
+
+    expect(r.gastos).toEqual({ conteo: null, total: null });
+  });
+
+  it('un dia sin nada devuelve ceros y no revienta', () => {
+    const r = resumenDelDia([fila({ scheduled_date: dia(4) })], HOY, HOY, SIN_GASTOS);
+
+    expect(r.activos).toBe(0);
+    expect(r.sinConfirmar).toBe(0);
+    expect(r.urgentes).toBe(0);
+    expect(r.sinConfirmarEnOtrosDias).toBe(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('leerGastosDelDia', () => {
+  type Respuesta = { data: { monto: number }[] | null; error: { message: string } | null };
+
+  function clienteDeGastos(respuesta: Respuesta) {
+    const dentro = vi.fn(async () => respuesta);
+    const select = vi.fn(() => ({ in: dentro }));
+    const from = vi.fn(() => ({ select }));
+    return { supabase: { from }, from, select, dentro };
+  }
+
+  it('suma los montos y cuenta las filas', async () => {
+    const c = clienteDeGastos({ data: [{ monto: 30_000 }, { monto: 150_000 }], error: null });
+
+    const r = await leerGastosDelDia(comoCliente(c.supabase), ['a', 'b']);
+
+    expect(r).toEqual({ conteo: 2, total: 180_000 });
+    // El unico indice de la tabla es `expenses_cleaning_idx on (cleaning_id)`, y
+    // preguntar por la lista de aseos del dia es exactamente lo que cubre.
+    expect(c.from).toHaveBeenCalledWith('expenses');
+    expect(c.dentro).toHaveBeenCalledWith('cleaning_id', ['a', 'b']);
+  });
+
+  it('con lista vacia NO pregunta nada', async () => {
+    const c = clienteDeGastos({ data: [], error: null });
+
+    const r = await leerGastosDelDia(comoCliente(c.supabase), []);
+
+    expect(r).toEqual({ conteo: 0, total: 0 });
+    expect(c.from).not.toHaveBeenCalled();
+  });
+
+  it('si la consulta falla SE DEGRADA a nulos y no lanza', async () => {
+    // Tumbar `/operacion` —la pantalla desde la que el admin confirma y reasigna—
+    // porque una metrica accesoria no se pudo leer seria cambiar un dato que falta por
+    // una jornada sin herramienta.
+    const c = clienteDeGastos({ data: null, error: { message: 'caida' } });
+
+    const r = await leerGastosDelDia(comoCliente(c.supabase), ['a']);
+
+    expect(r).toEqual({ conteo: null, total: null });
   });
 });
 

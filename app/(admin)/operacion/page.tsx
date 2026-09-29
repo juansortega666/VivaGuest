@@ -18,10 +18,13 @@ import {
   leerAlertasAtendidas,
   leerAlertasDelAdmin,
   leerAseadoresActivos,
+  leerGastosDelDia,
   leerOperacion,
   leerUltimoExitoDeSync,
+  resumenDelDia,
   type AlertaDelAdmin,
   type FilaDeOperacion,
+  type GastosDelDia,
 } from '@/lib/data/operacion';
 import { leerPanelDeAseo } from '@/lib/data/panel-aseo';
 import {
@@ -33,6 +36,8 @@ import {
 } from '@/lib/domain/alertas';
 import { estadoDeAvisosDeAseador } from '@/lib/domain/avisos';
 import { diaValido, formatFechaBog, formatFechaLargaBog } from '@/lib/domain/dates';
+import { formatAbreviadoCOP, formatCOP } from '@/lib/domain/money';
+import { estadoDeSincronizacion } from '@/lib/domain/salud-sync';
 import { publicEnv } from '@/lib/env';
 
 import { BandejaSinConfirmar } from './_components/BandejaSinConfirmar';
@@ -47,6 +52,7 @@ import { PanelAlertas } from './_components/PanelAlertas';
 import { PanelAseo } from './_components/PanelAseo';
 import { ResumenDelDia } from './_components/ResumenDelDia';
 import { SelectorDeDia } from './_components/SelectorDeDia';
+import { SenalDeCalendario } from './_components/SenalDeCalendario';
 import { SincronizacionEnVivo } from './_components/SincronizacionEnVivo';
 import { TiraAvisosAdmin } from './_components/TiraAvisosAdmin';
 
@@ -174,6 +180,54 @@ function notificacionesParaAlertas(
  * `formatFechaLargaBog` y no `formatFechaBog`: esta ultima emite el dia de la
  * semana (`vie, 4 de septiembre`) y detras de "del" eso es agramatical.
  */
+/**
+ * La cifra de la métrica de gastos: `4 · $ 180K`.
+ *
+ * Tres formas y las tres son estados distintos, no tres estilos:
+ *
+ *   - **Nulo** es "no se pudo leer". El guion, con `no se pudo leer` para el lector
+ *     de pantalla. NO es cero: afirmar que no hubo gastos sin haberlos podido contar
+ *     es la misma mentira que el medidor de almacenamiento evita con su `null`.
+ *   - **Cero** es "no hubo gastos". Se pinta el cero SOLO, sin el `· $ 0`: la mitad
+ *     de dinero de un conteo en cero es siempre cero, así que son cuatro caracteres
+ *     que no dicen nada nuevo. Es la misma regla de data-ink que quita la leyenda de
+ *     `+0 en otros días`.
+ *   - **Con gastos**, el conteo y el total abreviado, que es la forma que el dueño
+ *     pidió literal.
+ */
+function cifraDeGastos(gastos: GastosDelDia): string {
+  if (gastos.conteo === null) return '—';
+  if (gastos.conteo === 0) return '0';
+  return `${gastos.conteo} · ${formatAbreviadoCOP(gastos.total)}`;
+}
+
+/**
+ * El `title` de la métrica de gastos: la cifra EXACTA y la frase de la divergencia.
+ *
+ * Las dos mitades son obligatorias y por razones distintas:
+ *
+ *   1. **La cifra exacta**, porque la abreviatura redondea y `$ 180K` sobre cuatro
+ *      gastos que suman `$ 180.400` parece un error de cuadre al abrir el detalle.
+ *      Es la regla que este repo ya aplica a todo texto truncado.
+ *   2. **La frase de la divergencia**, porque `/finanzas` agrupa los gastos por el
+ *      día en que el aseo se CERRÓ y esta pantalla por el día en que estaba
+ *      PROGRAMADO. Un aseo del 28 cerrado a las 00:20 pone su gasto el 29 allá y el
+ *      28 acá. Las dos cifras pueden no coincidir, **eso no es un defecto**, y sin
+ *      esta frase vuelve como reporte de bug.
+ */
+function tituloDeGastos(gastos: GastosDelDia, dia: string): string {
+  const divergencia =
+    'La sección Finanzas los agrupa por el día en que el aseo se cerró, así que las dos cifras pueden no coincidir.';
+
+  if (gastos.conteo === null) {
+    return `No se pudieron leer los gastos de este día. ${divergencia}`;
+  }
+
+  const cuantos = gastos.conteo === 1 ? '1 gasto reportado' : `${gastos.conteo} gastos reportados`;
+
+  return `${formatCOP(gastos.total)} en ${cuantos} sobre los aseos programados el ${formatFechaLargaBog(dia)}. ${divergencia}`;
+}
+
 function resumenDeAtrasados(total: number, masViejo: string | null): string {
   const conteo = `${total} ${total === 1 ? 'aseo' : 'aseos'}`;
   if (masViejo === null) return conteo;
@@ -423,22 +477,41 @@ export default async function OperacionPage({
   const filasDelDiaSeleccionado = filasDelDia(operacion.filas, diaEfectivo);
 
   /**
-   * LA PRIMERA CIFRA DEL VISTAZO: los aseos ACTIVOS del día seleccionado.
+   * LOS GASTOS DEL DÍA, Y ES LA ÚNICA LECTURA QUE **NO** CABE EN EL `Promise.all`.
    *
-   * Gestionados y no cancelados. Las unidades de gestión externa NO cuentan, por la
-   * misma razón por la que `cargaPorAseador` las excluye: no son trabajo que
-   * VivaGuest hace, así que sumarlas al número que el admin usa para dimensionar su
-   * día lo haría decidir sobre trabajo que no es suyo.
+   * No es un descuido de paralelismo: la consulta filtra por los identificadores de
+   * los aseos DEL DÍA, así que no se puede construir hasta que la lectura de aseos
+   * haya vuelto. Es un viaje encadenado de verdad, sobre una tabla con índice por
+   * `cleaning_id` y decenas de filas.
    *
-   * **VIVE ACÁ SOLO DURANTE ESTA TASK.** La Task 2 de este plan la muda a
-   * `resumenDelDia()` de `lib/data/operacion.ts`, junto con las otras tres cifras y
-   * con sus unitarias. Está escrita inline y no en la capa de datos porque esta
-   * task es el trazador del eje del día y no el vistazo, y adelantar la proyección
-   * obligaría a escribir dos veces su contrato de tipos.
+   * Se degrada sola y no se envuelve en `.catch`: la función ya devuelve nulos si la
+   * consulta falla, por la misma razón literal que `marcarSinEvidencia`. Ver su
+   * cabecera, y en particular la divergencia declarada con `/finanzas`.
    */
-  const activosDelDia = filasDelDiaSeleccionado.filter(
-    (f) => f.is_managed && f.state !== 'cancelada',
-  ).length;
+  const gastosDelDia = await leerGastosDelDia(
+    supabase,
+    filasDelDiaSeleccionado.map((f) => f.id),
+  );
+
+  /**
+   * EL VISTAZO ENTERO, DE UNA PROYECCIÓN PURA Y NO DE CUATRO `filter` EN EL JSX.
+   *
+   * Recibe la VENTANA COMPLETA y no el día ya filtrado, porque la cifra de
+   * desbordamiento de `Sin confirmar` (D-05-7) se calcula sobre la ventana menos el
+   * día. Ver la cabecera de `resumenDelDia`.
+   */
+  const resumen = resumenDelDia(operacion.filas, diaEfectivo, operacion.hoy, gastosDelDia);
+
+  /**
+   * LA SALUD DE LA SINCRONIZACIÓN, DECIDIDA **UNA** VEZ EN ESTA PÁGINA.
+   *
+   * La misma marca (`ultimoExito`) y el mismo instante (`ahoraMs`) que recibe
+   * `alertasComputadas()` para decidir si emite la alerta `calendario_caido`. Por eso
+   * la señal de la cabecera y la alerta del panel NO PUEDEN contradecirse dentro del
+   * mismo render: no son dos cálculos, es la misma función llamada con los mismos dos
+   * argumentos. Un umbral escrito en el componente sería la segunda verdad.
+   */
+  const saludDeSync = estadoDeSincronizacion(ultimoExito, ahoraMs);
 
   const bloques = agruparPorDia(operacion.filas, operacion.hoy);
   const chips = cargaPorAseador(operacion.filas, operacion.hoy, aseadores);
@@ -652,14 +725,18 @@ export default async function OperacionPage({
           {/*
             EL SELECTOR DE DIA VA AL FINAL DE LA FILA, Y EL ORDEN ES EL QUE EL
             DUENO PIDIO LITERAL (2026-09-28): la senal de estado del calendario
-            inmediatamente a su izquierda. Esa senal la trae la Task 2 de este
-            plan; el hueco es aqui, justo antes de este bloque.
+            INMEDIATAMENTE a su izquierda, que es la que va justo arriba de este
+            bloque. **Ese orden del DOM es contrato y no estetica**, asi que va
+            escrito aqui para que un reordenado posterior no lo pierda: hay una
+            asercion E2E que compara las dos posiciones en el documento.
 
             Va ULTIMO y no primero porque es el control que gobierna la pantalla
             entera: el ojo lo busca en el extremo, y ponerlo entre el medidor de
             almacenamiento y la marca de sincronizacion lo dejaria pareciendo una
             tercera pieza de estado del sistema.
           */}
+          <SenalDeCalendario estado={saludDeSync} />
+
           <SelectorDeDia
             dia={diaEfectivo}
             hoy={operacion.hoy}
@@ -671,19 +748,86 @@ export default async function OperacionPage({
       {/*
         ── EL VISTAZO DEL DIA SELECCIONADO (plan 10-05) ────────────────────────
 
-        En esta task lleva UNA sola metrica, a proposito: esto es el trazador que
-        prueba que el dia viaja desde la direccion hasta el rango de la consulta y
-        sale por una cifra en pantalla. Las otras tres, con sus dos trampas (los
-        urgentes de un dia pasado y los gastos), entran en la Task 2.
-
-        El contenedor ya nace con la rejilla de cuatro: cambiar el numero de pistas
-        despues seria mover la geometria dos veces.
+        Las CUATRO metricas salen del dia del selector, sin excepcion: cambiar de dia
+        cambia las cuatro. Su redaccion vive aqui y no en los componentes porque la
+        copia es contrato de pantalla y el componente es geometria.
       */}
       <ResumenDelDia>
+        <MetricaDelDia clave="activos" rotulo="Aseos activos" cifra={String(resumen.activos)} />
+
+        {/*
+          LA LEYENDA SOLO APARECE CON DESBORDAMIENTO (D-05-7). Es lo que conserva la
+          promesa del criterio 1 al matar la bandeja lateral: hasta este plan, un sin
+          confirmar de dentro de tres dias se veia HOY sin navegar, y perder eso seria
+          una regresion contra "que ningun aseo se pierda", que es el core value del
+          producto y no una preferencia de diseno.
+
+          Un `+0 en otros dias` seria una linea de texto diciendo que no hay nada que
+          decir, misma regla que ya aplica la cabecera de dia.
+        */}
         <MetricaDelDia
-          clave="activos"
-          rotulo="Aseos activos"
-          cifra={String(activosDelDia)}
+          clave="sin-confirmar"
+          rotulo="Sin confirmar"
+          cifra={String(resumen.sinConfirmar)}
+          leyenda={
+            resumen.sinConfirmarEnOtrosDias > 0
+              ? `+${resumen.sinConfirmarEnOtrosDias} en otros días`
+              : undefined
+          }
+        />
+
+        {/*
+          ── `URGENTES` EN UN DIA PASADO NO ES CERO, ES EL GUION (D-05-3) ──────
+
+          `is_urgent` solo se mantiene para `scheduled_date >= today_bog()`, asi que
+          en un dia pasado el valor esta CONGELADO y pintar la cifra seria afirmar
+          algo que la base ya no sostiene. Nulo y cero son cosas distintas y se
+          pintan distinto, igual que `SinDato` de la fila de aseo.
+
+          ── Y EL ROTULO Y LA COPIA DE LA TARJETA NO SON LA MISMA COSA ────────
+
+          El rotulo visible es `URGENTES` (las versalitas las pone el CSS), y es la
+          etiqueta de TIPO que el panel de alertas ya usa y que el admin ya aprendio.
+          **El literal de la tarjeta de aseo sigue siendo `Entra huesped el mismo
+          dia` y NO SE TOCA**, ni se "unifica" con este rotulo: son una etiqueta de
+          categoria y una frase que explica un hecho, y cambiar la segunda por la
+          primera dejaria al admin leyendo una palabra suelta donde antes tenia la
+          razon. La frase viaja en el `title`, que es donde cabe.
+        */}
+        <MetricaDelDia
+          clave="urgentes"
+          rotulo="Urgentes"
+          cifra={resumen.urgentes === null ? '—' : String(resumen.urgentes)}
+          textoAccesible={resumen.urgentes === null ? 'no aplica' : undefined}
+          title={
+            resumen.urgentes === null
+              ? 'No aplica: urgente significa que entra huésped el mismo día, y en un día que ya pasó no hay nada que apurar.'
+              : 'Entra huésped el mismo día.'
+          }
+        />
+
+        {/*
+          ── LOS GASTOS, Y LA DIVERGENCIA CON `/finanzas` VA EN EL `title` ─────
+
+          `expenses` solo tiene `created_at`, asi que no tiene dia de negocio. El
+          proyecto ya decidio en tres migraciones que un gasto pertenece al dia en que
+          el aseo se CERRO; la decision del dueno para esta pantalla es la contraria,
+          el dia en que el aseo estaba PROGRAMADO, porque pidio que las cuatro
+          metricas salgan de la fecha del selector sin excepcion.
+
+          **Las dos cifras pueden no coincidir y eso NO es un defecto.** Sin la frase
+          del `title`, esto vuelve como reporte de bug en un mes.
+
+          Y la cifra EXACTA va tambien ahi, porque la abreviatura redondea: `$ 180K`
+          sobre cuatro gastos que suman `$ 180.400` es correcto y parece un error de
+          cuadre a quien abra el detalle.
+        */}
+        <MetricaDelDia
+          clave="gastos"
+          rotulo="Gastos del día"
+          cifra={cifraDeGastos(resumen.gastos)}
+          textoAccesible={resumen.gastos.conteo === null ? 'no se pudo leer' : undefined}
+          title={tituloDeGastos(resumen.gastos, diaEfectivo)}
         />
       </ResumenDelDia>
 

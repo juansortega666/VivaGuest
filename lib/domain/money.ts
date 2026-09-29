@@ -97,3 +97,83 @@ export function aEnteroCOP(v: unknown): number | null {
   const entero = Number(digitos);
   return Number.isSafeInteger(entero) ? entero : null;
 }
+
+/** Los dos umbrales de la abreviatura. Van con nombre para que el `if` se lea. */
+const MIL = 1_000;
+const MILLON = 1_000_000;
+
+/**
+ * Igual que `COP` pero con UN decimal. Es lo que emite la coma de es-CO en
+ * `$ 1,5M`, y la razon de que exista un formateador y no una concatenacion es la
+ * misma que ya tiene escrita `aEnteroCOP`: **el separador decimal de es-CO es la
+ * COMA**, y componer `${mantisa.toFixed(1)}M` a mano emitiria `1.5M` con punto, o
+ * sea la forma anglosajona, que en es-CO se lee como separador de MILES. Un gasto
+ * de un millon y medio se leeria como quince millones.
+ */
+const COP_UN_DECIMAL = new Intl.NumberFormat('es-CO', {
+  style: 'currency',
+  currency: 'COP',
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
+/**
+ * PESOS ABREVIADOS PARA LA METRICA DE GASTOS DEL VISTAZO DE `/operacion`
+ * (plan 10-05): `180000` produce `"$ 180K"` y `1500000` produce `"$ 1,5M"`.
+ *
+ * ── LOS TRES TRAMOS ────────────────────────────────────────────────────────
+ *
+ *   por debajo de mil        -> sin sufijo, la cifra entera  (`$ 999`)
+ *   de mil a menos de millon -> sufijo `K`                   (`$ 180K`)
+ *   de un millon para arriba -> sufijo `M`                   (`$ 1,5M`)
+ *
+ * Con mantisa menor que diez se emite UN decimal, porque `$ 1M` y `$ 1,9M` son
+ * cifras muy distintas y redondear a la unidad ahi pierde casi la mitad del dato.
+ * Con mantisa de dos o tres cifras, ninguno: el decimal de `$ 180,4K` no cambia
+ * ninguna decision.
+ *
+ * ── LA PROMOCION DE UNIDAD, QUE NO ES UN ADORNO ────────────────────────────
+ *
+ * `999999` cae en el tramo de los miles y su mantisa es `999,999`, que redondeada
+ * a su propia precision da MIL. `$ 1.000K` es la cifra correcta escrita en la
+ * unidad equivocada, y ademas mete un separador de miles dentro de una
+ * abreviatura de miles. Cuando eso pasa se sube de unidad: `$ 1,0M`.
+ *
+ * ── LA CONSECUENCIA HONESTA DE ABREVIAR, Y COMO SE PAGA ────────────────────
+ *
+ * **La cifra redondeada NO RECONCILIA con la suma de los gastos del detalle.** Un
+ * vistazo que diga `$ 180K` sobre cuatro gastos que suman `$ 180.400` es correcto
+ * y va a parecer un error de cuadre a quien abra el detalle. Por eso **la cifra
+ * exacta viaja en el `title`**, que es la regla que este repo ya aplica a todo
+ * texto truncado: lo que se recorta para caber tiene que estar entero a un
+ * `hover` de distancia.
+ *
+ * La ausencia devuelve lo mismo que `formatCOP`, o sea el em dash, y NO una cadena
+ * vacia: un hueco sin glifo en una fila de cuatro metricas se lee como que la
+ * metrica no existe.
+ */
+export function formatAbreviadoCOP(n: number | null | undefined): string {
+  if (n == null) return VACIO;
+
+  const absoluto = Math.abs(n);
+  if (absoluto < MIL) return COP.format(n);
+
+  let divisor = absoluto < MILLON ? MIL : MILLON;
+  let sufijo = divisor === MIL ? 'K' : 'M';
+
+  // Ver la promocion de unidad, arriba.
+  if (divisor === MIL && Math.abs(redondearMantisa(n / MIL)) >= MIL) {
+    divisor = MILLON;
+    sufijo = 'M';
+  }
+
+  const mantisa = n / divisor;
+  const formateador = Math.abs(mantisa) < 10 ? COP_UN_DECIMAL : COP;
+
+  return `${formateador.format(mantisa)}${sufijo}`;
+}
+
+/** Redondea la mantisa a la precision con la que se va a emitir, ni mas ni menos. */
+function redondearMantisa(mantisa: number): number {
+  return Math.abs(mantisa) < 10 ? Math.round(mantisa * 10) / 10 : Math.round(mantisa);
+}

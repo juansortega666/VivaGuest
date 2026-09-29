@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { aEnteroCOP, formatCOP, formatMilesCOP } from './money';
+import { aEnteroCOP, formatAbreviadoCOP, formatCOP, formatMilesCOP } from './money';
 
 /**
  * `Intl` mete espacios duros (NBSP y NNBSP) entre el simbolo y el numero. Comparar
@@ -107,5 +107,61 @@ describe('formatMilesCOP', () => {
     // Es lo que pasa cuando el admin sale y vuelve a entrar al campo sin tocarlo.
     const unaVez = formatMilesCOP(1500000);
     expect(plano(formatMilesCOP(unaVez))).toBe(plano(unaVez));
+  });
+});
+
+describe('formatAbreviadoCOP', () => {
+  /**
+   * LA ABREVIATURA DE LA METRICA DE GASTOS DEL VISTAZO (plan 10-05).
+   *
+   * Lo que este bloque defiende, y no es el redondeo: que la COMA de es-CO sale de
+   * `Intl` y no de una concatenacion a mano. `${(1.5).toFixed(1)}M` emite `1.5M`
+   * con PUNTO, o sea la forma anglosajona, que en es-CO se lee como separador de
+   * MILES: un gasto de millon y medio se leeria como quince millones. Es la misma
+   * clase de trampa que `aEnteroCOP` ya tiene documentada por el otro lado.
+   */
+  it('por debajo de mil no lleva sufijo', () => {
+    expect(plano(formatAbreviadoCOP(0))).toBe('$ 0');
+    expect(plano(formatAbreviadoCOP(999))).toBe('$ 999');
+  });
+
+  it('de mil a menos de un millon lleva sufijo de miles', () => {
+    expect(plano(formatAbreviadoCOP(1000))).toBe('$ 1,0K');
+    expect(plano(formatAbreviadoCOP(180000))).toBe('$ 180K');
+  });
+
+  it('de un millon para arriba lleva sufijo de millones', () => {
+    expect(plano(formatAbreviadoCOP(1000000))).toBe('$ 1,0M');
+    expect(plano(formatAbreviadoCOP(12345678))).toBe('$ 12M');
+  });
+
+  it('con mantisa menor que diez emite UN decimal, con la COMA de es-CO', () => {
+    // El punto seria la forma anglosajona y en es-CO se lee como separador de
+    // miles: `$ 1.5M` se leeria como quince millones.
+    expect(plano(formatAbreviadoCOP(1_500_000))).toBe('$ 1,5M');
+    expect(formatAbreviadoCOP(1_500_000)).toContain(',');
+    expect(formatAbreviadoCOP(1_500_000)).not.toContain('.');
+  });
+
+  it('con mantisa de dos o tres cifras no emite decimal', () => {
+    // El decimal de `$ 180,4K` no cambia ninguna decision del admin.
+    expect(plano(formatAbreviadoCOP(180_400))).toBe('$ 180K');
+    expect(plano(formatAbreviadoCOP(12_000))).toBe('$ 12K');
+  });
+
+  it('999999 SUBE DE UNIDAD en vez de decir mil K', () => {
+    // Su mantisa es 999,999, que redondeada a su propia precision da MIL. `$ 1.000K`
+    // es la cifra correcta en la unidad equivocada, y ademas mete un separador de
+    // miles dentro de una abreviatura de miles.
+    expect(plano(formatAbreviadoCOP(999_999))).toBe('$ 1,0M');
+    expect(formatAbreviadoCOP(999_999)).not.toContain('K');
+  });
+
+  it('la ausencia devuelve lo MISMO que formatCOP y no una cadena vacia', () => {
+    // Un hueco sin glifo en una fila de cuatro metricas se lee como que la metrica
+    // no existe.
+    expect(formatAbreviadoCOP(null)).toBe(formatCOP(null));
+    expect(formatAbreviadoCOP(undefined)).toBe(formatCOP(undefined));
+    expect(formatAbreviadoCOP(null)).not.toBe('');
   });
 });
