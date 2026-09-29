@@ -12,6 +12,30 @@
 >
 > El alcance cerrado hoy es **solo `/login`**. El resto del dashboard entra
 > después, cuando el dueño lo defina pantalla por pantalla.
+>
+> ---
+>
+> **NOTA FECHADA 2026-09-29: ESAS DOS ÚLTIMAS FRASES DEJARON DE SER CIERTAS EL
+> 2026-09-28.** Ese día el dueño definió la SEGUNDA pantalla, `/operacion`, en
+> conversación directa, y tomó dos decisiones nuevas que **no se reabren**:
+>
+> 1. **Los gastos del vistazo se filtran por el DÍA SELECCIONADO**, y el supuesto
+>    que se le planteó y no contradijo es que son los gastos de los aseos
+>    programados ese día. Diverge de cómo los agrupa la sección financiera, a
+>    propósito y por escrito.
+> 2. **El panel de alertas se convierte en una campana de la barra superior.**
+>    Sale del carril derecho.
+>
+> El contrato de diseño de esa pantalla, con su geometría, sus derogaciones
+> fechadas de los contratos de las Fases 4, 5 y 8, y las tres decisiones que hay
+> que poder auditar, vive en **`10-UI-SPEC.md` §16**. El punto abierto 3 de abajo
+> queda cerrado A MEDIAS, y dice cómo.
+>
+> **LAS SIETE DECISIONES DE ABAJO NO SE TOCAN.** Deciden `/login` y esta pantalla
+> no es `/login`. Su texto y sus citas literales quedan intactos, incluidas las
+> dos notas de derogación del 2026-09-26. La única que alcanza a `/operacion` es
+> **D10-1**: no se cambia de biblioteca, se trabaja sobre los 26 componentes que
+> ya están en el repo.
 
 ## D10-1 · El problema, en sus palabras
 
@@ -138,3 +162,16 @@ Fase 2 (§3, actualización del 2026-09-01). No se reabre.
    primer creativo es claro, el wordmark necesita velo o cambia de color.
 3. **El resto del dashboard.** Esta fase abre con el login; las demás pantallas
    se definen después.
+
+   > **CERRADO A MEDIAS EL 2026-09-29.** El 2026-09-28 el dueño definió la
+   > segunda pantalla, **`/operacion`**, y su rediseño se ejecutó en el plan
+   > 10-05: selector de día que gobierna la pantalla entera, vistazo de cuatro
+   > métricas del día sin cromo de tarjeta, dos columnas desde 1280px (la lista
+   > del día al 30% y el detalle del aseo al 70%) y las alertas en una campana de
+   > la barra superior. El contrato entero está en **`10-UI-SPEC.md` §16**, con
+   > las dos decisiones que tomó esa sesión (los gastos por el día seleccionado y
+   > la campana) escritas en la nota fechada de la cabecera de este archivo.
+   >
+   > **Sigue abierto lo demás, y es la deuda 1 de `10-UI-SPEC.md` §15:**
+   > `/apartamentos`, `/aseadores` y `/finanzas` siguen con el tema por defecto.
+   > La fase **no** cierra el objetivo del ROADMAP.

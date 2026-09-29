@@ -99,6 +99,18 @@ existe para documentar, y cuesta media hora de diagnóstico cada vez.
 
 ## 3. Dos casos E2E rojos con la base reseteada, ninguno en `/login`
 
+> **CERRADO EL 2026-09-29, en la Task 4 del plan 10-05. El desenlace completo, con
+> las dos sondas y la causa, está en el punto 7 de este mismo archivo.** En corto:
+> el rojo de `e2e/operacion.spec.ts:429` **no era un test frágil, era un defecto de
+> producto** (el `router.refresh()` vivía en el `onOpenChange` del diálogo, que no
+> dispara en un cierre programático, así que cancelar, reasignar, reprogramar y
+> cerrar escribían en la base y la pantalla no se actualizaba hasta recargar a
+> mano); y el de `e2e/push-instalacion.spec.ts:97` quedó **verde**, así que pasa de
+> rojo fijo a intermitente conocido del `edge-runtime` apagado.
+>
+> El texto de abajo se conserva sin tocar, como registro de lo que se midió el
+> 2026-09-28 y de por qué no se arregló entonces.
+
 **Estado:** con `npm run db:reset` inmediatamente antes, `PLAYWRIGHT_PORT=3210 npx
 playwright test` reporta **171 pasados · 2 fallados · 1 saltado** (174 en total).
 
@@ -335,3 +347,77 @@ stack local. Queda como intermitente conocido y no como rojo fijo.
 | | Al escribir el punto 3 | 2026-09-29 |
 |---|---|---|
 | E2E | 171 pasados · **2 fallados** · 1 saltado | **199 pasados · 0 fallados** · 1 saltado |
+
+---
+
+## 8. El `scroll={false}` del enlace de la tarjeta NO está defendido por ningún rojo (2026-09-29)
+
+**Encontrado al correr el señuelo 4 de la Task 5 de 10-05.** No lo causa este plan:
+la prop lleva ahí desde que la Fase 8 la puso, y lo que este plan hizo fue intentar
+verla en rojo y no conseguirlo.
+
+**Estado:** una prop correcta, con su razón escrita, y **sin compuerta**.
+
+El plan predecía que quitar el `scroll={false}` del enlace de apertura de la tarjeta
+pondría rojo el caso *"abrir el detalle NO manda la lista del dia al tope"*. Se quitó,
+se reconstruyó y se corrió:
+
+```
+✓  1 [chromium] › abrir el detalle NO manda la lista del dia al tope, y no le borra
+                  el toggle (2.6s)
+  1 passed
+```
+
+**Verde. El señuelo no mordió.**
+
+**La causa, y sale de una aserción que ya existe.** A partir de `xl` el contenedor de
+página tiene altura cerrada y **el documento no scrollea**: lo afirma por nombre el
+caso *"con TREINTA tarjetas en el dia la PAGINA no scrollea"*, con
+`documentoScrollea === false`. El enrutador de Next, al navegar sin `scroll={false}`,
+lleva a la vista el tope del documento; si ya está a la vista, **no hace nada**. O sea
+que en esta pantalla, a 1280 y por encima, la prop es un no-op.
+
+**Las dos causas del mismo síntoma no son simétricas, y eso es lo que había que
+medir:** la clave por identificador mal puesta SÍ pone rojo el caso
+(`Expected: 3144 / Received: 0`), el `scroll={false}` no.
+
+**Por qué no se arregla acá.** El sitio donde la prop sí hace algo es **por debajo de
+1280**, donde la pantalla se apila y el documento vuelve a scrollear. Escribir ese caso
+pide sembrar el escenario a un viewport de 1279 y medir el recorrido del documento, y
+eso es un caso nuevo con su propia siembra, no una línea dentro del que ya existe.
+
+**Condición de salida:** un caso a 1279px que afirme que abrir el detalle no devuelve
+el DOCUMENTO al tope. Mientras no exista, el `scroll={false}` de `TarjetaAseo.tsx`
+está sostenido por su comentario y no por la suite, **y eso hay que saberlo antes de
+borrarlo "por redundante"**.
+
+---
+
+## 9. El `it` invisible de `lib/data/operacion.test.ts` sigue sin correr (2026-09-29)
+
+**Es el punto 5 de este archivo, y se revisa acá para dejar dicho en cuál de las dos
+tasks entraba y por qué salió de las dos.**
+
+El caso `D-08: el límite inferior baja SIETE días, no se queda en hoy` está declarado
+dentro del cuerpo del `it` anterior y después de su `return`, así que **nunca se ha
+registrado en el runner**. La Task 1 del plan 10-05 lo midió y lo anotó.
+
+**Decisión de la Task 6, escrita porque el plan pedía decidirlo:** **no entra ni en la
+Task 5 ni en la Task 6, y se queda como el punto 5.** Las razones:
+
+1. **La propiedad que defendía YA ESTÁ defendida**, por el bloque
+   `la ventana ante un dia pedido` que escribió la Task 1, y en concreto por
+   `LA VENTANA DE LAS ALERTAS NO SE ESTRECHA NUNCA`, que afirma
+   `desde <= hoy − VENTANA_ATRAS_DIAS` para los seis valores de `?dia`. El agujero
+   está tapado por arriba: el criterio 7 del ROADMAP de la Fase 5 tiene compuerta.
+2. **Desanidarlo toca el único caso del archivo que manipula el reloj** con
+   `vi.useFakeTimers()` fuera de un `describe` propio, con riesgo real de arrastrar
+   los temporizadores falsos a otro caso. Eso es trabajo sobre la capa de datos, y la
+   Task 5 es la pantalla y la Task 6 son documentos.
+3. **Y la Task 6 no toca código por contrato**: sus cuatro archivos son `.md`. Meter
+   ahí un arreglo de `.test.ts` sería exactamente el tipo de cambio fuera de alcance
+   que este archivo existe para evitar.
+
+**Condición de salida, sin cambios:** mover el `it` a hermano del anterior y comprobar
+que la cuenta del archivo SUBE en uno. Si al desanidarlo sale rojo, es un hallazgo de
+segundo orden y hay que medirlo antes de tocar la consulta.

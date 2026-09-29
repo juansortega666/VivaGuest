@@ -62,6 +62,28 @@ que nadie puede auditar, y esta fase lleva tres planes ejecutados contra el text
 
 ## 0. Lo que esta fase renderiza de verdad
 
+> **ACTUALIZADO EL 2026-09-29.** Hasta el plan 10-04 esta sección hablaba de UNA sola pantalla,
+> `/login`. **La fase renderiza DOS**: `/login` y `/operacion`, la pantalla de trabajo del admin,
+> cuyo rediseño decidió el dueño el 2026-09-28. Su contrato entero vive en **§16**, y las filas de
+> abajo marcadas `/operacion` son sus hechos anclados. Lo que sigue sin cambiar es que **la fase
+> NO cierra el objetivo del ROADMAP**: ver la deuda 1 de §15.
+
+### Hechos anclados de `/operacion` (2026-09-29)
+
+| Hecho anclado | Consecuencia de diseño |
+|---|---|
+| **El dueño describió la pantalla como genérica e ilegible el 2026-09-28**, y nombró el defecto concreto: el estado del día no se entiende de un vistazo | El eje de la pantalla pasa de "relativo a hoy" a **un selector de día**, y arriba va un vistazo de cuatro métricas que se lee en cinco segundos. §16.3 |
+| **`agruparPorDia()` codificaba `Atrasados / Hoy / Mañana / Siguientes` dentro de la CAPA DE DATOS.** Con un selector de día, `Mañana` deja de tener significado | La función muere y con ella sus tres bloques y su estado de colapso. Se deroga `04-UI-SPEC` §8.1 en la parte de la agrupación, no en la del día vacío. §16.1 |
+| **`--container-rail` son 360px fijos y tenía UN consumidor de aplicación en todo el repo** (medido con `grep -rn` sobre `app/`, `components/`, `lib/` y `e2e/`) | Se **retira** el token, no se le cambia el valor, y el reparto pasa a `@utility rejilla-operacion` con dos pistas `fr`. A 1280 el 30% da los mismos 360px. §16.2 |
+| **`TopNav` lo renderiza `app/(admin)/layout.tsx`, y un layout de App Router NO recibe `searchParams`** | Al mudar el panel de alertas a una campana de la barra superior, el toggle `Ver atendidas` **se invierte a estado de cliente**, y eso invierte la regla de 04-13 con su razón escrita. §16.5 |
+| **`is_urgent` solo se mantiene para `scheduled_date >= public.today_bog()`** (el `where` de los RPC de sincronización) | En un día pasado la métrica `Urgentes` dice el guion con `no aplica`, no una cifra congelada. Recalcularla al leer sería una segunda verdad sobre el mismo dato. §16.3 |
+| **`expenses` solo tiene `created_at`: no tiene día de negocio.** El proyecto ya decidió en tres migraciones que un gasto pertenece al día en que el aseo se CERRÓ | La decisión del dueño para esta pantalla (el día en que el aseo estaba PROGRAMADO) **diverge a propósito**, y la frase entera viaja en el `title` de la métrica. Las dos cifras pueden no coincidir y no es un defecto. §16.3 |
+| **`SheetContent` se portaleaba a `document.body`, y al pasar el detalle a inline ese ámbito desaparece.** `08-11` midió dos aserciones de seguridad en verde con la palabra prohibida presente | El detalle gana localizador propio (`[data-slot="detalle-aseo"]`) y el control de alcance de 08-11 **se vuelve a correr en los dos sentidos**. Medido el 2026-09-29. §16.8 |
+| **`02-UI-SPEC` §4.6 ya declara el choque de hues entre `--primary` (29) y `--destructive` (13.7)** | La señal de calendario caído sale en `--status-warn` y no en el rojo que el dueño pidió, porque un tercer rojo pondría tres rojos en una pantalla. **Desviación declarada, y el dueño la revisa en el checkpoint.** §16.6 |
+| **La barra de ambiente de pruebas mide 48px y la suite E2E corre justo donde se pinta** | Toda medida vertical se toma contra el contenedor de página, y su resta va dentro del `calc()` de la altura cerrada. 10-04 pagó esta misma trampa en `/login`. §11.5 punto 5 |
+
+### Hechos anclados de `/login` (2026-09-26)
+
 | Hecho anclado | Consecuencia de diseño |
 |---|---|
 | **Reparto 50/50 sin canal, decidido el 2026-09-26** (deroga D10-2 y D10-3, que pedían 45% · 10% de canal · 45%) | Dos pistas del 50% y ninguna pista vacía que repartir. El login se coloca en la columna 2. §2.1 dice por qué, y §2.2 mide qué pasa en cada viewport |
@@ -946,12 +968,23 @@ Por el hallazgo B, `lucide-react@1.39.0` no exporta ninguna marca comercial. Reg
 
 Esta pantalla ya usa `Eye`, `EyeOff` y `Loader2`, los tres dentro de `FormularioLogin`, que no se toca. **Esta fase no añade ningún icono lucide.** Los dos glifos de §11.3 son SVG del proyecto y quedan anotados como excepción declarada a la lista cerrada de `02-UI-SPEC` §14.3.
 
-### 11.5 Cuatro trampas del repo que el executor tiene que tener delante
+> **ACTUALIZADO EL 2026-09-29.** Esa frase valía cuando la fase entregaba solo `/login`. **`/operacion` sí añade un icono lucide**, y va como **ampliación declarada** y no como excepción silenciosa:
+>
+> | Icono | Dónde | Por qué entra |
+> |---|---|---|
+> | `CalendarCheck` | `SenalDeCalendario.tsx`, la rama SANA de la señal de estado del calendario | La rama CAÍDA usa `CalendarX`, que **ya está** en la lista con ese mismo significado en el panel de alertas. Hacían falta **dos siluetas distintas** y no dos colores del mismo punto, porque `04-UI-SPEC` §5 prohíbe el color como único canal |
+>
+> Precedentes del mismo trato: `HardDrive` (quick `260918-a33`, 2026-09-18) y `Bell`. **La regla que no se toca no es "la lista no crece nunca", es "la lista no crece en silencio".** El detalle está en §16.7.
+
+### 11.5 Cinco trampas del repo que el executor tiene que tener delante
+
+> **La quinta se añadió el 2026-09-29, con `/operacion`.** Es la misma trampa de la barra de ambiente de pruebas del punto 4, aplicada a una medida VERTICAL en vez de a un sangrado.
 
 1. **`bg-[#E2E5E7]` rompe el build de CI.** Guardarraíl 6. Los cuatro grises solo pueden nombrarse en `app/globals.css`.
 2. **Un `max-w-*` nuevo sin registrar en `cn()` no llega al DOM.** `lib/utils.ts`. Esta fase no debería necesitar ninguno (§4.2); si aparece, el registro no es opcional.
 3. **`animate-anuncio` sin `bg-anuncio-1` deja el panel invisible con movimiento reducido.** §7.3. Es la clase que se borra "por redundante" en la primera limpieza. Medido con el señuelo 5 de 10-04: el `background-color` computado pasa de `oklch(0.92 0.0045 250)` a `rgba(0, 0, 0, 0)`, o sea el panel literalmente transparente.
 4. **Medir el sangrado contra el viewport en vez de contra `[data-slot="pantalla-login"]` da un rojo contra el código correcto.** `app/layout.tsx` pinta una barra de ambiente de pruebas de **48px** en todo entorno cuyo `NEXT_PUBLIC_VIVAGUEST_ENTORNO` no sea `produccion`, y la suite E2E corre justamente ahí. El contenedor de `/login` es `min-h-[calc(100svh-var(--alto-barra-pruebas,0px))]`, así que en la corrida de Playwright empieza en `y = 48`. Una aserción escrita como `expect(panel.y).toBe(0)` sale ROJA contra el producto correcto, y es el peor tipo de rojo: el que hace que alguien "arregle" el producto para complacer al instrumento.
+5. **Una ALTURA escrita sin restar la barra de ambiente de pruebas desborda 48px exactos en la corrida de Playwright.** Es el punto 4 aplicado al otro eje, y `/operacion` lo paga entero: su contenedor de página tiene altura cerrada de `xl:` para arriba, y una aserción de *"la página no scrollea"* con treinta tarjetas sale **ROJA contra el código correcto** si el `calc()` no lleva `var(--alto-barra-pruebas, 0px)`. Los cuatro sustraendos reales son esa barra, `--spacing-barra` (la barra superior), `--spacing-xl` (el `pt-xl` del `<main>`) y `--spacing-3xl` (su `pb-3xl`). El fallback `0px` cubre producción, donde la barra no se pinta. Y va `100svh` y no `100vh`: en un navegador con barra retráctil `vh` cuenta el viewport grande y la última tarjeta queda debajo del cromo.
 
 ---
 
@@ -1032,11 +1065,273 @@ No se declaró ningún registry de terceros, así que la compuerta de vetting (`
 
 ---
 
+## 16. /operacion: el contrato de la pantalla de trabajo del admin
+
+> **Escrita el 2026-09-29, con el plan 10-05.** El rediseño de esta pantalla lo decidió el dueño
+> el **2026-09-28**, en conversación directa, después de describirla como genérica e ilegible. El
+> defecto concreto que nombró: **el estado del día no se entiende de un vistazo.**
+>
+> **VA NUMERADA 16 Y COLOCADA ANTES DE LA 15 A PROPÓSITO.** La 15 es la deuda declarada y tiene
+> que seguir siendo lo último del cuerpo, porque es lo que `gsd-ui-auditor` lee al final.
+> Renumerar las quince secciones anteriores rompería las referencias cruzadas de tres planes.
+>
+> **Esta sección NO deroga nada de `/login`.** Las siete decisiones de `10-CONTEXT.md` deciden
+> `/login` y esta pantalla no es `/login`. La única que la toca es **D10-1**: no se cambia de
+> biblioteca, se trabaja sobre los 26 componentes que ya están en el repo.
+
+### 16.1 Qué deroga de los tres contratos previos, y qué sobrevive de cada uno
+
+Esta pantalla lleva **tres contratos escritos encima** (Fases 4, 5 y 8). Ninguno se edita: son
+registro de fases cerradas. Lo que se deroga se dice acá, por número de sección, con lo que
+sobrevive al lado.
+
+| Contrato | Qué se DEROGA | Qué SOBREVIVE |
+|---|---|---|
+| `04-UI-SPEC` §8.1 | La agrupación en tres bloques relativos a hoy (`Atrasados / Hoy / Mañana / Siguientes`) y su estado de colapso. Con un selector de día, `Mañana` deja de tener significado | **La regla de que un día sin aseos se pinta igual**, porque que no haya nada es información y no ausencia de información |
+| `04-UI-SPEC` §9 | La bandeja `Sin confirmar` como **card del carril**. Deja de ser una sección independiente | **Su contrato de orden entero y su prohibición de paginar.** El predicado del sin confirmar no cambia: sigue siendo el del índice parcial `cleanings_unconfirmed_idx` |
+| `04-UI-SPEC` §11 | El **carril lateral fijo** de 360px donde vivía el panel de alertas | **Las cuatro garantías del panel**, intactas: contador del total, orden cronológico, sin severidad y sin jerarquía visual entre tipos |
+| `05-UI-SPEC` §12 | El **bloque de atrasados** como agrupación propia | **§12.5 palabra por palabra**, ver 16.4. Y la tercera señal inline (`Hourglass` de hora límite vencida) sigue apareciendo en cualquier día, no solo en los pasados |
+| `08-UI-SPEC` §10 | Que el detalle del aseo sea un **panel deslizante** en esta pantalla | **Todo su contenido y todo su contrato de direcciones**: los cuatro grupos, las formas de §6.4, el parámetro `?aseo`, el enlace a un aseo fuera de la ventana, el botón atrás y la ruta al cerrar con los parámetros vivos |
+
+**Lo que NO se deroga y hay que decirlo porque se pierde fácil:** `08-UI-SPEC` §10 sigue
+gobernando el detalle en **las otras pantallas**. `PanelLectura.tsx` es el armazón compartido de
+cuatro paneles de lectura del admin y este plan **no lo toca ni lo dobla**: construye un armazón
+inline al lado (`DetalleDelAseo.tsx`). Un quinto consumidor con un modo inline lo habría
+convertido en dos componentes disfrazados de uno.
+
+### 16.2 La geometría
+
+El `<main>` del layout aporta `max-w-admin` (1440px) y `px-xl` (24px por lado). Sobre eso,
+`@utility rejilla-operacion` son dos pistas `minmax(0, 30fr)` y `minmax(0, 70fr)` con `gap-2xl`
+(32px).
+
+| Viewport | Útiles | Lista del día (30%) | Detalle (70%) |
+|---|---|---|---|
+| 1920 y 1440 | 1392 | **408** | **952** |
+| **1280** (el mínimo del proyecto) | 1232 | **360** | **840** |
+| 1279 y por debajo | apilado | ancho completo | ancho completo, debajo |
+
+**A 1280 la pantalla nueva son las mismas dos medidas de hoy, intercambiadas de lado:** el 30%
+da 360px, que es el valor exacto del token `--container-rail` que se retira, y el 70% da 840px,
+que es el ancho exacto del carril ancho de la pantalla vieja. **Nada se estrechó.**
+
+**El reparto vive ENTERO en `@utility rejilla-operacion` y la página no escribe ni un
+porcentaje**, igual que `rejilla-login` de 10-04. `minmax(0, Nfr)` y no `Nfr` a secas: el mínimo
+implícito de una pista es `auto`, así que una tarjeta con un nombre largo ensancharía su pista y
+empujaría la otra fuera del viewport en vez de truncar dentro.
+
+**`--container-rail` se RETIRA, no se le cambia el valor.** Tenía un solo consumidor de
+aplicación en todo el repo, así que no era un token compartido aunque el comentario de la Fase 5
+dijera que lo reutilizaba tal cual. Cambiarle el valor a un token aparentemente compartido es
+exactamente lo que este contrato prohíbe por nombre.
+
+**El corte es `xl:` (1280) y no `lg:` (1024).** A 1024 los útiles son 976, menos el hueco 944, y
+el 30% da 283px: por debajo de los 360px que la bandeja demostró que hacen falta para una fila
+legible con estado, nombre y hora. Apilado, **primero la lista del día y después el detalle**: lo
+que se opera va antes de lo que se consulta.
+
+**El presupuesto de altura NO se calcula restando alturas de cabecera.** El contenedor de la
+página es una columna flex con altura cerrada de `xl:` para arriba, y la región de las dos
+columnas se lleva `min-h-0 flex-1`: lo que sobre tras la cabecera y el vistazo, sin aritmética.
+Un `calc()` que restara la altura de la cabecera y del vistazo se rompe el día que la copia de
+una métrica pase a dos líneas, y el síntoma sería la columna derecha desbordando por abajo.
+
+La altura cerrada del contenedor sí es aritmética, y sale entera de tokens: `100svh` menos
+`--alto-barra-pruebas` menos `--spacing-barra` menos `--spacing-xl` menos `--spacing-3xl`, que
+son los cuatro sustraendos reales (la barra de ambiente de pruebas, la barra superior, el `pt-xl`
+del `<main>` y su `pb-3xl`). Ver la trampa 5 de §11.5.
+
+### 16.3 El vistazo: cuatro métricas del día seleccionado
+
+**Las cuatro salen del día del selector, sin excepción**: cambiar de día cambia las cuatro.
+
+| Rótulo (copia exacta) | Cifra | Leyenda / `title` |
+|---|---|---|
+| `Aseos activos` | el conteo del día | ninguna |
+| `Sin confirmar` | el conteo del día | `+N en otros días`, en micro y **solo con desbordamiento** |
+| `Urgentes` | el conteo, o el guion en un día pasado | `Entra huésped el mismo día.` / la frase del `no aplica` |
+| `Gastos del día` | conteo y total abreviado (`4 · $ 180K`) | la cifra exacta y la frase de la divergencia con la sección financiera |
+
+**Las tres decisiones que hay que poder auditar:**
+
+1. **`Urgentes` en un día anterior a hoy dice el guion con `no aplica`, y no una cifra
+   congelada.** El `where` del update de urgencia de los RPC de sincronización solo mantiene
+   `scheduled_date >= public.today_bog()`, así que en un día pasado `is_urgent` es un valor
+   congelado. Recalcularlo al leer es posible y **se descartó**: sería una segunda verdad sobre la
+   urgencia, con un predicado parecido pero no idéntico al del SQL. La métrica sigue la regla que
+   el propio dominio ya tomó: `alertasComputadas()` acota la alerta de urgencia a
+   `scheduled_date >= hoy` porque su significado es "entra huésped el mismo día" y pasada la fecha
+   ya no hay nada que apurar. Nulo y cero son cosas distintas y se pintan distinto, igual que
+   `SinDato` de la fila de aseo.
+2. **Los gastos del día son los de los aseos PROGRAMADOS ese día, y eso diverge de la sección
+   financiera a propósito.** `expenses` solo tiene `created_at`, así que no tiene día de negocio.
+   El proyecto ya decidió en tres migraciones que un gasto pertenece a
+   `public.dia_bog(cleanings.finished_at)`, o sea al día en que el aseo se CERRÓ. La decisión del
+   dueño para esta pantalla es la contraria, porque pidió que las cuatro métricas salgan de la
+   fecha del selector sin excepción. **Las dos cifras pueden no coincidir y eso NO es un
+   defecto**, así que la frase entera viaja en el `title` de la métrica. Sin esa frase, esto
+   vuelve como reporte de bug en un mes.
+3. **El vistazo NO lleva cromo de tarjeta, y eso lo separa de `/finanzas` a propósito.**
+   `TarjetaKPI` de la Fase 7 es `rounded-md border border-border bg-background p-lg` con alto fijo
+   `h-kpi`, y su cabecera explica que lo que hace destacar al número es justamente su card propia.
+   El principio de data ink que enunció el dueño dice lo contrario: ni bordes ni decoración que no
+   comunique. Acá el vistazo son cuatro pares de rótulo en micro versalitas y cifra en display,
+   separados por aire. **`TarjetaKPI` no se reutiliza y no se dobla:** formatea dinero por dentro
+   y tres de estas cuatro métricas no son dinero. **Las dos pantallas van a verse distintas, es
+   declarado y no accidental, y el dueño lo juzga en el checkpoint de este plan.**
+
+**Y la cifra de desbordamiento es lo que salva el criterio 1 del ROADMAP de la Fase 4.** Hasta
+este rediseño la bandeja contaba TODOS los sin confirmar de la ventana de catorce días: uno de
+dentro de tres días se veía hoy, sin navegar. Con la pantalla por día eso se perdería, y perderlo
+es una regresión contra *"que ningún aseo se pierda"*, que es el core value del producto y no una
+preferencia de diseño. El `+N` se calcula con el MISMO `bandejaSinConfirmar()` sobre la ventana
+entera menos el día seleccionado, así que no hay predicado nuevo.
+
+### 16.4 La tarjeta
+
+Hereda de la fila de la tabla vieja, sin perder nada:
+
+- **Las cuatro señales inline** (`Zap` urgente, `Flag` por revisar, `Hourglass` hora límite
+  vencida, `ImageOff` sin evidencia), con sus mismos iconos y sus mismos nombres accesibles.
+- **Los dos vacíos con su distinción intacta:** `Sin asignar` en color de aviso para una
+  gestionada sin aseador (es trabajo que nadie tiene), y `no aplica` para una unidad de gestión
+  externa (la base lo prohíbe por `cl_unmanaged_is_inert`).
+- **El badge de tipo** y **el ancla `#aseo-{id}`**, que es el destino de las alertas de la
+  campana. `scroll-mt-barra` compensa la barra superior fija de 56px.
+- **`aria-current` sobre la tarjeta cuyo detalle está abierto** (§13.1).
+
+**El `Sin confirmar` es un ESTADO VISUAL de la tarjeta, no una sección aparte.** Se dice con un
+borde izquierdo de 2px en `--status-warn`, que **sustituye** al borde neutro de ese lado y no se
+suma (dos bordes pegados de 1 y 2px se leen como un error de render). Es color de ESTADO, no
+decoración: significa exactamente lo que el icono `Inbox` y el `text-status-warn` que
+`estadoDeAseo()` ya le daba a esa clave.
+
+**INVERSIÓN DECLARADA DEL CONTRATO DE ORDEN.** `TablaDia.tsx` afirmaba por escrito que los sin
+confirmar **NO flotan arriba**, y su razón era que su superficie propia era la bandeja del
+carril. Al matar la bandeja, esa razón desaparece, **y aun así siguen sin flotar**: lo que los
+distingue ahora es el estado visual dentro del mismo orden por hora límite. Se dice acá en vez de
+cambiarlo en silencio.
+
+**Y §12.5 de `05-UI-SPEC` SOBREVIVE PALABRA POR PALABRA, al pasar de `TableRow` a tarjeta:**
+
+> **Ninguna fila de `Atrasados` se tinta, ni cambia de peso, ni de alto.**
+
+Ninguna tarjeta atrasada se tinta, ni cambia de peso, ni de alto. Lo que distingue un atrasado es
+**el selector de día**, que es un canal de mucho más ancho de banda que un tinte, exactamente
+igual que antes lo era el bloque `Atrasados`. La prohibición no caduca al cambiar de primitiva.
+
+### 16.5 La campana
+
+El panel de alertas sale del carril lateral y pasa a **una campana de la barra superior**,
+decisión del dueño del 2026-09-28. **Las cuatro garantías de `04-UI-SPEC` §11 quedan intactas:**
+
+1. **El contador dice el TOTAL**, nunca lo renderizado ni lo que queda tras el filtro. Es la
+   única garantía medible de que el scroll interno no es un escondite (criterio 4 del ROADMAP de
+   la Fase 4). **Un popover es más pequeño que un carril, así que la tentación de paginar es
+   mayor:** la prohibición de paginar, de virtualizar y de ofrecer "ver más" queda escrita en el
+   componente mudado.
+2. **El orden sigue siendo cronológico.** Ni severidad, ni orden por gravedad, ni color por tipo.
+   `PresentacionDeAlerta` sigue sin campo de severidad.
+3. **El clic de una alerta sigue aterrizando en la fila de su aseo**, y ahora es **más fuerte que
+   antes**: el destino lleva el día dentro (`/operacion?dia={scheduled_date}#aseo-{id}`), así que
+   ya no depende de que un bloque exista ni de que esté abierto.
+4. **No se duplican en la campana los conteos que el vistazo ya da.**
+
+**LA INVERSIÓN DEL TOGGLE `Ver atendidas` A ESTADO DE CLIENTE, CON SU RAZÓN ENTERA.** `TopNav` lo
+renderiza `app/(admin)/layout.tsx`, y **un layout de App Router NO recibe `searchParams`**. Así
+que `?alertas=atendidas`, que era un parámetro de servidor leído por `page.tsx`, deja de ser
+resoluble donde la campana vive. La salida es leer las dos listas en el layout y filtrar en el
+cliente con el toggle.
+
+Eso **INVIERTE la regla que el plan 04-13 dejó escrita** (lo que cambia qué filas lee el servidor
+vive en la URL; lo que solo filtra lo ya traído vive en el cliente), y la inversión es legítima
+porque **la premisa de la regla era que el control vive en una página que recibe los parámetros**,
+y este control ya no vive ahí. Dos consecuencias que van escritas: se fueron las constantes
+`PARAM_ATENDIDAS`, `HREF_SIN_ATENDER` y `HREF_ATENDIDAS`, y **un enlace guardado con ese filtro
+puesto dejó de funcionar**. El parámetro que ahora tiene que sobrevivir a abrir y cerrar el
+detalle es `?dia`, y hay un caso E2E que lo afirma.
+
+### 16.6 Color
+
+**El color solo significa estado o alerta. Nunca decoración.** Ninguna superficie nueva de esta
+pantalla lleva fondo de color, borde de color ni texto de color que no signifique un estado.
+**La lista cerrada del acento de `02-UI-SPEC` §4.4 no se amplía**, y el vistazo no lleva cromo de
+tarjeta (16.3).
+
+**DESVIACIÓN DECLARADA: el dueño pidió ROJO para la señal de calendario caído y salió en
+`--status-warn` (ámbar).** La razón está medida y no es preferencia:
+
+- `--status-warn` es el token con el que ya están pintadas **todas** las señales de aviso de esta
+  pantalla: `Zap`, `Flag`, `Hourglass`, `ImageOff`, `Sin asignar`, los dos badges y el contador.
+- `--destructive` está reservado a acciones destructivas y al borde de error.
+- `02-UI-SPEC` §4.6 ya declara el **choque de hues** entre `--primary` (29) y `--destructive`
+  (13.7). Meter un tercer rojo de estado pondría **tres rojos** en una pantalla.
+
+**El dueño la revisa en el checkpoint del plan 10-05.** Si dice que no grita bastante, es un
+cambio de una línea en `SenalDeCalendario.tsx`, **y ese día hay que escribir acá la nota del
+tercer rojo en pantalla con el choque de hues al lado**, para que quien audite el color después
+sepa que es una decisión y no un descuido. Los tokens de marca no se tocan en ningún caso.
+
+### 16.7 Iconos
+
+**`CalendarCheck` es una ampliación declarada de la lista cerrada de `04-UI-SPEC` §17.3.** Los
+precedentes son `HardDrive` (quick `260918-a33`, 2026-09-18) y `Bell`: la regla que no se toca no
+es "la lista no crece nunca", es "la lista no crece en silencio".
+
+**La señal de calendario son DOS ICONOS DISTINTOS, no dos colores del mismo punto.** `04-UI-SPEC`
+§5 prohíbe el color como único canal, y un punto neutro contra un punto rojo se diferencian solo
+por el color. Sano: `CalendarCheck`. Caído: `CalendarX`, que es el **mismo** icono que la alerta
+`calendario_caido` ya usa en `MAPA_DE_ALERTAS`, así que el admin lo aprende una vez. Las dos
+llevan nombre accesible, que es el segundo canal para quien no ve el color.
+
+### 16.8 Trampas
+
+Las tres de esta pantalla. La cuarta (la barra de ambiente de pruebas aplicada a una medida
+vertical) está en §11.5 punto 5, porque es una trampa del repo y no de esta ruta.
+
+1. **La barra de ambiente de pruebas mide 48px y la suite E2E corre justo donde se pinta.** Toda
+   medida vertical se toma contra el contenedor de la página y nunca contra el viewport, y la
+   resta de la barra va dentro del `calc()`. Ver §11.5 punto 5.
+2. **Los gastos no tienen día de negocio**, y esta pantalla se desvía de la sección financiera a
+   propósito. La divergencia va escrita EN PANTALLA, en el `title` de la métrica. Ver 16.3 punto 2.
+3. **Al pasar el detalle de `Sheet` a inline vuelve el problema de alcance que `08-11` midió.**
+   `SheetContent` se portaleaba a `document.body`, así que `getByRole('dialog')` acotaba el panel
+   limpiamente. **Inline, ese ámbito desaparece** y el riesgo vuelve entero: la lista del día
+   pinta el mismo nombre de apartamento que el detalle. La salida es un localizador propio
+   (`[data-slot="detalle-aseo"]`) y **volver a correr el control de 08-11 en los dos sentidos**,
+   con la palabra prohibida sembrada FUERA del detalle. Medido el 2026-09-29: acotada al detalle
+   sigue en verde, sin acotar se pone roja (`Expected: false / Received: true`). Sin ese control,
+   las aserciones negativas del criterio 5 son verdaderas por accidente.
+   **Y hay un hallazgo de forma al lado:** la colisión de ámbito de esta pantalla viaja por el
+   TEXTO y no por el nombre accesible, porque el enlace de la tarjeta lleva
+   `aria-label="Ver el aseo de {nombre}"` y no se llama como el apartamento.
+
+**Y una compuerta de forma, que no es trampa sino invariante:** con el detalle abierto, el conteo
+de elementos con rol de diálogo en la pantalla es **cero**. El detalle inline no es modal a
+propósito: no atrapa el foco, no cierra con la tecla de escape y no tapa la lista, porque la
+lista de al lado sigue viva y operable.
+
+### 16.9 Consideraciones de interfaz
+
+| Categoría | Cómo se resuelve en esta pantalla |
+|---|---|
+| **Vacío: un día sin aseos** | Se pinta igual, con su mensaje. Que no haya nada es información, y es lo que sobrevive de `04-UI-SPEC` §8.1 |
+| **Vacío: la columna derecha sin selección** | **No puede existir.** Sin nada seleccionado lleva la información general del día: la carga por aseador, el desglose por estado, lo que queda más allá del horizonte y la leyenda. Una columna del 70% esperando a que alguien pulse algo ocupa el sitio más grande de la pantalla y no dice nada, así que el admin aprende a no mirarla |
+| **Volumen: treinta tarjetas en un día** | La lista scrollea **por dentro** (`min-h-0` + `flex-1` + `overflow-y-auto`) y la página no scrollea. Medido con seis activos más veinticuatro cancelados y el toggle puesto |
+| **Texto largo: un nombre de apartamento a 360px** | `min-w-0` + `truncate` dentro de la tarjeta, con el nombre completo en el `title`. La pista es `minmax(0, 30fr)` justamente para que trunque dentro en vez de ensanchar la columna |
+| **Carga** | **No se reintroduce `loading.tsx` en esta ruta.** Está medido en `08-02-MEDICION.md` §3 que el fallback del segmento se activa al cambiar los parámetros de la MISMA ruta y manda el scroll a cero, y el selector de día es exactamente eso. El único esqueleto es el de la barrera de suspensión del detalle, con la geometría real |
+| **Error** | Por el `error.tsx` de la ruta, sin cambios. Un aseo que no existe o que no se puede ver **no** es un error: se cae a la información del día y el parámetro huérfano se queda en la dirección, porque limpiarlo reescribiría un enlace que alguien pegó en un chat |
+| **Movimiento reducido** | `n/a` para esta pantalla, **con su razón**: no introduce ninguna animación propia. Lo único que se mueve son las transiciones de hover y foco que el bloque global de `prefers-reduced-motion` de `globals.css` ya apaga |
+| **Foco y teclado** | El detalle inline **no** atrapa el foco y **no** reimplementa nada de lo que Base UI daba en el `Sheet`, porque no es modal. Su control de cerrar es un enlace, así que se puede abrir en otra pestaña |
+| **Estado persistente** | El toggle de cancelados y el recorrido de la lista **sobreviven a abrir el detalle**, y hay un caso que lo afirma. La clave por identificador va sobre el detalle y sobre nada más (INSTRUCCIÓN 3 del veredicto de 08-02) |
+
+---
+
 ## 15. Deuda declarada de este contrato
 
 Se documenta acá para que `gsd-ui-auditor` no la reporte como hallazgo nuevo.
 
-1. **El resto del dashboard sigue sin rediseñar, y sigue siendo la deuda más importante de las once.** El objetivo del ROADMAP para la Fase 10 es "que el dashboard del admin deje de verse como shadcn recién instalado". Esta fase entrega **una** pantalla, que es lo único que `10-CONTEXT.md` cerró. `/operacion`, `/apartamentos`, `/aseadores` y `/finanzas` siguen con el tema por defecto y el `baseColor: neutral` que D10-1 identificó como el problema real. **La fase no cierra el objetivo del ROADMAP y no debe declararse como si lo cerrara.**
+1. **El resto del dashboard sigue sin rediseñar, y sigue siendo la deuda más importante de las catorce.** El objetivo del ROADMAP para la Fase 10 es "que el dashboard del admin deje de verse como shadcn recién instalado". **CORREGIDA A MEDIAS EL 2026-09-29:** la fase entrega **DOS pantallas**, `/login` y `/operacion` (§16), y no una. Lo que **no** cambió es lo importante: `/apartamentos`, `/aseadores` y `/finanzas` siguen con el tema por defecto y el `baseColor: neutral` que D10-1 identificó como el problema real. **La fase no cierra el objetivo del ROADMAP y no debe declararse como si lo cerrara.** Esa frase sigue siendo verdad con dos pantallas igual que lo era con una, y por eso se conserva literal.
 2. **`aria-hidden` en el panel caduca con el primer anuncio real.** Un anuncio con enlace dentro de un contenedor `aria-hidden` es una infracción de 4.1.2 y un enlace inalcanzable por teclado. Ese día el panel necesita nombre accesible y el enlace entra al orden de tabulación.
 3. **`display: none` no evita la descarga de una imagen.** Hoy no importa (no hay imagen). Cuando la haya, el panel necesita `<picture>` con atributo `media`, o pasa a ser frontera de cliente. Un teléfono descargando el creativo de un panel que nunca va a ver es coste directo sobre el plan de datos del aseador.
 4. **El formulario tiene controles de 32 y 28px en una pantalla que el aseador usa desde el teléfono.** El `Input` es `h-8` y el toggle de contraseña es `icon-sm`; el piso de 44px de `05-UI-SPEC` es exclusivo de `app/(cleaner)/` y `check-escala-movil.sh` no mira `app/(public)/`. No es alcance de esta fase (el formulario no se toca) pero es un hueco real del contrato de toque, y el `Input` a `text-base` debajo de `md:` es lo único que hoy evita el zoom automático de iOS en esa pantalla.
@@ -1047,6 +1342,12 @@ Se documenta acá para que `gsd-ui-auditor` no la reporte como hallazgo nuevo.
 9. **El recorte del creativo a sangre completa.** Era la razón 1 de la §3.1 derogada, y al invertirse la decisión pasa a ser deuda: un creativo real en un panel pegado a los cuatro bordes se recorta con `object-fit: cover` (y cortarle el logo a un anunciante es el único modo de fallo que no perdona) o deja franjas contra el borde desnudo del navegador, que se lee como defecto de maquetación. La tarjeta derogada permitía `object-contain` con las franjas sobre una superficie que se leía como marco. Se perdió a cambio del diseño que el dueño escogió el 2026-09-26, y queda escrito para que nadie lo redescubra cuando llegue el primer anunciante.
 10. **El color del wordmark del panel es blanco por decisión del dueño, con 1.27:1 sobre el gris más claro.** La entrada completa, con su etiqueta correcta (infracción aceptada, no exención) y su condición de salida, vive en **§10.4**. Esta deuda **remite ahí y no la repite a propósito**: una infracción registrada en dos sitios se cierra en uno solo y sobrevive en el otro.
 11. **El wordmark se anuncia dos veces al lector de pantalla.** El `<h1>` del formulario y el `<p>` del panel dicen los dos "VivaGuest". Es **redundancia aceptada, no barrera**: la alternativa (ponerle `aria-hidden` al del panel) volvería inútil todo el trabajo de sacarlo del subárbol `aria-hidden` del panel, que es exactamente lo que este contrato defiende en §10.1.
+
+> **DEUDAS 12, 13 Y 14: añadidas el 2026-09-29 con `/operacion` (§16).**
+
+12. **La métrica `Urgentes` SUBCUENTA los aseos creados a mano, y la causa está en el dominio de sincronización.** El update que mantiene `is_urgent` solo toca filas con `origin = 'ical'`, así que **un `repaso` o una `emergencia` creados a mano nunca se marcan urgentes**, aunque entre huésped el mismo día. La métrica del vistazo hereda esa subcuenta porque lee la columna en vez de recalcular, que es lo correcto: recalcular sería una segunda verdad sobre la urgencia. **Condición de salida:** ampliar el `where` del update en los RPC de sincronización, que es una decisión del dominio de sincronización y no de una pantalla. Hasta entonces, la cifra es un piso y no un total.
+13. **Los gastos del día divergen de los de la sección financiera, y las dos cifras pueden no coincidir.** `/operacion` agrupa por `scheduled_date` del aseo (el día del selector, decisión del dueño del 2026-09-28) y `/finanzas` por `public.dia_bog(cleanings.finished_at)` (el día en que el aseo se cerró, decidido en tres migraciones). Un aseo programado el 28 y cerrado a las 00:20 pone su gasto el 29 allá y el 28 acá. **Hoy se mitiga con la frase entera en el `title` de la métrica**, que es lo que impide que esto vuelva como reporte de bug. **Condición de salida:** que el dueño decida cuál de las dos agrupaciones es la del producto, y que la otra la cite en vez de calcular la suya.
+14. **La campana le impuso una consulta más a CADA página del admin.** La lectura de alertas vivía en `app/(admin)/operacion/page.tsx` y ahora vive en `app/(admin)/layout.tsx`, porque la campana vive en la barra superior y un layout no recibe `searchParams`. Coste real medido en forma, no en tiempo: una consulta sobre `notifications`, con un admin y decenas de filas, en las cuatro secciones. **Y hay una consecuencia de fiabilidad que importa más que el coste:** un fallo en esa lectura deja de tumbar una pantalla y pasa a tumbar las cuatro. **Condición de salida:** si el volumen de `notifications` crece, la lectura pasa a ser diferida con su propia barrera de suspensión dentro de la campana, en vez de bloquear el layout.
 
 ---
 
