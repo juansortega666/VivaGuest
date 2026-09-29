@@ -29,6 +29,7 @@ import { formatAbreviadoCOP, formatCOP } from '@/lib/domain/money';
 import { estadoDeSincronizacion } from '@/lib/domain/salud-sync';
 import { publicEnv } from '@/lib/env';
 
+import { DetalleDelAseo } from './_components/DetalleDelAseo';
 import { DialogoCrearAseo } from './_components/DialogoCrearAseo';
 import { LeyendaDeAseos } from './_components/EstadoAseo';
 import { FranjaCarga } from './_components/FranjaCarga';
@@ -37,7 +38,6 @@ import { ListaDelDia } from './_components/ListaDelDia';
 import { MedidorDeAlmacenamiento } from './_components/MedidorDeAlmacenamiento';
 import type { ContextoDeAcciones } from './_components/MenuAseo';
 import { MetricaDelDia } from './_components/MetricaDelDia';
-import { PanelAseo } from './_components/PanelAseo';
 import { ResumenDelDia } from './_components/ResumenDelDia';
 import { SelectorDeDia } from './_components/SelectorDeDia';
 import { SenalDeCalendario } from './_components/SenalDeCalendario';
@@ -733,19 +733,40 @@ export default async function OperacionPage({
           <SincronizacionEnVivo leidoEnMs={operacion.leidoEnMs} />
 
           {/*
-            ── `Crear aseo` SE FUE DE LA CABECERA A LA COLUMNA DERECHA (plan 10-05) ─
+            ── `Crear aseo` VOLVIO A LA CABECERA, Y ESTA ES LA DECISION (Task 5) ───
 
-            Vivia aqui y ahora vive en `InfoDelDia`, con el resto de la informacion
-            general del dia. La razon es que la cabecera paso a llevar el control que
-            gobierna la pantalla entera —la senal de calendario y el selector de dia—
-            y meter ahi ademas una accion de escritura le quita el foco a eso.
+            La Task 4 lo bajo de aqui a `InfoDelDia`, y dejo escrita en voz alta la
+            consecuencia: **con el detalle de un aseo abierto, la columna derecha lo
+            muestra a el y el boton dejaba de ser alcanzable sin cerrar el detalle.**
+            Las dos salidas que quedaban anotadas eran una copia en la cabecera o el
+            boton fuera del bloque que el detalle sustituye.
 
-            **Y hay una consecuencia que hay que decir en voz alta**: con el detalle de
-            un aseo abierto, la columna derecha lo muestra a el y este boton NO ESTA
-            ALCANZABLE sin cerrar el detalle. Lo hereda la Task 5 de este plan, que es
-            la que mete el detalle en esa columna, y ahi hay que decidirlo: o una copia
-            en la cabecera, o el boton fuera del bloque que el detalle sustituye.
+            **Se tomo la segunda, y la razon es que la primera no es aceptable:** dos
+            controles con el mismo nombre accesible en la misma pantalla es
+            exactamente lo que §13 prohibe, y ademas obligaria a mantener dos sitios
+            sincronizados para una accion sola.
+
+            Asi que el boton vuelve a la fila de cabecera, que es el UNICO bloque de
+            esta pantalla que ni el detalle ni la lista sustituyen nunca. La razon por
+            la que se habia bajado (que la cabecera lleva el control que gobierna la
+            pantalla entera y una accion de escritura le quita el foco) se paga
+            poniendolo ANTES de la senal de calendario y del selector, no despues: el
+            extremo derecho sigue siendo del selector, que es donde el ojo lo busca.
+
+            **Y conserva el cambio de comportamiento de la Task 1**, que fue
+            deliberado: su fecha por defecto es el DIA SELECCIONADO y no hoy. Crear un
+            aseo mirando el viernes y que el dialogo proponga hoy seria pedirle al
+            admin que corrija a mano lo que la pantalla ya sabe.
+
+            `Crear aseo` va en `outline`: el unico boton primario de la pantalla es
+            `Confirmar N aseos`, en la cabecera de la lista del dia (§4.2).
           */}
+          <DialogoCrearAseo
+            apartamentos={apartamentosParaCrear}
+            hoy={operacion.hoy}
+            dia={diaEfectivo}
+          />
+
 
           {/*
             EL SELECTOR DE DIA VA AL FINAL DE LA FILA, Y EL ORDEN ES EL QUE EL
@@ -902,112 +923,106 @@ export default async function OperacionPage({
         />
 
         {/*
-          LA COLUMNA DERECHA NUNCA ESTA VACIA. Sin nada seleccionado enseña la
-          informacion general del dia; el detalle del aseo llega en la Task 5 de este
-          plan y ocupa este mismo sitio.
+          ── LA SEGUNDA PISTA DE LA REJILLA, Y **NUNCA ESTA VACIA** ──────────────
+
+          Con un aseo valido en la direccion lleva su DETALLE; sin nada seleccionado
+          lleva la informacion general del dia. Lo pidio el dueño con esas palabras el
+          2026-09-28: el detalle a la derecha, y sin seleccion la informacion del dia,
+          **nunca una caja vacia**.
+
+          Las dos ramas ocupan LA MISMA pista, asi que la pantalla no se recoloca al
+          abrir un aseo: la lista de la izquierda no se mueve ni un pixel.
+
+          ── EL DETALLE YA NO ES UN DIALOGO, Y ESO CAMBIO DONDE VIVE ────────────
+
+          Hasta este plan era un `Sheet` que la primitiva portaleaba a `document.body`,
+          asi que colgaba FUERA de esta rejilla: su sitio en el arbol no era su sitio
+          en la pantalla. Ahora es un nodo inline de esta pista, y por eso entra aqui.
+
+          **LA CLAVE POR IDENTIFICADOR VA SOBRE EL DETALLE Y SOBRE NADA MAS**, para
+          que abrir un segundo aseo no reutilice el arbol del primero. NO sobre la
+          barrera de suspension, NO sobre este contenedor y NO sobre nada que envuelva
+          a la lista del dia (INSTRUCCION 3 del VEREDICTO de 08-02): ahi forzaria el
+          remonte del subarbol y se llevaria por delante el estado de cliente de la
+          lista, que es la mitad del criterio 1 del ROADMAP de la Fase 8.
+
+          ── Y EL DETALLE SOLO EXISTE SI LA LECTURA DEVOLVIO FILA ───────────────
+
+          Cero filas significa que el aseo no existe o que no se puede ver, y las dos
+          cosas se tratan igual: **sin 404, sin toast, sin detalle vacio, sin
+          redireccion**. Se cae a la informacion del dia y el parametro huerfano SE
+          QUEDA en la direccion, porque limpiarlo reescribiria un enlace que alguien
+          pego en un chat (§11.4).
         */}
-        <InfoDelDia cabecera={cabeceraDelDia}>
-          <FranjaCarga chips={chips} sinAvisos={aseadoresSinAvisos} titulo={tituloDeLaFranja} />
+        {aseoAbierto !== null && lecturaDelPanel !== null ? (
+          <DetalleDelAseo
+            key={aseoAbierto.cabecera.aseoId}
+            cabecera={aseoAbierto.cabecera}
+            // LA MISMA promesa que ya se resolvio arriba para decidir si este detalle
+            // existe. No es una segunda lectura: una llamada nueva repetiria las seis
+            // consultas y las seis firmas. La consecuencia (que el esqueleto no llega
+            // a pintarse) esta escrita en la cabecera de `DetalleDelAseo`.
+            panel={lecturaDelPanel}
+            rutaAlCerrar={rutaAlCerrar}
+            rutaDelApartamento={`/apartamentos?apartamento=${aseoAbierto.cabecera.apartamentoId}`}
+          />
+        ) : (
+          <InfoDelDia cabecera={cabeceraDelDia}>
+            <FranjaCarga chips={chips} sinAvisos={aseadoresSinAvisos} titulo={tituloDeLaFranja} />
 
-          {/*
-            EL DESGLOSE DEL DIA: cuantos aseos hay en cada estado.
+            {/*
+              EL DESGLOSE DEL DIA: cuantos aseos hay en cada estado.
 
-            Sale de `estadoDeAseo()`, la unica derivacion del repo, asi que sus
-            etiquetas son las mismas que pinta cada tarjeta y no una segunda
-            redaccion. Solo se listan los estados CON filas: seis lineas en cero
-            serian seis lineas diciendo que no hay nada que decir.
-          */}
-          {desgloseDelDia.length > 0 && (
-            <div className="flex flex-col gap-xs">
-              <h3 className="text-micro font-semibold tracking-columna text-muted-foreground uppercase">
-                Desglose
-              </h3>
-              <ul className="flex flex-col gap-xs">
-                {desgloseDelDia.map(({ clave, etiqueta, conteo }) => (
-                  <li key={clave} className="flex items-baseline gap-sm text-body">
-                    <span className="tabular-nums text-foreground">{conteo}</span>
-                    <span className="text-muted-foreground">{etiqueta}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+              Sale de `estadoDeAseo()`, la unica derivacion del repo, asi que sus
+              etiquetas son las mismas que pinta cada tarjeta y no una segunda
+              redaccion. Solo se listan los estados CON filas: seis lineas en cero
+              serian seis lineas diciendo que no hay nada que decir.
+            */}
+            {desgloseDelDia.length > 0 && (
+              <div className="flex flex-col gap-xs">
+                <h3 className="text-micro font-semibold tracking-columna text-muted-foreground uppercase">
+                  Desglose
+                </h3>
+                <ul className="flex flex-col gap-xs">
+                  {desgloseDelDia.map(({ clave, etiqueta, conteo }) => (
+                    <li key={clave} className="flex items-baseline gap-sm text-body">
+                      <span className="tabular-nums text-foreground">{conteo}</span>
+                      <span className="text-muted-foreground">{etiqueta}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
-          {/*
-            Lo que queda MAS ALLA DEL HORIZONTE se CUENTA, no se agrupa: no hay ninguna
-            decision que tomar hoy sobre un aseo de dentro de dos semanas, pero saber
-            que existe evita la pregunta "¿y no hay nada mas?" (T-05-54).
+            {/*
+              Lo que queda MAS ALLA DEL HORIZONTE se CUENTA, no se agrupa: no hay ninguna
+              decision que tomar hoy sobre un aseo de dentro de dos semanas, pero saber
+              que existe evita la pregunta "¿y no hay nada mas?" (T-05-54).
 
-            VIVIA AL PIE DEL CARRIL ANCHO, que este plan borro. Se MUDA, no se pierde.
-          */}
-          {masAllaDelHorizonte > 0 && (
-            <p className="text-micro text-muted-foreground">
-              Hay {masAllaDelHorizonte}{' '}
-              {masAllaDelHorizonte === 1 ? 'aseo programado' : 'aseos programados'} después del{' '}
-              {formatFechaBog(operacion.horizonte)}.
-            </p>
-          )}
+              VIVIA AL PIE DEL CARRIL ANCHO, que este plan borro. Se MUDA, no se pierde.
+            */}
+            {masAllaDelHorizonte > 0 && (
+              <p className="text-micro text-muted-foreground">
+                Hay {masAllaDelHorizonte}{' '}
+                {masAllaDelHorizonte === 1 ? 'aseo programado' : 'aseos programados'} después del{' '}
+                {formatFechaBog(operacion.horizonte)}.
+              </p>
+            )}
 
-          {/* La leyenda va UNA SOLA VEZ (§5). */}
-          <LeyendaDeAseos />
+            {/* La leyenda va UNA SOLA VEZ (§5). */}
+            <LeyendaDeAseos />
 
-          {/* `Crear aseo` va en `outline`: el unico boton primario de la pantalla es
-              `Confirmar N aseos`, en la cabecera de la lista del dia (§4.2). */}
-          <div className="flex">
-            <DialogoCrearAseo
-              apartamentos={apartamentosParaCrear}
-              hoy={operacion.hoy}
-              dia={diaEfectivo}
-            />
-          </div>
-        </InfoDelDia>
+            {/*
+              ── `Crear aseo` YA NO VIVE AQUI, Y SE DICE EN VEZ DE DESAPARECER ────
+
+              La Task 4 lo puso en este bloque y la Task 5 lo devolvio a la fila de
+              cabecera, porque el detalle de un aseo SUSTITUYE a este bloque entero y
+              el boton dejaba de ser alcanzable con un aseo abierto. La razon larga
+              esta escrita donde ahora vive.
+            */}
+          </InfoDelDia>
+        )}
       </div>
-
-      {/*
-        ── EL PANEL DE ASEO (§10, criterio 4) ───────────────────────────────
-
-        Solo se renderiza cuando la lectura devolvio fila. Cero filas significa
-        que el aseo no existe o que no se puede ver, y las dos cosas se tratan
-        igual: **sin 404, sin toast, sin panel vacio, sin redireccion**, y el
-        parametro huerfano SE QUEDA en la direccion, porque limpiarlo reescribiria
-        un enlace que alguien pego en un chat (§11.4).
-
-        LA CLAVE VA AQUI Y EN NINGUN OTRO SITIO. Sobre el panel, para que abrir un
-        segundo aseo no reutilice el arbol del primero: sin ella no vuelve a hacer
-        su entrada, no recoloca el foco y se veria el nombre nuevo dentro del
-        panel viejo.
-
-        **NO sobre la barrera de suspension y NO sobre nada que envuelva a la
-        tabla del dia** (INSTRUCCION 3 del VEREDICTO de 08-02). Ahi forzaria el
-        remonte del subarbol y se llevaria por delante el estado de cliente de los
-        bloques de dia, que hoy sobrevive y sobrevive medido.
-
-        Va FUERA de la rejilla de los dos carriles: es un dialogo que la primitiva
-        lleva a un portal, asi que su sitio en el arbol no es su sitio en la
-        pantalla, y colgarlo de una pista de rejilla solo confundiria al que lea.
-      */}
-      {aseoAbierto !== null && lecturaDelPanel !== null && (
-        <PanelAseo
-          key={aseoAbierto.cabecera.aseoId}
-          cabecera={aseoAbierto.cabecera}
-          // LA MISMA promesa que ya se resolvio arriba para decidir si este panel
-          // existe. No es una segunda lectura: una llamada nueva repetiria las
-          // seis consultas y las seis firmas.
-          //
-          // Consecuencia honesta, y va escrita: como la promesa ya esta resuelta
-          // cuando el panel se renderiza, **el esqueleto de su barrera de
-          // suspension no llega a pintarse**. La barrera se queda igual, porque
-          // es lo que mantiene la forma comun de los cuatro paneles, y porque la
-          // alternativa —llamar a la definer una vez para validar y otra vez
-          // dentro del panel— compraria un esqueleto que 08-02 §6.1 ya midio que
-          // NO APARECE NUNCA (cero de doce corridas, porque la respuesta del
-          // servidor vuelve en ~70 ms) a cambio de duplicar una consulta de
-          // verdad. No vale la pena.
-          panel={lecturaDelPanel}
-          rutaAlCerrar={rutaAlCerrar}
-          rutaDelApartamento={`/apartamentos?apartamento=${aseoAbierto.cabecera.apartamentoId}`}
-        />
-      )}
     </div>
   );
 }

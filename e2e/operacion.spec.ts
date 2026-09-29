@@ -1129,10 +1129,66 @@ test('sin seleccion, la columna derecha NO esta vacia', async ({ paginaAdmin }) 
   const info = paginaAdmin.locator('[data-slot="info-dia"]');
   await expect(info).toBeVisible();
 
-  // Las tres piezas que el contrato nombra.
+  // Las piezas que el contrato nombra.
   await expect(info.getByText('Carga de hoy')).toBeVisible();
   await expect(info.getByRole('heading', { name: 'Desglose' })).toBeVisible();
-  await expect(info.getByRole('button', { name: 'Crear aseo' })).toBeVisible();
+
+  /*
+    ── `Crear aseo` YA NO SE AFIRMA AQUI, Y LA ASERCION NO SE PIERDE ─────────
+
+    La Task 4 lo puso en este bloque y la Task 5 lo devolvio a la fila de
+    cabecera, porque el detalle de un aseo SUSTITUYE a este bloque entero y el
+    boton dejaba de ser inalcanzable con un aseo abierto. Lo que aqui se afirmaba
+    (que el boton existe y se ve) lo afirma ahora el caso de abajo, y encima con
+    el detalle abierto, que es la condicion en la que antes se perdia.
+  */
+  await expect(
+    paginaAdmin.getByRole('button', { name: 'Crear aseo' }),
+    'el boton sigue existiendo, ahora en la cabecera y no en esta columna',
+  ).toBeVisible();
+});
+
+test('`Crear aseo` sigue alcanzable CON EL DETALLE ABIERTO', async ({ paginaAdmin }) => {
+  const { gestionada, aseadoraA, fechas } = escenario;
+  const [idAseo] = await sembrarAseos(servicio, [
+    { propiedad: gestionada.id, fecha: fechas.hoy, aseador: aseadoraA.id, confirmado: true },
+  ]);
+
+  /**
+   * ════════════════════════════════════════════════════════════════════════
+   * LA COMPUERTA DE LA DECISION QUE LA TASK 5 TUVO QUE TOMAR.
+   *
+   * La Task 4 bajo `Crear aseo` de la cabecera a `InfoDelDia`, y dejo escrita la
+   * consecuencia: **el detalle de un aseo sustituye a `InfoDelDia` entero**, asi
+   * que con un aseo abierto el boton dejaba de existir en la pantalla. Un admin
+   * que esta mirando un aseo y quiere crear otro tendria que cerrar el que mira.
+   *
+   * La salida tomada fue devolver el boton a la fila de cabecera, que es el
+   * unico bloque que ni el detalle ni la lista sustituyen nunca. La otra salida
+   * (una copia dentro del detalle) se descarto: dos controles con el mismo
+   * nombre accesible en la misma pantalla es lo que §13 prohibe.
+   *
+   * Este caso es lo que impide que alguien vuelva a bajarlo sin darse cuenta.
+   * ════════════════════════════════════════════════════════════════════════
+   */
+  await paginaAdmin.goto(`/operacion?aseo=${idAseo}`);
+  await expect(paginaAdmin.locator('[data-slot="detalle-aseo"]')).toBeVisible();
+
+  // CONTROL: el bloque que el detalle sustituye NO esta. Sin esta mitad, el caso
+  // pasaria tambien en una pantalla donde el detalle no hubiera abierto.
+  await expect(
+    paginaAdmin.locator('[data-slot="info-dia"]'),
+    'CONTROL: con el detalle abierto, `InfoDelDia` no esta en la pantalla',
+  ).toHaveCount(0);
+
+  await expect(
+    paginaAdmin.getByRole('button', { name: 'Crear aseo' }),
+    '`Crear aseo` sigue alcanzable con el detalle abierto: vive en la cabecera, fuera del bloque que el detalle sustituye',
+  ).toBeVisible();
+
+  // Y sigue siendo UNO SOLO: una copia dentro del detalle dejaria dos controles
+  // con el mismo nombre accesible, que es lo que la decision descarto.
+  await expect(paginaAdmin.getByRole('button', { name: 'Crear aseo' })).toHaveCount(1);
 });
 
 test('a 1279 la pantalla se APILA y la lista del dia va primero', async ({ paginaAdmin }) => {
@@ -1674,18 +1730,40 @@ test('pulsar una alerta de un aseo de MAÑANA lleva al día de ESE aseo y a su f
  * `/apartamentos`: *"desde Operación, tocar un aseo muestra en qué va:
  * checklist, evidencia y los gastos o daños reportados, sin salir del día"*.
  *
- * ── TODO LO QUE SE LEA DEL PANEL SE ACOTA AL DIÁLOGO, SIN EXCEPCIÓN ───────
+ * ── ESTA CABECERA SE REESCRIBIÓ ENTERA EN EL PLAN 10-05, PORQUE SU HALLAZGO
+ *    CAMBIÓ DE SIGNO ──────────────────────────────────────────────────────
  *
- * `SheetContent` se portalea a `document.body`, así que el panel NO vive dentro
- * del contenedor de página. El plan 08-11 lo midió con un señuelo puesto a mano:
- * acotadas por el contenedor de página, dos aserciones de seguridad **pasaron en
- * verde con la palabra prohibida dentro del panel**. Ampliarlas a la pantalla entera tampoco
- * vale: vuelven a ser verdaderas por accidente, mirando la tabla de detrás, que
- * pinta el mismo nombre de apartamento. Se lee con `getByRole('dialog')`.
+ * **Lo que decía hasta hoy:** `SheetContent` se portalea a `document.body`, así
+ * que el panel NO vive dentro del contenedor de página, y por eso
+ * `getByRole('dialog')` lo acotaba limpiamente. Ese era el mundo del `Sheet`.
  *
- * Y la otra mitad, para cuando haga falta: leer la PÁGINA DE DETRÁS con el panel
- * abierto no se puede hacer por rol, porque Base UI la marca como oculta al
- * árbol de accesibilidad. Para eso se lee del DOM.
+ * **Lo que pasa desde el plan 10-05:** el detalle dejó de ser un diálogo y es un
+ * nodo INLINE de la columna derecha. O sea que **el portal ya no existe, el rol
+ * de diálogo ya no está disponible como ámbito, y el problema que 08-11 midió
+ * vuelve entero.** Lo que lo sustituye es un localizador propio:
+ * `[data-slot="detalle-aseo"]`, envuelto en `detalleDelAseo()`.
+ *
+ * ── Y EL HALLAZGO DE 08-11 SIGUE SIENDO EL MISMO, ASÍ QUE SE VOLVIÓ A MEDIR ─
+ *
+ * 08-11 dejó una salida impresa: con el ámbito equivocado, **dos aserciones de
+ * seguridad pasaron en VERDE con la palabra prohibida presente**. Acotar a la
+ * pantalla entera tampoco vale, y ahora menos: la lista del día de la izquierda
+ * pinta el MISMO nombre de apartamento que el detalle, así que un localizador
+ * sin acotar resuelve a dos elementos y revienta en `strict mode violation`, o
+ * peor, pasa por accidente.
+ *
+ * Por eso hay un caso dedicado al final de esta sección (*"CONTROL DE ALCANCE
+ * (08-11)"*) que siembra la palabra prohibida FUERA del detalle y comprueba **en
+ * los dos sentidos** que el acotado tiene dientes: acotado al detalle sigue en
+ * verde, sin acotar se pone rojo. Sin ese control, las aserciones negativas de
+ * esta sección son verdaderas por accidente.
+ *
+ * ── LA COMPUERTA CONTRA QUE ALGUIEN DEVUELVA EL `Sheet` ─────────────────
+ *
+ * Cada caso que abre el detalle afirma además que el conteo de elementos con rol
+ * de diálogo en la pantalla es CERO. El detalle inline no es modal a propósito
+ * (no atrapa el foco, no cierra con la tecla de escape, no tapa la lista), y esa
+ * decisión hay que poder defenderla de una regresión silenciosa.
  *
  * ── LAS PIEZAS SE AFIRMAN POR SEPARADO, Y CON NÚMEROS ───────────────────
  *
@@ -1695,6 +1773,30 @@ test('pulsar una alerta de un aseo de MAÑANA lleva al día de ESE aseo y a su f
  * Lo mismo con la tira: el conteo de casillas y la casilla de `+{N}`.
  * ════════════════════════════════════════════════════════════════════════════
  */
+
+/**
+ * El detalle del aseo, por su `data-slot` propio.
+ *
+ * **Es el ámbito de TODO lo que se lea del detalle, sin excepción.** Ver la
+ * cabecera de arriba y el caso de control de alcance del final de la sección.
+ */
+function detalleDelAseo(p: Page): Locator {
+  return p.locator('[data-slot="detalle-aseo"]');
+}
+
+/**
+ * La compuerta contra que alguien devuelva el `Sheet`: con el detalle abierto,
+ * en la pantalla no puede haber NI UN elemento con rol de diálogo.
+ *
+ * Va como ayudante y no copiada cinco veces para que el día que el detalle
+ * vuelva a ser modal caigan los cinco casos a la vez y con el mismo mensaje.
+ */
+async function sinNingunDialogo(p: Page): Promise<void> {
+  await expect(
+    p.getByRole('dialog'),
+    'el detalle del aseo es INLINE desde el plan 10-05: cero diálogos en la pantalla',
+  ).toHaveCount(0);
+}
 
 /** Las tareas que se le siembran al aseo del panel, y cuántas quedan hechas. */
 const CHECKLIST_TOTAL = 12;
@@ -1962,8 +2064,8 @@ async function fijarElDineroDelAseo(aseo: string): Promise<void> {
  * que el valor es el primer `<dd>` que sigue al término. Buscar el texto suelto
  * no serviría: `sin definir` sale en dos filas del mismo panel.
  */
-function valorDeLaFila(panel: Locator, etiqueta: string): Locator {
-  return panel
+function valorDeLaFila(detalle: Locator, etiqueta: string): Locator {
+  return detalle
     .locator('dt', { hasText: new RegExp(`^${etiqueta}$`) })
     .locator('xpath=following-sibling::dd[1]');
 }
@@ -2038,18 +2140,19 @@ test('CRITERIO 4: el panel dice en qué va el aseo, con el progreso, la evidenci
     `aseo=${idAseo}`,
   );
 
-  const panel = paginaAdmin.getByRole('dialog');
-  await expect(panel).toBeVisible();
+  const detalle = detalleDelAseo(paginaAdmin);
+  await expect(detalle).toBeVisible();
+  await sinNingunDialogo(paginaAdmin);
   await expect(
-    panel.getByRole('link', { name: gestionada.nombre }),
-    'el título del panel es el nombre del apartamento, y es el único enlace que sale de la sección (§10.2)',
+    detalle.getByRole('link', { name: gestionada.nombre }),
+    'el título del detalle es el nombre del apartamento, y es el único enlace que sale de la sección (§10.2)',
   ).toBeVisible();
 
   // ── PIEZA 1 DE 4: EL PROGRESO, CON LOS DOS NÚMEROS ──────────────────────
   // La forma sola no basta: `algo/algo` pasaría con la cuenta mal hecha, que es
   // justo el defecto contra el que T-08-22 puso la regla de no contar el
   // checklist en el componente.
-  const progreso = (await valorDeLaFila(panel, 'Checklist').textContent()) ?? '';
+  const progreso = (await valorDeLaFila(detalle, 'Checklist').textContent()) ?? '';
   expect(
     progreso,
     `CRITERIO 4 · el progreso del checklist dice ${CHECKLIST_HECHAS}/${total}, los números sembrados`,
@@ -2062,38 +2165,38 @@ test('CRITERIO 4: el panel dice en qué va el aseo, con el progreso, la evidenci
   // ── PIEZA 2 DE 4: LA TIRA DE EVIDENCIA, CON SU CONTEO ───────────────────
   // El `<ul>` de la tira es la única lista del panel: los cuatro grupos son
   // listas de definición, que no exponen el rol `list`.
-  const tira = panel.getByRole('list');
+  const tira = detalle.getByRole('list');
   await expect(
     tira.getByRole('listitem'),
     'CRITERIO 4 · la tira pinta seis casillas: cinco fotos y la de conteo (§10.3)',
   ).toHaveCount(MINIATURAS_CON_CONTEO + 1);
 
   await expect(
-    panel.getByRole('button', { name: `Ver la foto de ${cuartoDeLaPrimera}` }),
+    detalle.getByRole('button', { name: `Ver la foto de ${cuartoDeLaPrimera}` }),
     'CRITERIO 4 · la foto que SÍ existe se pinta como miniatura, con su nombre accesible',
   ).toHaveCount(1);
 
   await expect(
-    panel.getByLabel('Foto no disponible'),
+    detalle.getByLabel('Foto no disponible'),
     'CRITERIO 4 · una foto sin objeto en el bucket ocupa su sitio en vez de desaparecer de la tira',
   ).toHaveCount(MINIATURAS_CON_CONTEO - 1);
 
   await expect(
-    panel.getByLabel(`${FOTOS_SEMBRADAS - MINIATURAS_CON_CONTEO} fotos más`),
+    detalle.getByLabel(`${FOTOS_SEMBRADAS - MINIATURAS_CON_CONTEO} fotos más`),
     'CRITERIO 4 · la casilla de conteo dice cuántas no se ven',
   ).toBeVisible();
 
   // ── PIEZA 3 DE 4: LOS REPORTES, CON SU PREFIJO Y SU CIFRA ───────────────
   await expect(
-    panel.getByText(`Gasto · ${concepto}`, { exact: true }),
+    detalle.getByText(`Gasto · ${concepto}`, { exact: true }),
     'CRITERIO 4 · el gasto va con su prefijo (§10.2)',
   ).toBeVisible();
   await expect(
-    panel.getByText(formatCOP(montoDelGasto), { exact: true }),
+    detalle.getByText(formatCOP(montoDelGasto), { exact: true }),
     'CRITERIO 4 · y con su monto',
   ).toBeVisible();
   await expect(
-    panel.getByText(`Daño · ${descripcionDelDano}`, { exact: true }),
+    detalle.getByText(`Daño · ${descripcionDelDano}`, { exact: true }),
     'CRITERIO 4 · el daño va con el suyo, que es el otro canal de la distinción',
   ).toBeVisible();
 
@@ -2101,7 +2204,7 @@ test('CRITERIO 4: el panel dice en qué va el aseo, con el progreso, la evidenci
   // solo aparece cuando hay al menos un daño: sin daños no hay nada que aclarar.
   // Aquí es donde más falta hace, porque el pago al aseador va justo debajo.
   await expect(
-    panel.getByText('Los daños no se descuentan del pago.', { exact: true }),
+    detalle.getByText('Los daños no se descuentan del pago.', { exact: true }),
     'CRITERIO 4 · con un daño reportado, la línea de D7-2 está, literal de §15.2',
   ).toBeVisible();
 
@@ -2109,18 +2212,18 @@ test('CRITERIO 4: el panel dice en qué va el aseo, con el progreso, la evidenci
   // Es FIN-01 desde la interfaz. La aserción 105 del bloque P de pgTAP lo afirma
   // desde la base; las dos juntas cierran el camino entero.
   await expect(
-    valorDeLaFila(panel, 'Tarifa al huésped'),
+    valorDeLaFila(detalle, 'Tarifa al huésped'),
     'FIN-01 · la tarifa del panel es la del ASEO, no la viva del apartamento',
   ).toHaveText(formatCOP(CIFRAS_DEL_ASEO.tarifa));
-  await expect(valorDeLaFila(panel, 'Pago al aseador'), 'FIN-01 · y el pago también').toHaveText(
+  await expect(valorDeLaFila(detalle, 'Pago al aseador'), 'FIN-01 · y el pago también').toHaveText(
     formatCOP(CIFRAS_DEL_ASEO.pago),
   );
   await expect(
-    valorDeLaFila(panel, 'Margen'),
+    valorDeLaFila(detalle, 'Margen'),
     'FIN-01 · el margen llega restado por la definer, no recalculado por la pantalla',
   ).toHaveText(formatCOP(CIFRAS_DEL_ASEO.margen));
 
-  const contenido = (await panel.textContent()) ?? '';
+  const contenido = (await detalle.textContent()) ?? '';
   expect(
     contenido,
     'FIN-01 · la tarifa viva del apartamento NO aparece en el panel: manda el snapshot del aseo',
@@ -2141,10 +2244,11 @@ test('CRITERIO 4: un aseo sin confirmar enseña el checklist como ausente, no co
 
   await paginaAdmin.goto(`/operacion?aseo=${idAseo}`);
 
-  const panel = paginaAdmin.getByRole('dialog');
-  await expect(panel).toBeVisible();
+  const detalle = detalleDelAseo(paginaAdmin);
+  await expect(detalle).toBeVisible();
+  await sinNingunDialogo(paginaAdmin);
 
-  const leido = (await valorDeLaFila(panel, 'Checklist').textContent()) ?? '';
+  const leido = (await valorDeLaFila(detalle, 'Checklist').textContent()) ?? '';
 
   // El glifo NUNCA va solo: lleva su texto de solo lectura (§13.2). Y la forma
   // es `sin definir` y no `no aplica`: en una gestionada el checklist SÍ va a
@@ -2182,9 +2286,15 @@ test('CRITERIO 4: la fila de gestión externa no abre panel, y su nombre sigue l
   // pulsa una celda que no es el nombre, que es lo que hace un admin que cree que
   // la fila entera reacciona.
   await fila.getByText(externa.contacto, { exact: true }).click();
-  await expect(paginaAdmin.getByRole('dialog'), 'la fila inerte no abre ningún panel').toHaveCount(
-    0,
-  );
+  // REACOTADO EN EL PLAN 10-05: el detalle dejó de ser un diálogo, así que la
+  // ausencia se mide sobre el localizador propio del detalle. Las dos aserciones
+  // van juntas y ninguna sobra: la primera dice que el detalle no se abrió, la
+  // segunda que tampoco se abrió nada modal por otra vía.
+  await expect(
+    detalleDelAseo(paginaAdmin),
+    'la tarjeta inerte no abre ningún detalle',
+  ).toHaveCount(0);
+  await sinNingunDialogo(paginaAdmin);
   await expect(paginaAdmin, 'y no le mete ningún parámetro a la dirección').toHaveURL(
     /\/operacion$/,
   );
@@ -2200,6 +2310,212 @@ test('CRITERIO 4: la fila de gestión externa no abre panel, y su nombre sigue l
   expect(paginaAdmin.url(), 'el nombre lleva a la ficha de SU apartamento').toContain(
     `apartamento=${externa.id}`,
   );
+});
+
+test('abrir el detalle NO manda la lista del dia al tope, y no le borra el toggle', async ({
+  paginaAdmin,
+}) => {
+  const { gestionada, segunda, tercera, cuarta, quinta, sexta, fechas } = escenario;
+  const unidades = [gestionada, segunda, tercera, cuarta, quinta, sexta];
+
+  /**
+   * ════════════════════════════════════════════════════════════════════════
+   * ESTE CASO ES LA MITAD DEL CRITERIO 1 DEL ROADMAP DE LA FASE 8, Y NO
+   * EXISTIA: el plan 10-05 lo escribe porque la Task 5 mete el detalle DENTRO
+   * de la rejilla, que es donde una clave mal puesta hace dano.
+   *
+   * ── LAS DOS CAUSAS DISTINTAS DEL MISMO SINTOMA, Y LAS DOS SE MIDEN ──────
+   *
+   *   1. **La clave por identificador puesta sobre el contenedor de la
+   *      rejilla** en vez de sobre el detalle. Forzaria el remonte del
+   *      subarbol entero: la lista se reconstruye, y con ella se van el
+   *      recorrido Y el toggle de cancelados (INSTRUCCION 3 del VEREDICTO de
+   *      08-02).
+   *   2. **El `scroll={false}` quitado del enlace de la tarjeta.** El enrutador
+   *      recolocaria el recorrido tras navegar, y como el documento no scrollea
+   *      a `xl`, el unico contenedor con recorrido que hay es la lista.
+   *
+   * Por eso el caso afirma LAS DOS COSAS: el recorrido y el conteo de tarjetas.
+   * Una sola de las dos dejaria una de las dos causas sin compuerta.
+   * ════════════════════════════════════════════════════════════════════════
+   */
+  const filas: AseoASembrar[] = unidades.map((u) => ({ propiedad: u.id, fecha: fechas.hoy }));
+  for (let i = 0; i < 4; i += 1) {
+    for (const unidad of unidades) {
+      filas.push({ propiedad: unidad.id, fecha: fechas.hoy, estado: 'cancelada' });
+    }
+  }
+  await sembrarAseos(servicio, filas);
+
+  await paginaAdmin.goto('/operacion');
+  await paginaAdmin.getByRole('button', { name: 'Ver cancelados (24)' }).click();
+  await expect(paginaAdmin.locator('[data-slot="tarjeta-aseo"]')).toHaveCount(30);
+
+  const lista = paginaAdmin.locator('[data-slot="lista-dia"] ul');
+
+  // El recorrido lo produce el propio Playwright al llevar el ultimo enlace a la
+  // vista, que es exactamente lo que hace un admin: baja hasta el aseo que
+  // busca. No se fija a mano un `scrollTop` porque un valor inventado puede caer
+  // fuera del recorrido real y la medida quedaria en cero sin avisar.
+  const enlaces = paginaAdmin.getByRole('link', { name: /^Ver el aseo de / });
+  const ultimo = enlaces.last();
+  await ultimo.scrollIntoViewIfNeeded();
+
+  const antes = await lista.evaluate((n) => n.scrollTop);
+  expect(
+    antes,
+    'CONTROL: la lista tiene de verdad recorrido que perder. Sin esto, la asercion de abajo pasaria con cero igual a cero',
+  ).toBeGreaterThan(0);
+
+  await pulsarHastaNavegar(paginaAdmin, ultimo, /\?aseo=[0-9a-f-]{36}$/);
+  await expect(detalleDelAseo(paginaAdmin)).toBeVisible();
+
+  expect(
+    await lista.evaluate((n) => n.scrollTop),
+    'abrir el detalle NO devuelve la lista al tope: el admin pierde el sitio donde estaba',
+  ).toBe(antes);
+
+  await expect(
+    paginaAdmin.locator('[data-slot="tarjeta-aseo"]'),
+    'y el toggle de cancelados, que es estado de CLIENTE de la lista, sobrevive a abrir el detalle',
+  ).toHaveCount(30);
+});
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * EL CONTROL DE ALCANCE DE 08-11, VUELTO A CORRER PORQUE EL PORTAL DESAPARECIO.
+ *
+ * 08-11 dejo una salida impresa con tres lineas: con el ambito equivocado
+ * (`locator('main')`) una asercion de seguridad **pasaba en VERDE con la palabra
+ * prohibida dentro del panel**, y con el ambito bueno (`getByRole('dialog')`) se
+ * ponia roja. Aquel verde falso no lo causo nadie: **el test se debilito solo**
+ * cuando 08-08 convirtio la ficha en panel portaleado.
+ *
+ * **La Task 5 de 10-05 repite la misma clase de mudanza**, en el sentido
+ * contrario: el detalle deja de estar portaleado y pasa a vivir DENTRO del
+ * contenedor de pagina, al lado de la lista del dia. O sea que el ambito vuelve
+ * a estar en juego, y con un agravante: ya no hay rol de dialogo que usar.
+ *
+ * Este caso mide el acotado EN LOS DOS SENTIDOS, con la palabra prohibida
+ * sembrada a mano FUERA del detalle:
+ *
+ *   SENTIDO 1 · acotada a `[data-slot="detalle-aseo"]` → sigue en VERDE.
+ *   SENTIDO 2 · sin acotar (la pantalla entera)        → la palabra ESTA ahi,
+ *               o sea que la misma asercion negativa seria FALSA.
+ *
+ * El sentido 2 se escribe como una afirmacion POSITIVA de que la palabra esta en
+ * el cuerpo del documento, y no como un `expect(...).toThrow()`: afirmar la
+ * presencia es la prueba de que la version no acotada de la asercion se pondria
+ * roja, y se lee sin trucos.
+ *
+ * **Sin este caso, las aserciones negativas de esta seccion son verdaderas por
+ * accidente**, que es literalmente lo que 08-11 midio que pasaba.
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+test('CONTROL DE ALCANCE (08-11): la palabra prohibida FUERA del detalle no engana a la asercion acotada, y SI a la no acotada', async ({
+  paginaAdmin,
+}) => {
+  const { gestionada, aseadoraA, fechas } = escenario;
+
+  const [idAseo] = await sembrarAseos(servicio, [
+    { propiedad: gestionada.id, fecha: fechas.hoy, aseador: aseadoraA.id, estado: 'en_curso' },
+  ]);
+  await fijarElDineroDelAseo(idAseo);
+
+  // LA PALABRA PROHIBIDA ES LA TARIFA VIVA DEL APARTAMENTO, que es exactamente
+  // la que la asercion de FIN-01 del primer caso de esta seccion exige que NO
+  // aparezca dentro del detalle: el detalle pinta el SNAPSHOT del aseo.
+  const { data: apartamento, error } = await servicio
+    .from('properties')
+    .select('tarifa_huesped')
+    .eq('id', gestionada.id)
+    .single();
+  if (error || apartamento?.tarifa_huesped == null) {
+    throw new Error(`No se pudo releer la tarifa del apartamento: ${error?.message}`);
+  }
+  const prohibida = formatCOP(apartamento.tarifa_huesped);
+
+  await paginaAdmin.goto(`/operacion?aseo=${idAseo}`);
+  const detalle = detalleDelAseo(paginaAdmin);
+  await expect(detalle).toBeVisible();
+  await sinNingunDialogo(paginaAdmin);
+
+  // ── CONTROL DE PARTIDA: sin señuelo, la palabra no esta en NINGUN sitio ──
+  // Sin esto, el SENTIDO 1 pasaria por no haber señuelo, que es el mismo error
+  // que 08-11 tuvo que descartar con su tercera linea de salida.
+  expect(
+    ((await paginaAdmin.locator('body').textContent()) ?? '').includes(prohibida),
+    'CONTROL DE PARTIDA: antes del señuelo la palabra prohibida no esta en la pantalla',
+  ).toBe(false);
+
+  // ── EL SEÑUELO, PUESTO A MANO FUERA DEL DETALLE ─────────────────────────
+  // Dentro de la lista del dia, que es la vecina del detalle en la rejilla y el
+  // sitio donde un ambito demasiado ancho la encontraria.
+  await paginaAdmin.evaluate((texto) => {
+    const lista = document.querySelector('[data-slot="lista-dia"]');
+    if (lista === null) throw new Error('no hay lista del dia donde sembrar el señuelo');
+    const nodo = document.createElement('span');
+    nodo.dataset.senuelo = '08-11';
+    nodo.textContent = texto;
+    lista.appendChild(nodo);
+  }, prohibida);
+
+  // El señuelo cayo DONDE tenia que caer, y no dentro del detalle.
+  expect(
+    ((await paginaAdmin.locator('[data-slot="lista-dia"]').textContent()) ?? '').includes(
+      prohibida,
+    ),
+    'CONTROL DEL SEÑUELO: la palabra prohibida SI esta en la lista del dia',
+  ).toBe(true);
+
+  // ── SENTIDO 1: ACOTADA AL DETALLE, SIGUE EN VERDE ───────────────────────
+  expect(
+    ((await detalle.textContent()) ?? '').includes(prohibida),
+    'SENTIDO 1 · acotada a [data-slot="detalle-aseo"], la asercion de FIN-01 sigue siendo cierta con el señuelo puesto',
+  ).toBe(false);
+
+  // ── SENTIDO 2: SIN ACOTAR, LA MISMA ASERCION SERIA FALSA ────────────────
+  expect(
+    ((await paginaAdmin.locator('body').textContent()) ?? '').includes(prohibida),
+    'SENTIDO 2 · sobre la pantalla entera la palabra prohibida SI aparece, o sea que la version no acotada de la asercion se pondria ROJA. Ese es el verde falso que 08-11 midio',
+  ).toBe(true);
+
+  /*
+    ── Y LA TERCERA MITAD, QUE ES DE FORMA Y NO DE TEXTO ────────────────────
+
+    El nombre del apartamento se pinta en la tarjeta Y en el titulo del detalle,
+    asi que sin acotar un localizador por ese nombre resuelve a dos elementos. Es
+    el `strict mode violation` que delata un ambito no aplicado.
+
+    ── PERO **NO** POR ROL Y NOMBRE, Y ESO SE MIDIO AQUI (2026-09-29) ───────
+
+    La primera version de esta mitad afirmaba dos ENLACES y salio roja:
+
+        Expected: 2
+        Received: 1
+        Locator: getByRole('link', { name: 'E2E Op Gestionada 3076917e', exact: true })
+
+    La causa no es un defecto: **el enlace de la tarjeta lleva
+    `aria-label="Ver el aseo de {nombre}"`**, asi que su nombre accesible NO es
+    el nombre del apartamento y un localizador por rol y nombre no lo alcanza. El
+    unico enlace que se llama como el apartamento es el titulo del detalle.
+
+    O sea que la colision de ambito de esta pantalla viaja por el TEXTO y no por
+    el nombre accesible, y asi es como hay que medirla. Queda escrito porque la
+    version por rol se lee mas natural y el siguiente la va a volver a escribir.
+  */
+  const porTexto = paginaAdmin.getByText(gestionada.nombre, { exact: true });
+  const enElDetalle = detalle.getByText(gestionada.nombre, { exact: true });
+
+  const fuera = (await porTexto.count()) - (await enElDetalle.count());
+  expect(
+    fuera,
+    'sin acotar, el nombre del apartamento tambien se lee FUERA del detalle: es la colision de ambito, medida',
+  ).toBeGreaterThan(0);
+  await expect(
+    enElDetalle,
+    'acotado al detalle, el nombre del apartamento resuelve a UNO',
+  ).toHaveCount(1);
 });
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -2258,20 +2574,21 @@ test('CRITERIO 2: un enlace a un aseo FUERA de la ventana de hoy−7 a hoy+6 abr
   // Y ahora el enlace pegado en un chat, entrando POR DIRECCIÓN DIRECTA.
   await paginaAdmin.goto(`/operacion?aseo=${idAseo}`);
 
-  const panel = paginaAdmin.getByRole('dialog');
+  const detalle = detalleDelAseo(paginaAdmin);
   await expect(
-    panel,
-    'CRITERIO 2 · un enlace válido a un aseo fuera de la ventana abre su panel',
+    detalle,
+    'CRITERIO 2 · un enlace válido a un aseo fuera de la ventana abre su detalle',
   ).toBeVisible();
+  await sinNingunDialogo(paginaAdmin);
 
   // Y enseña ESE aseo, no otro. Sin esta mitad, un panel que abriera con el
   // primer aseo que encontrara pasaría la aserción de arriba sin despeinarse.
   await expect(
-    panel.getByRole('link', { name: gestionada.nombre }),
+    detalle.getByRole('link', { name: gestionada.nombre }),
     'CRITERIO 2 · y el panel es el del apartamento que la dirección dice',
   ).toBeVisible();
   await expect(
-    panel.getByText(formatFechaLargaBog(fechaVieja)),
+    detalle.getByText(formatFechaLargaBog(fechaVieja)),
     'CRITERIO 2 · y el de la fecha que la dirección dice, que es la de hace tres semanas',
   ).toBeVisible();
 
@@ -2295,7 +2612,8 @@ test('CRITERIO 3: el botón atrás cierra el panel de aseo y la dirección sigue
     paginaAdmin.getByRole('link', { name: `Ver el aseo de ${gestionada.nombre}` }),
     /\?aseo=[0-9a-f-]{36}$/,
   );
-  await expect(paginaAdmin.getByRole('dialog')).toBeVisible();
+  await expect(detalleDelAseo(paginaAdmin)).toBeVisible();
+  await sinNingunDialogo(paginaAdmin);
 
   await paginaAdmin.goBack();
 
@@ -2305,8 +2623,8 @@ test('CRITERIO 3: el botón atrás cierra el panel de aseo y la dirección sigue
   // sacó de la sección entera. Es el `about:blank` que midió el plan 08-11 en el
   // quinto panel.
   await expect(
-    paginaAdmin.getByRole('dialog'),
-    'CRITERIO 3 · el botón atrás cierra el panel',
+    detalleDelAseo(paginaAdmin),
+    'CRITERIO 3 · el botón atrás cierra el detalle',
   ).toHaveCount(0);
   await expect(
     paginaAdmin,
@@ -2363,18 +2681,21 @@ test('CRITERIO 3: cerrar el panel de aseo conserva el DIA seleccionado', async (
     'el enlace de apertura se compone desde los parámetros vivos, así que el día viaja',
   ).toContain(`dia=${fechas.hoy}`);
 
-  const panel = paginaAdmin.getByRole('dialog');
-  await expect(panel).toBeVisible();
+  const detalle = detalleDelAseo(paginaAdmin);
+  await expect(detalle).toBeVisible();
+  await sinNingunDialogo(paginaAdmin);
 
-  // El aspa de la primitiva, que es el único control de cierre: este panel no
-  // tiene pie, así que no hay dos botones llamados `Cerrar` como en el `Sheet`
-  // de confirmación.
-  await panel.getByRole('button', { name: 'Cerrar', exact: true }).click();
+  // ── EL CONTROL DE CIERRE ES UN **ENLACE** DESDE EL PLAN 10-05 ──────────
+  // Era el aspa de la primitiva `Sheet`, o sea un botón con un manejador. Ahora
+  // cerrar es NAVEGAR a la dirección del anfitrión sin el parámetro del aseo, y
+  // eso es un enlace: se puede abrir en otra pestaña y el enrutador hace el
+  // reemplazo. El nombre accesible NO cambió, que es lo que importa del caso.
+  await detalle.getByRole('link', { name: 'Cerrar', exact: true }).click();
   await esperarUrlDeCliente(paginaAdmin, new RegExp(`/operacion\\?dia=${fechas.hoy}$`));
 
   await expect(
-    paginaAdmin.getByRole('dialog'),
-    'CRITERIO 3 · el control de cierre cierra el panel',
+    detalleDelAseo(paginaAdmin),
+    'CRITERIO 3 · el control de cierre cierra el detalle',
   ).toHaveCount(0);
   expect(
     paginaAdmin.url(),
@@ -2502,7 +2823,8 @@ test('CRITERIO 5: ninguna cifra del panel de aseo llega al navegador de una asea
   // se miró.
   const cargasDelAdmin = interceptarCargaUtil(paginaAdmin);
   await paginaAdmin.goto(`/operacion?aseo=${idAseo}`);
-  await expect(paginaAdmin.getByRole('dialog')).toBeVisible();
+  await expect(detalleDelAseo(paginaAdmin)).toBeVisible();
+  await sinNingunDialogo(paginaAdmin);
   await paginaAdmin.waitForLoadState('networkidle');
   await expect.poll(() => cargasDelAdmin.length, { timeout: 5_000 }).toBeGreaterThan(0);
 

@@ -1,208 +1,63 @@
-import { ExternalLink, Hammer, Receipt } from 'lucide-react';
-import Link from 'next/link';
-import { Suspense } from 'react';
+import { Hammer, Receipt } from 'lucide-react';
 
 import { Separator } from '@/components/ui/separator';
 import type { PanelDeAseo } from '@/lib/data/panel-aseo';
 import { estadoDeAseo } from '@/lib/domain/cleanings';
-import { formatFechaLargaBog, formatHoraBog, nombreDeDiaBog } from '@/lib/domain/dates';
+import { formatHoraBog } from '@/lib/domain/dates';
 import { formatCOP } from '@/lib/domain/money';
 
-import { EsqueletoDePanel } from '../../_components/EsqueletoDePanel';
 import { FilaDeDato } from '../../_components/FilaDeDato';
 import { GrupoDePanel } from '../../_components/GrupoDePanel';
-import { PanelLectura } from '../../_components/PanelLectura';
-import { EstadoAseo } from './EstadoAseo';
 import { TiraDeEvidencia } from './TiraDeEvidencia';
 
 /**
- * EL PANEL DE ASEO (08-UI-SPEC §10, criterio 4 del ROADMAP).
+ * EL CUERPO DEL DETALLE DE UN ASEO (08-UI-SPEC §10, criterio 4 del ROADMAP).
  *
  * ════════════════════════════════════════════════════════════════════════════
- * ES LO ÚNICO DE LA FASE QUE NO EXISTÍA EN NINGUNA FORMA, Y ES LA RESPUESTA A
- * *"¿cómo va el 302?"*, QUE HOY SE RESUELVE POR WHATSAPP.
+ * ESTE ARCHIVO ES UNA **EXTRACCIÓN**, NO UNA REESCRITURA, Y EL DIFF HAY QUE
+ * LEERLO ASÍ.
  *
- * Criterio 4, literal: *"desde Operación, tocar un aseo muestra en qué va:
- * checklist, evidencia y los gastos o daños reportados, sin salir del día"*.
+ * Venía de `app/(admin)/operacion/_components/PanelAseo.tsx`, que era el panel
+ * deslizante de la Fase 8 y que el plan 10-05 partió en dos: el ARMAZÓN pasó de
+ * `Sheet` a un nodo inline de la columna derecha (`DetalleDelAseo.tsx`) y el
+ * CUERPO se vino acá entero.
  *
- * ── EL CONTENIDO ESTÁ CERRADO POR EL DUEÑO (D8-4) ───────────────────────
+ * ── QUÉ **NO** CAMBIÓ AL MUDARSE, Y VA POR NOMBRE ───────────────────────
  *
- * Apartamento, fecha, estado, quién lo hace, el checklist como `7/12`, las fotos
- * en miniatura, los gastos y daños reportados, y la tarifa con el pago y el
- * margen. **Fuera: el checklist tarea por tarea.** Lo que no está en la lista no
- * se muestra, y añadir un dato acá es modificar ese contrato.
+ *   1. **Los cuatro grupos**, en el mismo orden: `EJECUCIÓN`, `EVIDENCIA`,
+ *      `REPORTES` y `DINERO`, con las formas de §6.4.
+ *   2. **El grupo de dinero SIGUE SIN EXISTIR en una unidad de gestión
+ *      externa.** La lectura devuelve la fila igual con las tres cifras en cero
+ *      y es la pantalla la que decide no pintarlo leyendo la marca: tres ceros
+ *      dirían que el aseo no dejó dinero, cuando lo que pasa es que ese aseo no
+ *      es nuestro.
+ *   3. **La rama del checklist total en cero mira el TOTAL y no las hechas**, y
+ *      se distingue de un `0/12` a propósito. Ver la cabecera de
+ *      `filaDeChecklist`.
+ *   4. **La línea de D7-2** (`Los daños no se descuentan del pago.`) sigue
+ *      apareciendo solo con al menos un daño, y sigue yendo ANTES del
+ *      separador, porque es el pie DEL GRUPO DE REPORTES.
+ *   5. **Las cuatro prohibiciones de la cabecera vieja siguen vigentes**: no se
+ *      cuenta el checklist (T-08-22), no se deriva el estado, no se formatea a
+ *      mano y no se muta nada.
  *
- * ── CUATRO GRUPOS, Y CABEN EN LOS 590 PÍXELES DEL CUERPO SIN PIE ────────
+ * ── LO ÚNICO QUE CAMBIÓ, Y NO ES DE CONTENIDO ───────────────────────────
  *
- * §6.4 lo tiene contado: 104 de `EJECUCIÓN`, 89 de `EVIDENCIA`, 133 de
- * `REPORTES` con cuatro líneas y 104 de `DINERO`, más 99 de los tres
- * separadores, son **529px** contra los 590 disponibles a 700 de viewport, o sea
- * **61 de holgura**.
+ * `CuerpoDelPanel` se llamaba así y era local; ahora se llama `CuerpoDeAseo` y
+ * se exporta, porque su consumidor vive en otro archivo. Ni una fila, ni una
+ * cifra, ni un literal de copia cambió con la mudanza.
  *
- * El resto del panel son 396px fijos, así que `REPORTES` vale `17 + 29n` y cada
- * reporte extra cuesta 29px. **EL CUERPO DESBORDA A PARTIR DEL SÉPTIMO REPORTE,
- * NO DEL SEXTO**: con seis cabe por tres píxeles, que es holgura cero en la
- * práctica pero es cabida de verdad y el desplazamiento no aparece. Con siete
- * desborda por 26.
+ * ── LA ARITMÉTICA DE ALTURA DE §6.4 YA NO GOBIERNA ESTE CUERPO ──────────
  *
- * **Y HAY UN SEGUNDO NÚMERO QUE §6.4 NO CUENTA, PORQUE SU TABLA ES DE GRUPOS.**
- * La línea de "los daños no se descuentan del pago" cuesta 17px de texto más 16
- * de separación, o sea **33px**, y solo aparece cuando hay al menos un daño.
- * Cuando aparece, el umbral baja:
- *
- *     sin línea de daños:  n = 7 desborda (616 sobre 590)
- *     con línea de daños:  n = 5 desborda, por UN píxel (591 sobre 590)
- *
- * Cinco reportes con al menos un daño entre ellos es raro, pero mucho menos raro
- * que siete de cualquier cosa, así que el desplazamiento del cuerpo se va a ver
- * antes de lo que la tabla de §6.4 sugiere. No se recorta nada por eso: la línea
- * es obligación del contrato de la Fase 7 y el desplazamiento está ahí
- * precisamente para el caso largo.
- *
- * Siete gastos y daños en un solo aseo es patológico. El desplazamiento vertical
- * del cuerpo está ahí para ese caso y no incumple D8-7, que dice que "sin
- * scroll" es el objetivo que ordena el recorte del contenido y no una
- * restricción técnica dura. **Los dos números van escritos acá para que nadie
- * los descubra en producción.**
- *
- * ── ESTE PANEL NO TIENE PIE ─────────────────────────────────────────────
- *
- * Sin pie, el cuerpo pasa de 506px a 590. Y no lo necesita: todo lo que se puede
- * HACER sobre un aseo vive en el menú de la fila, que no se toca (§5.3 punto 5).
- * El único enlace que sale de la sección es el nombre del apartamento de la
- * cabecera, y es deliberado: el admin lo eligió, no le pasó por tocar una fila.
- *
- * ── NO HAY RAMA DE SIN PERMISO, Y ESTÁ PROHIBIDA POR NOMBRE (§10.4) ─────
- *
- * El layout de `(admin)` ya exige admin contra el servidor de autenticación, no
- * contra un claim del token, y la definer lo vuelve a comprobar por dentro. Si
- * esa función deniega, **es un defecto, no un estado**: se va por el `error.tsx`
- * de la ruta. Escribir acá un condicional de permiso denegado sería una TERCERA
- * copia de la misma regla y un sitio más donde equivocarse.
- *
- * ── LO QUE ESTE ARCHIVO NO HACE, Y VA POR NOMBRE ────────────────────────
- *
- *   1. **No cuenta el checklist.** El progreso llega ya calculado desde
- *      `lib/data/panel-aseo.ts`, con `progresoTotal(armarChecklist(...))`, que es
- *      la misma función que usa la pantalla del aseador. La cabecera de
- *      `lib/domain/checklist.ts` declara una duplicación y advierte por escrito
- *      contra una tercera; contarlo acá sería la cuarta. Es T-08-22.
- *   2. **No deriva el estado.** `estadoDeAseo()` es el espejo de
- *      `cl_unmanaged_is_inert` y `cl_managed_has_state`, y lo pinta el mismo
- *      componente que la fila de la tabla de atrás. Dos derivaciones del mismo
- *      dato en la misma pantalla es cómo una dice `Pendiente` y la otra
- *      `Sin confirmar` sobre el mismo aseo.
- *   3. **No formatea a mano.** Dinero, fecha larga y hora salen de los
- *      formateadores de dominio, que ya tienen sus pruebas.
- *   4. **No muta nada.** Confirmar, reasignar, cerrar y cancelar siguen viviendo
- *      en el menú. Ningún botón destructivo en toda la fase (§15.3).
+ * Los 590px de cuerpo disponible y los dos umbrales de desbordamiento (siete
+ * reportes sin línea de daños, cinco con ella) eran propiedades del `Sheet` a
+ * 700 de viewport. Inline, la columna derecha mide 840px de ancho y su alto es
+ * lo que sobre de la pantalla, así que esos dos números **dejaron de aplicar**.
+ * Se dicen acá y no se borran en silencio: quien busque por qué el panel cabía
+ * en 590 tiene que encontrar que esa restricción era del armazón viejo.
  * ════════════════════════════════════════════════════════════════════════════
  */
-export function PanelAseo({
-  cabecera,
-  panel,
-  rutaAlCerrar,
-  rutaDelApartamento,
-}: {
-  /**
-   * Lo que la cabecera necesita ANTES de que la promesa resuelva, y que la
-   * página ya tiene en la mano porque resolvió la lectura para decidir si el
-   * panel se renderiza. Así el nombre y el estado se pintan de verdad desde el
-   * primer frame y el esqueleto es solo del cuerpo (§11.1).
-   */
-  cabecera: PanelDeAseo['cabecera'];
-  /**
-   * Todo el panel, **como promesa sin resolver**. Llega así para que la barrera
-   * de suspensión de abajo tenga algo que esperar.
-   */
-  panel: Promise<PanelDeAseo | null>;
-  /**
-   * La dirección del anfitrión **ya compuesta**, sin el parámetro del panel y
-   * con `alertas` intacto. Se compone en el servidor; ver `PanelLectura`.
-   */
-  rutaAlCerrar: string;
-  /** `/apartamentos?apartamento={id}`, compuesta por la página. */
-  rutaDelApartamento: string;
-}) {
-  return (
-    <PanelLectura
-      titulo={
-        /*
-          ── EL ÚNICO ENLACE QUE SALE DE LA SECCIÓN, Y ES DELIBERADO (§10.2) ──
-
-          El admin lo eligió; no le pasó por tocar una fila. Esa es exactamente la
-          diferencia que §5.3 vino a arreglar: hoy tocar la fila navega al
-          formulario de edición del apartamento sin que nadie lo haya pedido.
-
-          El nombre accesible del diálogo NO se rompe por esto: se computa del
-          contenido del título, y el contenido sigue siendo el nombre. El icono
-          va oculto al lector porque acompaña al texto.
-
-          SIN la desactivación del salto de scroll, a diferencia de los enlaces
-          de apertura: esto es una navegación de verdad a OTRA ruta, y una ruta
-          nueva empieza arriba de todas formas. Mismo trato que el botón `Editar`
-          del panel de apartamento.
-        */
-        <Link
-          href={rutaDelApartamento}
-          className="transicion rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          {cabecera.apartamento}
-          <ExternalLink
-            className="ml-xs inline size-3.5 align-text-bottom"
-            strokeWidth={2}
-            aria-hidden="true"
-          />
-        </Link>
-      }
-      rutaAlCerrar={rutaAlCerrar}
-      apoyo={
-        <span className="inline-flex items-center gap-xs">
-          {/*
-            `jueves 18 de septiembre`, de los dos formateadores que ya existen.
-            Uno solo con día y fecha los junta con `", "` en es-CO, que no es el
-            copy de §10.1. Mismo criterio que `PanelApartamento`.
-          */}
-          {`${nombreDeDiaBog(cabecera.fecha)} ${formatFechaLargaBog(cabecera.fecha)}`} ·
-          <EstadoAseo
-            aseo={{
-              is_managed: cabecera.gestionPropia,
-              state: cabecera.estado,
-              confirmado_at: cabecera.confirmadoAt,
-            }}
-          />
-        </span>
-      }
-    >
-      <Suspense
-        fallback={
-          /*
-            LA BARRERA ES DEL PANEL, NO DEL SEGMENTO (INSTRUCCIÓN 4 del VEREDICTO
-            de 08-02). El fallback del segmento no se pinta nunca —cero
-            apariciones en doce corridas, porque la respuesta del servidor vuelve
-            en ~70 ms— así que no habría servido de esqueleto aunque se hubiera
-            quedado, y de hecho el archivo de carga de esta ruta está borrado.
-
-            **Sin clave acá ni en nada que envuelva a la tabla del día**
-            (INSTRUCCIÓN 3): una clave derivada de los parámetros fuerza el
-            remonte del subárbol. La clave por identificador va sobre el panel
-            entero y la pone la página.
-
-            Las formas salen de §6.4: `EJECUCIÓN` con tres filas, `EVIDENCIA` con
-            una (la tira), `REPORTES` con dos en el caso típico, y `DINERO` con
-            tres. En una unidad de gestión externa el grupo de dinero no existe.
-          */
-          <EsqueletoDePanel grupos={cabecera.gestionPropia ? [3, 1, 2, 3] : [3, 1, 2]} />
-        }
-      >
-        <CuerpoDelPanel panel={panel} />
-      </Suspense>
-    </PanelLectura>
-  );
-}
-
-/** El cuerpo, que es lo único que espera al viaje de la lectura. */
-async function CuerpoDelPanel({ panel }: { panel: Promise<PanelDeAseo | null> }) {
+export async function CuerpoDeAseo({ panel }: { panel: Promise<PanelDeAseo | null> }) {
   const datos = await panel;
 
   // La página ya comprobó que hay fila antes de renderizar este panel, así que
