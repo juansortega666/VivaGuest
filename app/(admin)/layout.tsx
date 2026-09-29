@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 
 import { NoAutorizado, exigirAdmin } from '@/lib/auth/guards';
+import { leerCampana } from '@/lib/data/campana';
 
 import { TopNav } from './_components/TopNav';
 
@@ -20,6 +21,17 @@ import { TopNav } from './_components/TopNav';
  * Lo que compra: no renderizar un panel entero a quien no puede leer ni una fila,
  * y fallar con una redireccion en vez de con una pantalla vacia sin causa.
  * ────────────────────────────────────────────────────────────────────────────
+ *
+ * ── LA CAMPANA DE ALERTAS SE LEE AQUI, Y NO ES UN DESCUIDO DE CAPAS (D-05-9) ─
+ *
+ * `leerCampana()` vive en este layout porque la campana vive en `TopNav`, o sea en el
+ * SHELL, y en App Router el shell es el layout. **No hay forma de que una pagina
+ * rellene una ranura de su layout.** El coste en consultas, la consecuencia sobre D-14
+ * y la inversion del toggle `Ver atendidas` a estado de cliente estan escritos enteros
+ * en la cabecera de `lib/data/campana.ts`. Se leen antes de tocar esto.
+ *
+ * El reloj se lee UNA vez aqui y baja por parametro, que es lo que D-14 pide: llamar
+ * `Date.now()` dentro de cada lectura daria respuestas distintas a la misma pregunta.
  *
  * `force-dynamic` tampoco es cosmetico. Todo lo que cuelga de aqui son datos por
  * usuario, y una respuesta cacheada se sirve a otro usuario: es la fuga de
@@ -59,9 +71,12 @@ export default async function AdminLayout({
 
   const nombre = perfil?.full_name ?? user.email ?? 'Administrador';
 
+  // UNA sola lectura del reloj para todo el shell (D-14). Ver la cabecera.
+  const alertas = await leerCampana(supabase, user.id, Date.now());
+
   return (
     <div className="min-h-[calc(100svh-var(--alto-barra-pruebas,0px))] bg-canvas">
-      <TopNav nombre={nombre} />
+      <TopNav nombre={nombre} alertas={alertas} />
 
       {/* Contenedor de contenido de §6.2: 1440px, centrado, 24px de padding
           lateral y superior, 48px por debajo. */}

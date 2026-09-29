@@ -25,14 +25,22 @@ import { SheetConfirmar } from './SheetConfirmar';
  * producto entero. El scroll cuesta una rueda de ratón; un "ver más" cuesta que
  * alguien no lo pulse.
  *
- * ── EL PRESUPUESTO DE ALTURA VIENE DEL PLAN 04-09 Y NO SE NEGOCIA ──────────
- * El `aside` tiene altura cerrada de `xl` para arriba porque D-02 exige que la
- * bandeja Y el panel de alertas se vean sin scroll de página, con quince sin
- * confirmar y treinta alertas. El reparto acordado es: esta card a `max-h-[40%]`
- * del carril, con la CABECERA Y EL CTA FUERA de su scrollport y solo la lista
- * dentro. §9 pedía la cabecera `sticky top-0` para que el contador nunca se fuera
- * con el scroll; dejarla fuera del scrollport consigue lo mismo por construcción
- * y sin pegado. Apilado (por debajo de `xl`) no hay recorte: la lista va entera.
+ * ── EL PRESUPUESTO DE ALTURA VENÍA DEL PLAN 04-09 Y EL 10-05 LO RETIRÓ ────
+ * Decía: el `aside` con altura cerrada de `xl` para arriba, esta card a
+ * `max-h-[40%]` del carril y el panel de alertas con el resto, porque D-02 exigía
+ * que las DOS se vieran sin scroll de página con quince sin confirmar y treinta
+ * alertas.
+ *
+ * **El panel de alertas se fue a la campana de la barra superior (D-05-9), así que
+ * ese reparto ya no tiene dos inquilinos y el recorte se retira**: la lista va
+ * entera, como ya iba apilado. Lo que SÍ se queda es la cabecera FUERA del
+ * scrollport de la lista, y su razón no cambió: §9 pedía la cabecera `sticky top-0`
+ * para que el contador nunca se fuera con el scroll, y dejarla fuera del scrollport
+ * consigue lo mismo por construcción y sin pegado.
+ *
+ * **Y esto es transitorio de una sola task**: la Task 4 de 10-05 se lleva esta card
+ * entera, porque `Sin confirmar` deja de ser una sección y pasa a ser un estado
+ * visual de cada tarjeta de aseo dentro de la lista del día.
  *
  * ── EL ORDEN YA VIENE RESUELTO, Y ACÁ NO SE TOCA ───────────────────────────
  * `bandejaSinConfirmar()` ordena por fecha ascendente y, dentro del mismo día,
@@ -75,7 +83,7 @@ export function BandejaSinConfirmar({
   return (
     <section
       aria-labelledby={idTitulo}
-      className="flex min-h-0 flex-col rounded-md border border-border bg-background xl:max-h-[40%]"
+      className="flex min-h-0 flex-col rounded-md border border-border bg-background"
     >
       {/* Cabecera de 40px, FUERA del scrollport: el contador no se va nunca. */}
       <div className="flex h-fila shrink-0 items-center justify-between gap-sm px-md">

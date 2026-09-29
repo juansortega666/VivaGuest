@@ -69,9 +69,66 @@ const SIETE_TIPOS = [
   'HORA LÍMITE VENCIDA',
 ] as const;
 
-/** El panel, por su encabezado. Nunca por clase: las clases son presentación. */
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * EL PANEL SE MUDO A UNA CAMPANA DE LA BARRA SUPERIOR (D-05-9, plan 10-05).
+ *
+ * Los seis casos de este archivo estan REESCRITOS contra esa superficie, y NINGUNO
+ * se borro: cada propiedad que afirmaban sigue afirmada, en particular el contador
+ * que dice el TOTAL, que es el criterio 4 del ROADMAP de la Fase 4.
+ *
+ * Lo que cambia mecanicamente en todos: **hay que ABRIR la campana antes de medir
+ * nada**, porque el contenido del popover se monta al abrir y no antes (decision de
+ * coste, ver `CampanaDeAlertas`). Medido: con la campana cerrada,
+ * `[data-slot="popover-content"]` da CERO elementos.
+ *
+ * Y lo que cambia de fondo en UNO: el toggle `Ver atendidas` ya no vive en la
+ * direccion. Su caso afirma ahora que la lista cambia SIN que la direccion se mueva.
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+
+/** La campana de la barra superior. */
+function campana(p: Page): Locator {
+  return p.locator('[data-slot="campana-alertas"]');
+}
+
+/**
+ * Abre la campana y espera a que el panel este montado.
+ *
+ * Se espera al PANEL y no al popover: el popover aparece con su animacion de entrada
+ * y hay un instante en que existe con altura cero. Esperar al `region` del panel
+ * significa que el arbol de dentro ya esta, que es lo que cualquier asercion de abajo
+ * va a medir.
+ */
+async function abrirCampana(p: Page): Promise<void> {
+  await campana(p).click();
+  await expect(panel(p)).toBeVisible();
+}
+
+/**
+ * El panel, por su encabezado. Nunca por clase: las clases son presentación.
+ *
+ * El nombre cambia a `Atendidas` con el toggle puesto, de ahi el patron con las dos
+ * alternativas: un `/^Alertas/` suelto dejaria de encontrarlo justo en el caso que
+ * mide el toggle.
+ */
 function panel(p: Page): Locator {
-  return p.getByRole('region', { name: /^Alertas/ });
+  return p.getByRole('region', { name: /^(Alertas|Atendidas)/ });
+}
+
+/**
+ * EL CONTADOR DEL PANEL, POR SU ATRIBUTO Y NO POR SU TEXTO.
+ *
+ * Un `getByText('30', { exact: true })` afirma PRESENCIA, asi que su rojo es
+ * `element(s) not found` y no dice que numero se pinto de verdad. Medido con el
+ * señuelo de "el contador dice lo visible": el rojo no imprimia el `7`.
+ *
+ * Con el localizador por atributo, `toHaveText` imprime
+ * `Expected: "30" / Received: "7"`, que es el mensaje que hace diagnosticable el
+ * criterio 4 del ROADMAP de la Fase 4.
+ */
+function contadorDelPanel(p: Page): Locator {
+  return panel(p).locator('[data-slot="contador-alertas"]');
 }
 
 /** Las filas del panel. Es una `<ul>`, así que son `listitem`. */
@@ -302,6 +359,53 @@ async function sembrarLosSieteTipos(): Promise<string[]> {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// 0. LA CAMPANA ESTA EN LAS CUATRO SECCIONES, Y HAY EXACTAMENTE UNA — plan 10-05
+// ───────────────────────────────────────────────────────────────────────────
+
+test('hay UNA campana en la barra superior, y esta en las cuatro secciones del admin', async ({
+  paginaAdmin,
+}) => {
+  await fijarSaludDeSync(servicio, escenario.gestionada.id, 'sana', [
+    escenario.segunda.id,
+    escenario.tercera.id,
+    escenario.externa.id,
+  ]);
+
+  await sembrarAlertas(servicio, idAdmin, [
+    {
+      tipo: 'no_puedo',
+      titulo: 'La aseadora no puede hacer este aseo.',
+      cuerpo: 'Hay que reasignarlo.',
+      propiedad: escenario.gestionada.id,
+      creadaEnMs: Date.now(),
+    },
+  ]);
+
+  /**
+   * ── QUE MIDE ESTE CASO, Y ES LO QUE EL REDISENO COMPRO ────────────────────
+   *
+   * El panel de alertas vivia en un carril de `/operacion` y por lo tanto NO EXISTIA
+   * en las otras tres secciones: el admin tenia que volver a la pantalla de operacion
+   * para ver si algo habia pasado. Al mudarse al shell, esta en las cuatro.
+   *
+   * Y **EXACTAMENTE UNA**: la campana la renderiza `layout.tsx` a traves de `TopNav`,
+   * asi que una segunda copia solo puede llegar de que alguien la anada tambien en una
+   * pagina. Dos campanas con dos lecturas distintas del mismo dato es la clase de
+   * incoherencia que no se reporta y todo el mundo nota.
+   */
+  for (const ruta of ['/operacion', '/apartamentos', '/aseadores', '/finanzas']) {
+    await paginaAdmin.goto(ruta);
+
+    await expect(campana(paginaAdmin), `no hay una sola campana en ${ruta}`).toHaveCount(1);
+    await expect(campana(paginaAdmin)).toHaveAccessibleName('Alertas, 1 sin atender');
+  }
+
+  // Y se abre desde una seccion que NO es la de operacion, que es el punto entero.
+  await abrirCampana(paginaAdmin);
+  await expect(filasDelPanel(paginaAdmin)).toHaveCount(1);
+});
+
+// ───────────────────────────────────────────────────────────────────────────
 // 1. LA PRUEBA DE ESCALA DE GRISES
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -310,6 +414,7 @@ test('los siete tipos —cuatro de ellos sembrados a mano porque ninguna migraci
 }) => {
   await sembrarLosSieteTipos();
   await paginaAdmin.goto('/operacion');
+  await abrirCampana(paginaAdmin);
 
   // (a) LOS SIETE ESTÁN, Y SU ETIQUETA ES TEXTO. Si el tipo se distinguiera solo
   //     por el icono, ninguna de las siete encontraría nada.
@@ -356,8 +461,19 @@ test('los siete tipos —cuatro de ellos sembrados a mano porque ninguna migraci
   // última (`last:border-b-0`), así que el `<li>` de abajo mide un píxel menos
   // que los otros seis por una separación, no por una jerarquía. Lo que el
   // criterio 4 exige que sea idéntico es el alto de la fila, `--spacing-fila-alerta`.
+  //
+  // ── `offsetHeight` Y NO `getBoundingClientRect()`. MEDIDO EL 2026-09-28 ────
+  //
+  // El popover de la campana entra con `data-open:zoom-in-95`, o sea una animación de
+  // ESCALA. `getBoundingClientRect()` devuelve la caja TRANSFORMADA, así que medir a
+  // mitad de la animación da `62.0835…` en vez de 64 y el caso sale ROJO contra el
+  // código correcto. Es intermitente por construcción: el mismo assert pasaba en el
+  // primer caso de este archivo y caía en el quinto, por puro orden de reloj.
+  //
+  // `offsetHeight` es el alto de LAYOUT y la transformación no lo toca, que además es
+  // exactamente lo que el criterio 4 exige que sea idéntico.
   const altos = await filasDelPanel(paginaAdmin).evaluateAll((elementos) =>
-    elementos.map((el) => el.firstElementChild?.getBoundingClientRect().height ?? -1),
+    elementos.map((el) => (el.firstElementChild as HTMLElement | null)?.offsetHeight ?? -1),
   );
   expect(altos).toHaveLength(7);
   expect(new Set(altos)).toEqual(new Set([64]));
@@ -405,9 +521,18 @@ test('con treinta alertas la cabecera dice 30 aunque en pantalla quepan siete', 
 
   await paginaAdmin.goto('/operacion');
 
+  // (a.0) Y ANTES DE ABRIR NADA: **LA CAMPANA MISMA DICE 30**. Es la mitad nueva de
+  //       este caso y la que el rediseno hizo posible: el conteo esta visible sin
+  //       abrir la superficie, en las cuatro secciones del admin. Va sobre el nombre
+  //       accesible y no sobre el texto del badge, porque un numero suelto al lado de
+  //       un icono no se lee en voz alta como nada.
+  await expect(campana(paginaAdmin)).toHaveAccessibleName('Alertas, 30 sin atender');
+
+  await abrirCampana(paginaAdmin);
+
   // (a) EL CONTADOR DICE 30. Es la única forma de que el scroll interno no sea un
   //     escondite: puesto sobre las filas renderizadas diría 7 u 8.
-  await expect(panel(paginaAdmin).getByText('30', { exact: true })).toBeVisible();
+  await expect(contadorDelPanel(paginaAdmin)).toHaveText('30');
 
   // (b) Y LAS TREINTA ESTÁN EN EL DOM. No se pagina, no se virtualiza y no hay
   //     "ver más": de treinta en adelante, igual.
@@ -436,6 +561,7 @@ test('las primeras cinco filas salen en orden cronológico y no agrupadas por ti
 }) => {
   const esperado = await sembrarLosSieteTipos();
   await paginaAdmin.goto('/operacion');
+  await abrirCampana(paginaAdmin);
 
   await expect(filasDelPanel(paginaAdmin)).toHaveCount(esperado.length);
 
@@ -491,18 +617,31 @@ test('marcar una alerta como atendida la saca del panel y el toggle la muestra c
   ]);
 
   await paginaAdmin.goto('/operacion');
+  await abrirCampana(paginaAdmin);
   await expect(filasDelPanel(paginaAdmin)).toHaveCount(1);
+
+  const urlAntes = paginaAdmin.url();
 
   await paginaAdmin.getByRole('button', { name: `Marcar como atendida: ${TITULO}` }).click();
 
   // Sale del panel, y el panel NO desaparece: se queda con su estado vacío, que
-  // es lo que mantiene la geometría del carril estable (§11.5).
+  // es lo que mantiene la geometría estable (§11.5).
   await expect(filasDelPanel(paginaAdmin)).toHaveCount(0);
   await expect(panel(paginaAdmin).getByText('Sin alertas.')).toBeVisible();
 
-  // El toggle vive en la URL porque cambia QUÉ FILAS lee el servidor.
+  // ── EL TOGGLE YA NO VIVE EN LA DIRECCION (D-05-9) ─────────────────────────
+  //
+  // Vivia en `?alertas=atendidas` porque cambia QUE FILAS lee el servidor, que es la
+  // regla de `04-13`. Ya no puede: la campana vive en el layout y un layout de App
+  // Router NO recibe `searchParams`. Las dos listas llegan leidas y el toggle elige
+  // entre ellas en el cliente.
   await paginaAdmin.getByRole('button', { name: 'Filtrar alertas por tipo' }).click();
   await paginaAdmin.getByRole('menuitem', { name: 'Ver atendidas', exact: true }).click();
+
+  // Y LA DIRECCION NO SE MUEVE. Es la propiedad que el caso defiende ahora, y es la
+  // misma de antes vista del otro lado: el panel no se come ni reescribe los
+  // parametros de su anfitrion.
+  expect(paginaAdmin.url()).toBe(urlAntes);
 
   const atendida = paginaAdmin.getByRole('listitem').filter({ hasText: TITULO });
   await expect(atendida).toHaveCount(1);
@@ -527,6 +666,7 @@ test('las alertas computadas no ofrecen atender y aun así su fila mide lo mismo
 }) => {
   await sembrarLosSieteTipos();
   await paginaAdmin.goto('/operacion');
+  await abrirCampana(paginaAdmin);
 
   await expect(filasDelPanel(paginaAdmin)).toHaveCount(7);
 
@@ -545,8 +685,19 @@ test('las alertas computadas no ofrecen atender y aun así su fila mide lo mismo
   // última (`last:border-b-0`), así que el `<li>` de abajo mide un píxel menos
   // que los otros seis por una separación, no por una jerarquía. Lo que el
   // criterio 4 exige que sea idéntico es el alto de la fila, `--spacing-fila-alerta`.
+  //
+  // ── `offsetHeight` Y NO `getBoundingClientRect()`. MEDIDO EL 2026-09-28 ────
+  //
+  // El popover de la campana entra con `data-open:zoom-in-95`, o sea una animación de
+  // ESCALA. `getBoundingClientRect()` devuelve la caja TRANSFORMADA, así que medir a
+  // mitad de la animación da `62.0835…` en vez de 64 y el caso sale ROJO contra el
+  // código correcto. Es intermitente por construcción: el mismo assert pasaba en el
+  // primer caso de este archivo y caía en el quinto, por puro orden de reloj.
+  //
+  // `offsetHeight` es el alto de LAYOUT y la transformación no lo toca, que además es
+  // exactamente lo que el criterio 4 exige que sea idéntico.
   const altos = await filasDelPanel(paginaAdmin).evaluateAll((elementos) =>
-    elementos.map((el) => el.firstElementChild?.getBoundingClientRect().height ?? -1),
+    elementos.map((el) => (el.firstElementChild as HTMLElement | null)?.offsetHeight ?? -1),
   );
   expect(altos).toHaveLength(7);
   expect(new Set(altos)).toEqual(new Set([64]));
@@ -561,6 +712,7 @@ test('el filtro arranca en Todas, lista los tipos en orden fijo con su conteo, y
 }) => {
   await sembrarLosSieteTipos();
   await paginaAdmin.goto('/operacion');
+  await abrirCampana(paginaAdmin);
 
   await paginaAdmin.getByRole('button', { name: 'Filtrar alertas por tipo' }).click();
 

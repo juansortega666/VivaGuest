@@ -519,7 +519,12 @@ export function alertasComputadas(entrada: EntradaComputadas): Alerta[] {
         apartamento: a.apartamento,
         cleaningId: a.id,
         propertyId: a.property_id,
-        url: `/operacion#aseo-${a.id}`,
+        // EL DÍA VA DENTRO DEL DESTINO (plan 10-05). Desde el rediseño de
+        // `/operacion` la pantalla se filtra por un día, así que un ancla SIN día
+        // aterriza en el día de HOY y no encuentra la fila de un aseo de otro día:
+        // el clic se ve, se puede pulsar y no lleva a ninguna parte. El día sale de
+        // `scheduled_date`, que la entrada ya trae; no hace falta leer nada.
+        url: `/operacion?dia=${a.scheduled_date}#aseo-${a.id}`,
         atendible: false,
       });
     }
@@ -586,10 +591,17 @@ export function alertasComputadas(entrada: EntradaComputadas): Alerta[] {
         apartamento: a.apartamento,
         cleaningId: a.id,
         propertyId: a.property_id,
-        // EL ANCLA ES LO QUE HACE OBLIGATORIO EL BLOQUE `Atrasados` (§12.1): si
-        // estos aseos no se renderizan en ningún día, esta URL resuelve a nada y
-        // el clic no hace absolutamente nada ni avisa (T-05-55).
-        url: `/operacion#aseo-${a.id}`,
+        // EL ANCLA ES LO QUE HACE OBLIGATORIO QUE EL ASEO SE RENDERICE (§12.1): si
+        // no se renderiza en ningún sitio, esta URL resuelve a nada y el clic no
+        // hace absolutamente nada ni avisa (T-05-55).
+        //
+        // HASTA EL PLAN 10-05 ESO LO GARANTIZABA EL BLOQUE `Atrasados`. Ahora lo
+        // garantiza **el día metido en el destino**: el selector de día lleva la
+        // pantalla al día del aseo y el ancla encuentra su tarjeta. Es una garantía
+        // MÁS fuerte que la anterior, porque no depende de que un bloque exista ni
+        // de que esté expandido. Y esta alerta es justo la que más lo necesita: su
+        // rama NO se acota por fecha, así que su aseo casi siempre es de otro día.
+        url: `/operacion?dia=${a.scheduled_date}#aseo-${a.id}`,
         atendible: false,
       });
     }
@@ -728,6 +740,55 @@ export type ConteoDeTipo = {
   etiqueta: string;
   conteo: number;
 };
+
+/**
+ * METE EL DÍA EN UN DESTINO DE `/operacion` QUE LA BASE ESCRIBIÓ SIN ÉL (plan 10-05).
+ *
+ * `/operacion#aseo-abc` con el día `2026-09-24` sale `/operacion?dia=2026-09-24#aseo-abc`.
+ *
+ * ── POR QUÉ EXISTE, Y POR QUÉ NO SE ARREGLA EN LA BASE ───────────────────
+ *
+ * Las tres notificaciones de la migración 19 (`dano_reportado`, `gasto_reportado`,
+ * `faltantes_reportados`) escriben `'/operacion#aseo-' || p_cleaning`. Desde el
+ * rediseño, `/operacion` se filtra por un día, así que ese ancla aterriza en el día de
+ * HOY y no encuentra la fila de un aseo de otro día.
+ *
+ * **Las tres se dejan como están.** Cambiarlas costaría una migración para arreglar un
+ * enlace, y las filas YA ESCRITAS seguirían sin día de todas formas: una migración de
+ * datos sobre `notifications.url` para una dirección es exactamente el tipo de cambio
+ * que no se hace. El día se resuelve AL PRESENTAR.
+ *
+ * ── LAS CUATRO RAMAS DE NO HACER NADA, Y LAS CUATRO IMPORTAN ─────────────
+ *
+ *   1. `url` nula. No hay nada que reescribir (`almacenamiento_lleno`).
+ *   2. `dia` ausente. Es el aseo que NO está en la ventana de catorce días que la
+ *      campana lee. Se deja tal cual: la degradación de un ancla que no encuentra su
+ *      fila es la que ya existía para un bloque de día colapsado, y es mejor que
+ *      inventar un día.
+ *   3. La ruta no es `/operacion`. La caída global de calendario apunta a
+ *      `/apartamentos`, que no tiene selector de día: meterle un `?dia` sería
+ *      ensuciar la dirección de otra pantalla con un parámetro que no gobierna.
+ *   4. Ya trae un `dia`. No se pisa. Si algún día la base empieza a escribirlo, el que
+ *      manda es el de la base, que es quien sabe de qué aseo habla.
+ *
+ * Es una función de CADENAS y no toca `URL` ni `URLSearchParams`: la entrada es una
+ * ruta relativa, y `new URL('/operacion#x')` lanza sin una base.
+ */
+export function destinoConDia(
+  url: string | null,
+  dia: string | null | undefined,
+): string | null {
+  if (url === null || dia === null || dia === undefined) return url;
+  if (!url.startsWith('/operacion')) return url;
+
+  const corte = url.indexOf('#');
+  const ruta = corte === -1 ? url : url.slice(0, corte);
+  const ancla = corte === -1 ? '' : url.slice(corte);
+
+  if (ruta.includes('dia=')) return url;
+
+  return `${ruta}${ruta.includes('?') ? '&' : '?'}dia=${dia}${ancla}`;
+}
 
 /** Convierte una fila de `notifications` en una alerta del panel. */
 function alertaDeNotificacion(n: NotificacionParaAlertas): Alerta {

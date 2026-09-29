@@ -11,8 +11,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import type { AlertasDeLaCampana } from '@/lib/data/campana';
 import { cn } from '@/lib/utils';
 
+import { CampanaDeAlertas } from './CampanaDeAlertas';
 import { CirculoIniciales } from './CirculoIniciales';
 
 /**
@@ -23,6 +25,13 @@ import { CirculoIniciales } from './CirculoIniciales';
  * alternativa (convertir `layout.tsx` entero en cliente) arrastraria al bundle el
  * guard y la fabrica de Supabase de servidor, que ni siquiera pueden viajar al
  * navegador porque declaran `server-only`.
+ *
+ * ── Y SIGUE SIENDO POR ESA UNA SOLA RAZON DESPUES DEL PLAN 10-05 ──────────
+ *
+ * La campana de alertas entro en esta barra, y **no le anade ninguna lectura**: las
+ * alertas llegan YA LEIDAS por prop, porque quien las lee es `layout.tsx` con
+ * `leerCampana()`. Si este componente las leyera, arrastraria `lib/data/` al bundle
+ * del navegador, que es exactamente lo que el parrafo de arriba evita.
  */
 
 /**
@@ -64,7 +73,14 @@ const ENLACES = [
   { href: '/finanzas', etiqueta: 'Finanzas' },
 ] as const;
 
-export function TopNav({ nombre }: { nombre: string }) {
+export function TopNav({
+  nombre,
+  alertas,
+}: {
+  nombre: string;
+  /** Ya leidas por `layout.tsx`. Ver la cabecera: esta barra no lee nada. */
+  alertas: AlertasDeLaCampana;
+}) {
   const ruta = usePathname();
 
   return (
@@ -123,7 +139,17 @@ export function TopNav({ nombre }: { nombre: string }) {
           })}
         </ul>
 
-        <div className="ml-auto">
+        {/*
+          ── LA CAMPANA VA DENTRO DEL `ml-auto`, A LA IZQUIERDA DEL USUARIO ────
+
+          O sea en el extremo derecho de la barra, pegada al menu de usuario y no
+          suelta entre los enlaces de navegacion: es estado del sistema, no un destino.
+          Y el menu de usuario se queda ULTIMO porque es el unico control de la barra
+          que saca de la aplicacion.
+        */}
+        <div className="ml-auto flex items-center gap-sm">
+          <CampanaDeAlertas alertas={alertas} />
+
           <DropdownMenu>
             <DropdownMenuTrigger className="transicion flex items-center gap-sm rounded-md px-sm py-xs text-body text-foreground hover:bg-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
               {/*

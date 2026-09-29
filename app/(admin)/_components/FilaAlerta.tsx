@@ -27,10 +27,19 @@ import type { Alerta, IconoDeAlerta } from '@/lib/domain/alertas';
 import { presentacionDeAlerta } from '@/lib/domain/alertas';
 import { formatInstanteBog, tiempoRelativo } from '@/lib/domain/dates';
 
-import { devolverAlertaAlPanel, marcarAlertaAtendida } from '../_actions';
+import { devolverAlertaAlPanel, marcarAlertaAtendida } from '../operacion/_actions';
 
 /**
  * La fila de 64px del panel de alertas (04-UI-SPEC.md §11.3).
+ *
+ * ── MUDADA DESDE `operacion/_components/` EN EL PLAN 10-05 ────────────────
+ *
+ * **SIN NINGUN CAMBIO DE CONTRATO.** El panel dejo de ser un carril de
+ * `/operacion` y paso a ser una campana de la barra superior, o sea del SHELL, y
+ * por eso el archivo vive ahora al lado de `TopNav`. Lo unico que se movio con el
+ * es la ruta del import de las Server Actions, que siguen viviendo en
+ * `operacion/_actions.ts`: son acciones sobre `notifications` y no cambian de sitio
+ * por un cambio de superficie.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * LA REGLA DURA, Y ES LA MAS FACIL DE ROMPER POR ACCIDENTE (D-07, UI-SPEC §4.3)

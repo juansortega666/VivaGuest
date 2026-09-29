@@ -13,6 +13,7 @@ import {
   TIPOS_DE_NOTIFICACION,
   alertasComputadas,
   conteosPorTipo,
+  destinoConDia,
   mezclarAlertas,
   horaLimiteVencida,
   presentacionDeAlerta,
@@ -349,7 +350,10 @@ describe('alertasComputadas · urgente', () => {
 
     expect(alerta.atendible).toBe(false);
     expect(alerta.cleaningId).toBe('a');
-    expect(alerta.url).toBe('/operacion#aseo-a');
+    // EL DIA VA DENTRO DEL DESTINO desde el plan 10-05: `/operacion` se filtra por un
+    // dia, asi que un ancla sin dia aterriza en HOY y no encuentra la fila de un aseo
+    // de otro dia.
+    expect(alerta.url).toBe(`/operacion?dia=${HOY}#aseo-a`);
   });
 });
 
@@ -522,12 +526,16 @@ describe('alertasComputadas · hora límite vencida', () => {
     // de la Fase 4 protege.
     expect(alertas.map((a) => a.clave)).toEqual(['hora_limite_vencida', 'hora_limite_vencida']);
 
-    // Y LA URL SIGUE SIENDO EL ANCLA DEL ASEO, que es exactamente lo que hace
-    // obligatorio el bloque `Atrasados`: sin él, la del día anterior se vería,
-    // se podría tocar y no llevaría a ninguna parte (T-05-55, §12.1).
+    // Y LA URL SIGUE SIENDO EL ANCLA DEL ASEO, **AHORA CON SU DIA DELANTE**
+    // (plan 10-05). Es lo que hace que el clic aterrice: sin el dia, la del dia
+    // anterior se veria, se podria tocar y llevaria al dia de HOY, donde su fila no
+    // esta (T-05-55, §12.1).
+    //
+    // Y esta es LA alerta que mas lo necesita: su rama NO se acota por fecha, asi que
+    // su aseo casi siempre es de otro dia que el seleccionado.
     expect(alertas.map((a) => a.url)).toEqual([
-      '/operacion#aseo-hoy',
-      '/operacion#aseo-viejo',
+      `/operacion?dia=${HOY}#aseo-hoy`,
+      '/operacion?dia=2026-09-01#aseo-viejo',
     ]);
   });
 
@@ -1093,5 +1101,61 @@ describe('conteosPorTipo', () => {
 
     expect(conteos).toHaveLength(13);
     expect(conteos.every((c) => c.conteo === 0)).toBe(true);
+  });
+});
+
+describe('destinoConDia', () => {
+  /**
+   * EL DIA METIDO EN UN DESTINO QUE LA BASE ESCRIBIO SIN EL (plan 10-05).
+   *
+   * Las tres notificaciones de la migracion 19 escriben `/operacion#aseo-{id}`, y esas
+   * tres **no se tocan**: cambiarlas costaria una migracion para arreglar un enlace, y
+   * las filas ya escritas seguirian sin dia. El dia se resuelve AL PRESENTAR.
+   */
+  it('mete el dia ANTES del ancla, no despues', () => {
+    // El orden importa y es el error facil: `/operacion#aseo-abc?dia=…` deja el
+    // parametro DENTRO del fragmento, donde el servidor no lo ve nunca.
+    expect(destinoConDia('/operacion#aseo-abc', '2026-09-24')).toBe(
+      '/operacion?dia=2026-09-24#aseo-abc',
+    );
+  });
+
+  it('sin ancla tambien funciona', () => {
+    expect(destinoConDia('/operacion', '2026-09-24')).toBe('/operacion?dia=2026-09-24');
+  });
+
+  it('con otro parametro ya presente usa el separador correcto', () => {
+    expect(destinoConDia('/operacion?aseo=abc#x', '2026-09-24')).toBe(
+      '/operacion?aseo=abc&dia=2026-09-24#x',
+    );
+  });
+
+  it('una url nula se queda nula', () => {
+    // Es el caso de `almacenamiento_lleno`, que no tiene destino a proposito.
+    expect(destinoConDia(null, '2026-09-24')).toBeNull();
+  });
+
+  it('SIN DIA no se inventa nada: el destino se deja tal cual', () => {
+    // Es el aseo que NO esta en la ventana de catorce dias que la campana lee. La
+    // degradacion de un ancla que no encuentra su fila es la que ya existia para un
+    // bloque de dia colapsado, y es mejor que apuntar a un dia inventado.
+    expect(destinoConDia('/operacion#aseo-abc', null)).toBe('/operacion#aseo-abc');
+    expect(destinoConDia('/operacion#aseo-abc', undefined)).toBe('/operacion#aseo-abc');
+  });
+
+  it('NO toca una ruta que no sea /operacion', () => {
+    // La caida global de calendario apunta a `/apartamentos`, que no tiene selector de
+    // dia: meterle un `?dia` seria ensuciar la direccion de otra pantalla con un
+    // parametro que no gobierna.
+    expect(destinoConDia('/apartamentos', '2026-09-24')).toBe('/apartamentos');
+    expect(destinoConDia('/finanzas/aseos', '2026-09-24')).toBe('/finanzas/aseos');
+  });
+
+  it('NO pisa un dia que ya venga escrito', () => {
+    // Si algun dia la base empieza a escribirlo, el que manda es el de la base: es
+    // quien sabe de que aseo habla.
+    expect(destinoConDia('/operacion?dia=2026-01-01#aseo-abc', '2026-09-24')).toBe(
+      '/operacion?dia=2026-01-01#aseo-abc',
+    );
   });
 });

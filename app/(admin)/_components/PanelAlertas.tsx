@@ -1,7 +1,6 @@
 'use client';
 
 import { Check, ListFilter } from 'lucide-react';
-import Link from 'next/link';
 import { useOptimistic, useId, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
@@ -13,10 +12,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import type { Alerta, ClaveDeAlerta, ConteoDeTipo } from '@/lib/domain/alertas';
+import type { Alerta, ClaveDeAlerta } from '@/lib/domain/alertas';
+import { conteosPorTipo } from '@/lib/domain/alertas';
 
-import { EstadoVacio } from '../../_components/EstadoVacio';
-
+import { EstadoVacio } from './EstadoVacio';
 import { FilaAlerta } from './FilaAlerta';
 
 /**
@@ -57,41 +56,69 @@ import { FilaAlerta } from './FilaAlerta';
  * es una acción explícita del admin, y una alerta atendida SALE del panel en vez
  * de atenuarse.
  *
- * ── DÓNDE VIVE CADA DECISIÓN ──────────────────────────────────────────────
+ * ── DÓNDE VIVE CADA DECISIÓN, Y EL PLAN 10-05 INVIRTIÓ LA MITAD ──────────
  *
  * El filtro por tipo es estado de CLIENTE: no toca la base y no debe costar un
- * viaje. El toggle `Ver atendidas` es un parámetro de URL y por lo tanto de
- * SERVIDOR: cambia QUÉ FILAS se leen, y resolverlo en el cliente obligaría a
- * traer siempre las atendidas de siete días para tenerlas por si acaso.
+ * viaje. Eso no cambia.
+ *
+ * **EL TOGGLE `Ver atendidas` ERA UN PARÁMETRO DE URL Y AHORA ES ESTADO DE
+ * CLIENTE, Y ESO INVIERTE UNA REGLA ESCRITA (D-05-9).** La regla de `04-13` dice
+ * que lo que cambia QUÉ FILAS lee el servidor vive en la dirección, y este toggle
+ * lo cambia. Su premisa, en cambio, era que **el control vive en una página que
+ * recibe los parámetros**. Al mudarse el panel a la campana de la barra superior,
+ * el control pasó a vivir en el SHELL, y `app/(admin)/layout.tsx` **no recibe
+ * `searchParams`**: en App Router no hay forma de que una página rellene una ranura
+ * de su layout con un parámetro resuelto. El control se mudó; la premisa se cayó.
+ *
+ * Coste real, y va escrito: `leerCampana()` trae SIEMPRE las dos listas, o sea las
+ * atendidas de siete días aunque el admin no las pida. Es una consulta más sobre
+ * `notifications`, con un admin y decenas de filas.
+ *
+ * ── LO QUE SE FUE CON EL TOGGLE ──────────────────────────────────────────
+ *
+ * `PARAM_ATENDIDAS`, `HREF_SIN_ATENDER` y `HREF_ATENDIDAS` ya no existen. El día
+ * que alguien busque por qué un enlace guardado con `?alertas=atendidas` dejó de
+ * filtrar: dejó de ser una dirección compartible, a cambio de que el panel viva
+ * donde el admin lo puede abrir desde las cuatro secciones.
+ *
+ * ── Y LOS CONTEOS DEL FILTRO SE DERIVAN ACÁ, QUE ES EL TERCER CAMBIO ─────
+ *
+ * Antes llegaban por prop, calculados en el servidor sobre la lista que se estaba
+ * mostrando. Con el modo en el cliente, el servidor no sabe qué lista se muestra,
+ * así que los conteos se derivan del `enPanel` de abajo llamando al MISMO
+ * `conteosPorTipo()` del dominio. No es una copia de la lógica: es la misma función
+ * ejecutada donde ahora se conoce la respuesta. Pasar dos juegos de conteos por prop
+ * sería tener dos verdades esperando a desincronizarse.
  */
 
-/** El parámetro de URL del toggle. Un solo sitio donde está escrito. */
-const PARAM_ATENDIDAS = 'alertas';
-const VALOR_ATENDIDAS = 'atendidas';
-
-export const HREF_SIN_ATENDER = '/operacion';
-export const HREF_ATENDIDAS = `/operacion?${PARAM_ATENDIDAS}=${VALOR_ATENDIDAS}`;
-
 export function PanelAlertas({
-  alertas,
-  conteos,
+  sinAtender,
+  atendidas: listaAtendidas,
   ahoraMs,
-  modo,
 }: {
   /**
-   * Ya mezcladas y ordenadas por `mezclarAlertas()` en el servidor. La derivación
-   * vive en `lib/domain/alertas.ts`: duplicarla en el navegador sería duplicar el
-   * dominio, y dos verdades se desincronizan en el primer cambio.
+   * Las SIN ATENDER, ya mezcladas y ordenadas por `mezclarAlertas()` en el servidor.
+   * La derivación vive en `lib/domain/alertas.ts`: duplicarla en el navegador sería
+   * duplicar el dominio, y dos verdades se desincronizan en el primer cambio.
    */
-  alertas: Alerta[];
-  /** De `conteosPorTipo()`, en el ORDEN FIJO de §11.1 y con los ceros incluidos. */
-  conteos: ConteoDeTipo[];
-  /** El instante de la lectura, uno solo para toda la pantalla (D-14). */
+  sinAtender: Alerta[];
+  /**
+   * Las ATENDIDAS de los últimos siete días, también mezcladas en el servidor.
+   *
+   * LLEGAN SIEMPRE, se pidan o no, y es el coste de que el toggle sea estado de
+   * cliente (D-05-9). Ver la cabecera.
+   *
+   * **Y NO TRAEN NINGUNA COMPUTADA, a propósito y no por olvido:** urgente, hora
+   * límite vencida, calendario caído y almacenamiento lleno no tienen `read_at`, así
+   * que no se pueden atender y no pueden estar en la lista de atendidas.
+   */
+  atendidas: Alerta[];
+  /** El instante de la lectura, uno solo para todo el shell (D-14). */
   ahoraMs: number;
-  modo: 'sin_atender' | 'atendidas';
 }) {
   const idTitulo = useId();
   const [filtro, setFiltro] = useState<ClaveDeAlerta | null>(null);
+  const [modo, setModo] = useState<'sin_atender' | 'atendidas'>('sin_atender');
 
   /**
    * LAS FILAS QUE EL ADMIN ACABA DE RESOLVER Y TODAVÍA NO CONFIRMÓ EL SERVIDOR.
@@ -117,8 +144,14 @@ export function PanelAlertas({
   // EL TOTAL, y es el número que el contador enseña. No es `visibles.length`:
   // decir "7" con un filtro puesto sobre 30 sería exactamente el escondite que
   // este panel no puede tener.
-  const enPanel = alertas.filter((a) => !resueltas.includes(a.id));
+  const enPanel = (atendidas ? listaAtendidas : sinAtender).filter(
+    (a) => !resueltas.includes(a.id),
+  );
   const total = enPanel.length;
+
+  // El MISMO `conteosPorTipo()` del dominio, ejecutado donde ahora se sabe qué lista
+  // se muestra. Orden FIJO y ceros incluidos, que es su contrato. Ver la cabecera.
+  const conteos = conteosPorTipo(enPanel);
 
   // Filtrar CONSERVA el orden cronológico de `mezclarAlertas()`. Es lo único que
   // este componente hace con la lista.
@@ -133,7 +166,12 @@ export function PanelAlertas({
     // panel el resto.
     <section
       aria-labelledby={idTitulo}
-      className="flex min-h-0 flex-1 flex-col rounded-md border border-border bg-background"
+      // SIN borde y SIN fondo propios: los pone el popover que lo contiene, y dos
+      // bordes concéntricos a 1px de distancia se leen como un error de render. El
+      // `min-h-0` y el `flex-1` se quedan, porque son lo que hace que el scroll
+      // ocurra DENTRO de la lista en vez de que el contenedor crezca; lo que cambia
+      // es quién le cierra la altura, que ahora es el popover y antes era el carril.
+      className="flex min-h-0 flex-1 flex-col"
     >
       {/*
         Cabecera de 40px, FUERA del scrollport. §11.5 la pide `sticky top-0`;
@@ -159,6 +197,11 @@ export function PanelAlertas({
           */}
           {total > 0 && (
             <Badge
+              // El gancho del localizador de la asercion del criterio 4. Va como
+              // atributo y no se deduce de la clase: una asercion colgada de
+              // `bg-surface-warn` se rompe con cualquier retoque de color, y lo que
+              // hay que poder medir aqui es EL NUMERO.
+              data-slot="contador-alertas"
               aria-live="polite"
               className="bg-surface-warn text-micro font-semibold tabular-nums text-status-warn"
             >
@@ -204,15 +247,26 @@ export function PanelAlertas({
               <DropdownMenuSeparator />
 
               {/*
-                El toggle es un `<Link>` y no un botón con estado: cambia QUÉ FILAS
-                lee el servidor, así que vive en la URL. `scroll={false}` para que
-                la navegación blanda no mande la página al tope, que con el carril
-                lateral pegado sería un salto sin motivo.
+                ── EL TOGGLE ERA UN ENLACE Y AHORA ES UN BOTÓN (D-05-9) ─────────
+
+                Era un `<Link>` porque cambiaba QUÉ FILAS lee el servidor, y eso
+                vive en la URL por la regla de `04-13`. Ya no puede: la campana vive
+                en el layout y un layout de App Router NO recibe `searchParams`.
+                Las dos listas llegan leídas y este botón elige entre ellas.
+
+                Y al alternar, **la dirección de la página no se toca**: el panel no
+                se come los parámetros de su anfitrión, que es la misma propiedad que
+                defendía el `scroll={false}` de la versión anterior y que ahora
+                defiende el caso E2E sobre `?dia`.
               */}
               <DropdownMenuItem
-                render={
-                  <Link href={atendidas ? HREF_SIN_ATENDER : HREF_ATENDIDAS} scroll={false} />
-                }
+                onClick={() => {
+                  setModo(atendidas ? 'sin_atender' : 'atendidas');
+                  // El filtro por tipo se limpia al cambiar de lista: un filtro de
+                  // `DAÑO` heredado sobre las atendidas deja el panel en su vacío de
+                  // filtro y parece que no hay nada atendido.
+                  setFiltro(null);
+                }}
               >
                 {atendidas ? 'Ver sin atender' : 'Ver atendidas'}
               </DropdownMenuItem>

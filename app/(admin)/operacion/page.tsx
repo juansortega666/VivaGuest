@@ -15,25 +15,14 @@ import {
   bandejaSinConfirmar,
   cargaPorAseador,
   filasDelDia,
-  leerAlertasAtendidas,
-  leerAlertasDelAdmin,
   leerAseadoresActivos,
   leerGastosDelDia,
   leerOperacion,
   leerUltimoExitoDeSync,
   resumenDelDia,
-  type AlertaDelAdmin,
-  type FilaDeOperacion,
   type GastosDelDia,
 } from '@/lib/data/operacion';
 import { leerPanelDeAseo } from '@/lib/data/panel-aseo';
-import {
-  alertasComputadas,
-  conteosPorTipo,
-  mezclarAlertas,
-  type AseoParaAlertas,
-  type NotificacionParaAlertas,
-} from '@/lib/domain/alertas';
 import { estadoDeAvisosDeAseador } from '@/lib/domain/avisos';
 import { diaValido, formatFechaBog, formatFechaLargaBog } from '@/lib/domain/dates';
 import { formatAbreviadoCOP, formatCOP } from '@/lib/domain/money';
@@ -48,7 +37,6 @@ import { FranjaCarga } from './_components/FranjaCarga';
 import { MedidorDeAlmacenamiento } from './_components/MedidorDeAlmacenamiento';
 import type { ContextoDeAcciones } from './_components/MenuAseo';
 import { MetricaDelDia } from './_components/MetricaDelDia';
-import { PanelAlertas } from './_components/PanelAlertas';
 import { PanelAseo } from './_components/PanelAseo';
 import { ResumenDelDia } from './_components/ResumenDelDia';
 import { SelectorDeDia } from './_components/SelectorDeDia';
@@ -108,61 +96,17 @@ export const metadata: Metadata = {
  * ════════════════════════════════════════════════════════════════════════════
  */
 
-/**
- * Las filas de `cleanings` recortadas a lo que `alertasComputadas()` necesita.
+/*
+ * ── `aseosParaAlertas` Y `notificacionesParaAlertas` SE FUERON (plan 10-05) ──
  *
- * Es un mapeo, no una consulta: los ocho campos ya vienen en `FilaDeOperacion` y
- * los dos del embed tambien. Traer las alertas computadas de un segundo viaje
- * seria leer dos veces la misma tabla en la misma peticion.
+ * Vivían acá y ahora viven en `lib/data/campana.ts`, con el resto de la derivación
+ * del panel de alertas. El motivo es de sitio y no de estilo: la campana vive en la
+ * barra superior, o sea en el SHELL, y en App Router el shell es el layout. Una
+ * página no puede rellenar una ranura de su layout.
  *
- * `apartamentoHoraLimite` viaja aunque el dominio NO la use para calcular el
- * vencimiento: ese se calcula con `cleanings.hora_limite`, que es el snapshot que
- * el trigger puso al crear el aseo, porque APTO-05 permite pactar una hora
- * distinta para un aseo puntual. Va declarada para que la diferencia entre las
- * dos horas quede a la vista y nadie cambie la fuente por descuido.
+ * `notificacionesParaAlertas` además GANÓ algo en el camino: mete el día dentro del
+ * destino de las notificaciones que la base escribió sin él. Ver su cabecera.
  */
-function aseosParaAlertas(filas: FilaDeOperacion[]): AseoParaAlertas[] {
-  return filas.map((f) => ({
-    id: f.id,
-    property_id: f.property_id,
-    is_managed: f.is_managed,
-    state: f.state,
-    scheduled_date: f.scheduled_date,
-    hora_limite: f.hora_limite,
-    is_urgent: f.is_urgent,
-    created_at: f.created_at,
-    apartamento: f.property?.nombre ?? '',
-    apartamentoHoraLimite: f.property?.hora_limite ?? f.hora_limite,
-  }));
-}
-
-/**
- * Las filas de `notifications` con el nombre del apartamento ya resuelto.
- *
- * `leerAlertasDelAdmin()` trae `property_id` y no el nombre, y el join no se pide
- * en esa consulta a proposito: el catalogo entero (39 filas) ya esta leido en
- * esta misma peticion para otras dos cosas, asi que resolver el nombre es una
- * busqueda en un mapa y no un embed mas.
- *
- * `null` y no un `Apartamento desconocido` inventado cuando la notificacion no
- * cuelga de ninguno: quien decide como se ve un slot vacio es el componente.
- */
-function notificacionesParaAlertas(
-  filas: AlertaDelAdmin[],
-  nombres: Record<string, string>,
-): NotificacionParaAlertas[] {
-  return filas.map((n) => ({
-    id: n.id,
-    type: n.type,
-    title: n.title,
-    body: n.body,
-    url: n.url,
-    cleaning_id: n.cleaning_id,
-    property_id: n.property_id,
-    created_at: n.created_at,
-    apartamento: n.property_id === null ? null : (nombres[n.property_id] ?? null),
-  }));
-}
 
 /**
  * El texto de la derecha de la cabecera de `Atrasados` (05-UI-SPEC §12.2):
@@ -362,9 +306,6 @@ export default async function OperacionPage({
   const ahoraMs = Date.now();
 
   const parametros = await searchParams;
-  const modoAlertas = parametros.alertas;
-  const verAtendidas = modoAlertas === 'atendidas';
-
   /**
    * PRIMERO LA FORMA, ANTES DE TOCAR LA BASE.
    *
@@ -417,7 +358,6 @@ export default async function OperacionPage({
     operacion,
     aseadores,
     apartamentos,
-    notificaciones,
     ultimoExito,
     avisos,
     endpointDelAdmin,
@@ -430,9 +370,11 @@ export default async function OperacionPage({
       leerOperacion(supabase, ahoraMs, diaPedido),
       leerAseadoresActivos(supabase),
       listarApartamentos(supabase),
-      verAtendidas
-        ? leerAlertasAtendidas(supabase, user.id, ahoraMs)
-        : leerAlertasDelAdmin(supabase, user.id),
+      // La lectura de las ALERTAS ya no está acá: se fue al layout con la campana
+      // (D-05-9). Lo que sí se queda es `leerUltimoExitoDeSync`, porque la señal de
+      // calendario de la cabecera de ESTA pantalla sale de la misma marca. Es una
+      // lectura duplicada con la del layout, y es el precio de que la campana viva en
+      // el shell: las dos la necesitan y no pueden compartirla.
       leerUltimoExitoDeSync(supabase),
       // D-03 (§11.2 y §11.3). Va en el mismo `Promise.all` y no encadenada: es
       // una consulta independiente sobre la misma sesión, y sumarle su latencia
@@ -642,48 +584,22 @@ export default async function OperacionPage({
     aseoAbiertoId: aseoAbierto?.cabecera.aseoId ?? null,
   };
 
-  /**
-   * ── LA DERIVACION DEL PANEL DE ALERTAS VIVE EN EL SERVIDOR ────────────────
+  /*
+   * ── LA DERIVACION DEL PANEL DE ALERTAS SE FUE DE ESTA PAGINA (D-05-9) ─────
    *
-   * `alertasComputadas()`, `mezclarAlertas()` y `conteosPorTipo()` corren aca y no
-   * en el navegador. Bajarlas al cliente seria duplicar `lib/domain/alertas.ts`,
-   * y dos verdades sobre el mismo dato se desincronizan en el primer cambio. El
-   * componente solo filtra por tipo, que es una operacion que conserva el orden.
+   * `alertasComputadas()`, `mezclarAlertas()` y `conteosPorTipo()` corrian aca. Ahora
+   * corren en `leerCampana()`, que la llama `app/(admin)/layout.tsx`, porque la
+   * campana vive en la barra superior y un layout no puede recibir datos de su
+   * pagina.
    *
-   * En el modo `Ver atendidas` NO se computan las cuatro derivadas, y no es un
-   * olvido: urgente, hora limite vencida, calendario caido y almacenamiento no
-   * tienen `read_at`, asi que no se pueden atender y no pueden estar en la lista
-   * de atendidas. Se pasa `[]` de forma explicita para que la ausencia sea una
-   * decision escrita y no un efecto lateral.
+   * Y con ellas se fue el parametro `?alertas=atendidas`: un layout de App Router NO
+   * recibe `searchParams`, asi que el toggle `Ver atendidas` paso a ser estado de
+   * cliente. La razon completa esta en la cabecera de `lib/data/campana.ts`.
    *
-   * ── Y ESTO NO APAGA EL MEDIDOR DE LA CABECERA (RET-07) ───────────────────
-   *
-   * El `[]` de aqui vacia la LISTA del panel, no el NUMERO de la cabecera. El
-   * consumo de Storage se sigue leyendo y se sigue pintando en `Ver atendidas`,
-   * porque cuanto espacio queda no depende de que filtro tenga puesto el panel.
-   * Queda escrito aca, que es donde se decide, o el dia que alguien lea este
-   * `verAtendidas` va a creer que el medidor es un olvido.
+   * **EL MEDIDOR DE ALMACENAMIENTO SE QUEDA** (RET-07), y su lectura tambien: el
+   * numero de la cabecera de esta pantalla no depende de ningun filtro del panel, y
+   * nunca dependio. Lo que se fue es la LISTA, no el NUMERO.
    */
-  const computadas = verAtendidas
-    ? []
-    : alertasComputadas({
-        aseos: aseosParaAlertas(operacion.filas),
-        maxUltimoExito: ultimoExito,
-        ahoraMs,
-        hoy: operacion.hoy,
-        consumo,
-      });
-
-  const nombresDeApartamento = Object.fromEntries(apartamentos.map((a) => [a.id, a.nombre]));
-
-  const alertas = mezclarAlertas(
-    notificacionesParaAlertas(notificaciones, nombresDeApartamento),
-    computadas,
-  );
-
-  // El orden de esta lista es el FIJO de `ORDEN_DE_TIPOS`, con los ceros. Nunca
-  // por conteo: una lista de filtro que se reordena sola es inusable.
-  const conteos = conteosPorTipo(alertas);
 
   return (
     <div className="flex flex-col gap-xl">
@@ -989,49 +905,36 @@ export default async function OperacionPage({
         </div>
 
         {/*
-          ── EL CARRIL LATERAL, Y POR QUE TIENE ALTURA CERRADA (§6.2) ─────────
-          D-02 exige que la bandeja Y el panel de alertas esten visibles sin
-          scroll de pagina, siempre. Con 15 sin confirmar y 30 alertas eso solo se
-          cumple con un presupuesto de altura cerrado y scroll INTERNO en cada
-          lista. Su geometria se reserva aqui aunque las dos cards las construyan
-          los planes 04-10 y 04-13: dejarlo para entonces significaria descubrir a
-          mitad de camino que una empuja a la otra fuera de la pantalla.
+          ── EL CARRIL LATERAL SE QUEDA CON LA BANDEJA SOLA (plan 10-05) ──────
 
-          El reparto acordado, que las dos cards tienen que respetar:
-            bandeja: cabecera + CTA fuera del scroll; lista a `max-h-[40%]` del
-            carril con scroll propio.
-            alertas: cabecera fuera del scroll; lista a `flex-1` con scroll propio.
+          El panel de alertas se fue a la campana de la barra superior (D-05-9), asi
+          que el reparto de altura que `04-09` acordo entre las dos cards YA NO TIENE
+          DOS INQUILINOS. Ese reparto era: la bandeja a `max-h-[40%]` del carril con
+          scroll propio, y el panel con el `flex-1` que sobrara.
 
-          A 1080p con cromo de navegador (~900px de viewport util) el carril mide
-          ~820px: la bandeja cae en ~328px (ocho filas de 40px de quince) y el
-          panel en ~460px (siete filas de 64px de treinta). Ningun caso empuja al
-          otro fuera de la pantalla, que es exactamente lo que D-02 pide.
+          **La bandeja pasa a llevar su lista ENTERA, sin recorte de altura**, porque
+          no hay nada debajo a lo que dejarle sitio. Con quince sin confirmar son
+          ~600px de lista, que a 1080p caben en el carril.
 
-          El `sticky` y la altura solo se aplican de `xl` para arriba: apilado, el
-          carril lleva sus listas completas sin recorte y sin pegarse.
+          ── Y ESTO ES UN ESTADO TRANSITORIO DE UNA SOLA TASK ────────────────
 
-          `100svh` y no `100vh`: en un navegador con barra retractil `vh` cuenta
-          el viewport grande y la ultima fila de alertas queda debajo del cromo.
+          Va escrito porque si no parece una decision a medias: **la Task 4 de este
+          plan se lleva el carril entero**. La bandeja deja de ser una seccion y su
+          informacion pasa a ser un estado visual de cada tarjeta de aseo, dentro de
+          la lista del dia. Lo que queda aqui es lo minimo para que la pantalla siga
+          coherente y verde mientras eso llega.
+
+          `100svh` y no `100vh`: en un navegador con barra retractil `vh` cuenta el
+          viewport grande y la ultima fila queda debajo del cromo.
         */}
         <aside
-          aria-label="Pendientes y alertas"
-          className="flex flex-col gap-lg max-xl:order-first xl:sticky xl:top-barra xl:h-[calc(100svh-var(--spacing-barra)-var(--spacing-xl))]"
+          aria-label="Pendientes"
+          className="flex flex-col gap-lg max-xl:order-first xl:sticky xl:top-barra"
         >
           <BandejaSinConfirmar
             filas={sinConfirmar}
             responsables={responsables}
             responsableSinAvisos={responsableSinAvisos}
-          />
-
-          {/* Bloque inferior: se lleva el `flex-1` que sobra del carril, tenga
-              treinta alertas o ninguna. El panel NO desaparece cuando esta vacio,
-              porque su ausencia haria que la bandeja creciera y la geometria del
-              carril cambiara cada vez que entra o sale una alerta (§11.5). */}
-          <PanelAlertas
-            alertas={alertas}
-            conteos={conteos}
-            ahoraMs={ahoraMs}
-            modo={verAtendidas ? 'atendidas' : 'sin_atender'}
           />
         </aside>
       </div>

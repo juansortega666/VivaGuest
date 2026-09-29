@@ -1218,14 +1218,26 @@ test('la franja lista a todos los aseadores activos con sus ceros, Sin asignar a
 // 8. EL CLIC DE UNA ALERTA EXPANDE EL DÍA COLAPSADO (§11.3)
 // ───────────────────────────────────────────────────────────────────────────
 
-test('pulsar una alerta de un aseo de mañana ABRE el bloque Mañana y lleva a su fila', async ({
+test('pulsar una alerta de un aseo de MAÑANA lleva al día de ESE aseo y a su fila', async ({
   paginaAdmin,
 }) => {
   const { gestionada, aseadoraA, fechas } = escenario;
 
-  // Un aseo URGENTE de mañana produce la alerta computada `urgente`, cuyo destino
-  // es `/operacion#aseo-{id}`. `Mañana` nace colapsado, así que sin la expansión
-  // el clic no lleva a ninguna parte y tampoco avisa.
+  /**
+   * ── ESTE CASO CAMBIO DE MECANISMO Y CONSERVA SU PROPIEDAD (plan 10-05) ────
+   *
+   * Afirmaba: la alerta de un aseo de MAÑANA expande el bloque `Mañana`, porque su
+   * destino era `/operacion#aseo-{id}` y ese bloque nacia colapsado; sin la
+   * expansion el clic no llevaba a ninguna parte y tampoco avisaba.
+   *
+   * Los bloques relativos a hoy ya no existen y la pantalla se filtra por un dia. Lo
+   * que garantiza el aterrizaje ahora es **el dia metido en el destino**:
+   * `/operacion?dia={scheduled_date}#aseo-{id}`. La propiedad defendida es la misma y
+   * es MAS fuerte, porque no depende de que un bloque exista ni de que este abierto.
+   *
+   * Y el clic se da DENTRO DE LA CAMPANA, que es donde viven las alertas desde este
+   * plan.
+   */
   const [idAseo] = await sembrarAseos(servicio, [
     {
       propiedad: gestionada.id,
@@ -1242,11 +1254,27 @@ test('pulsar una alerta de un aseo de mañana ABRE el bloque Mañana y lleva a s
 
   await paginaAdmin.goto('/operacion');
 
-  await expect(cabeceraDeBloque(paginaAdmin, 'Mañana')).toHaveAttribute('aria-expanded', 'false');
+  // ── SIN CONTROL DE PARTIDA, Y HAY QUE DECIR POR QUE ────────────────────────
+  //
+  // Lo natural seria afirmar primero que la fila del aseo de mañana NO ESTA con la
+  // pantalla en HOY, para que el `toBeInViewport()` de abajo signifique algo. **Hoy no
+  // se puede**, y esta medido: `Expected: 0 / Received: 1`. La Task 3 de 10-05 mete el
+  // dia en el destino pero **todavia no ha rediseñado la pantalla**, asi que los tres
+  // acordeones relativos a hoy siguen ahi y el bloque `Mañana`, aunque nazca colapsado,
+  // renderiza sus filas en el DOM con su ancla.
+  //
+  // La Task 4 se lleva los acordeones, y ahi este control SI se puede escribir: con la
+  // pantalla filtrada por dia, la fila de otro dia no se renderiza.
 
+  await paginaAdmin.locator('[data-slot="campana-alertas"]').click();
   await paginaAdmin.getByRole('link', { name: /^URGENTE: / }).click();
 
-  await expect(cabeceraDeBloque(paginaAdmin, 'Mañana')).toHaveAttribute('aria-expanded', 'true');
+  // El destino lleva el dia del aseo, no el de hoy.
+  await esperarUrlDeCliente(paginaAdmin, new RegExp(`dia=${fechas.manana}`));
+  expect(paginaAdmin.url()).toContain(`dia=${fechas.manana}`);
+  expect(paginaAdmin.url()).toContain(`#aseo-${idAseo}`);
+
+  // Y la fila queda EN EL VIEWPORT, que es la propiedad del caso viejo intacta.
   await expect(paginaAdmin.locator(`#aseo-${idAseo}`)).toBeInViewport();
 });
 
@@ -1897,7 +1925,7 @@ test('CRITERIO 3: el botón atrás cierra el panel de aseo y la dirección sigue
   ).toHaveURL(/\/operacion$/);
 });
 
-test('CRITERIO 3: cerrar el panel de aseo conserva el filtro de alertas', async ({
+test('CRITERIO 3: cerrar el panel de aseo conserva el DIA seleccionado', async ({
   paginaAdmin,
 }) => {
   const { gestionada, aseadoraA, fechas } = escenario;
@@ -1906,23 +1934,45 @@ test('CRITERIO 3: cerrar el panel de aseo conserva el filtro de alertas', async 
     { propiedad: gestionada.id, fecha: fechas.hoy, aseador: aseadoraA.id, confirmado: true },
   ]);
 
-  // ── ESTO ES EL PITFALL 2 CONVERTIDO EN ASERCIÓN ─────────────────────────
-  // La aserción de ancla que el plan 08-11 conservó en finanzas protege el
-  // ABRIR; esta protege el CERRAR, que es la otra mitad y hoy no la cubre nadie.
-  // Una ruta de cierre constante (`/operacion` a secas) borraría el filtro, y el
-  // admin que estaba mirando las alertas atendidas y cierra un panel no
-  // entendería por qué la pantalla cambió debajo.
-  await paginaAdmin.goto('/operacion?alertas=atendidas');
+  /**
+   * ── ESTE CASO SE RESEMBRO SOBRE `?dia` (D-05-9), Y LA PROPIEDAD ES LA MISMA ─
+   *
+   * Afirmaba sobre `?alertas=atendidas`, que era el otro parametro que esta pantalla
+   * gobernaba. Ese parametro **ya no existe**: al mudarse el panel de alertas a la
+   * campana del shell, el toggle `Ver atendidas` paso a ser estado de cliente, porque
+   * un layout de App Router no recibe `searchParams`.
+   *
+   * El parametro que ahora tiene que sobrevivir a abrir y cerrar el detalle es `?dia`,
+   * y la propiedad defendida es **exactamente la misma**: el panel no se come los
+   * parametros de su anfitrion. Una ruta de cierre constante (`/operacion` a secas)
+   * borraria el dia, y el admin que estaba mirando el viernes y cierra un panel no
+   * entenderia por que la pantalla se le fue a hoy.
+   *
+   * Es el PITFALL 2 convertido en asercion: la de ancla que 08-11 conservo en finanzas
+   * protege el ABRIR; esta protege el CERRAR, que es la otra mitad.
+   *
+   * ── Y EL DIA ES **HOY**, AUNQUE PAREZCA EL CASO DEBIL. MEDIDO ─────────────
+   *
+   * Con `?dia=mañana` este caso muere en `El control nunca llego a tener su manejador
+   * de clic`: mientras los tres acordeones sigan existiendo, `Mañana` nace COLAPSADO y
+   * el enlace de su fila no se hidrata. Se quita en la Task 4.
+   *
+   * Y no debilita la asercion, porque **lo que se mide es la DIRECCION y no las filas**:
+   * el parametro va escrito explicitamente en el `goto`, asi que una ruta de cierre
+   * constante deja la direccion en `/operacion` a secas y el `toMatch` del final cae
+   * igual de rojo con hoy que con mañana.
+   */
+  await paginaAdmin.goto(`/operacion?dia=${fechas.hoy}`);
 
   await pulsarHastaNavegar(
     paginaAdmin,
     paginaAdmin.getByRole('link', { name: `Ver el aseo de ${gestionada.nombre}` }),
-    /\?alertas=atendidas&aseo=[0-9a-f-]{36}$/,
+    new RegExp(`\\?dia=${fechas.hoy}&aseo=[0-9a-f-]{36}$`),
   );
   expect(
     paginaAdmin.url(),
-    'el enlace de apertura se compone desde los parámetros vivos, así que el filtro viaja',
-  ).toContain('alertas=atendidas');
+    'el enlace de apertura se compone desde los parámetros vivos, así que el día viaja',
+  ).toContain(`dia=${fechas.hoy}`);
 
   const panel = paginaAdmin.getByRole('dialog');
   await expect(panel).toBeVisible();
@@ -1931,7 +1981,7 @@ test('CRITERIO 3: cerrar el panel de aseo conserva el filtro de alertas', async 
   // tiene pie, así que no hay dos botones llamados `Cerrar` como en el `Sheet`
   // de confirmación.
   await panel.getByRole('button', { name: 'Cerrar', exact: true }).click();
-  await esperarUrlDeCliente(paginaAdmin, /\/operacion\?alertas=atendidas$/);
+  await esperarUrlDeCliente(paginaAdmin, new RegExp(`/operacion\\?dia=${fechas.hoy}$`));
 
   await expect(
     paginaAdmin.getByRole('dialog'),
@@ -1939,8 +1989,8 @@ test('CRITERIO 3: cerrar el panel de aseo conserva el filtro de alertas', async 
   ).toHaveCount(0);
   expect(
     paginaAdmin.url(),
-    'CRITERIO 3 · y devuelve la dirección con el filtro de alertas INTACTO',
-  ).toMatch(/\/operacion\?alertas=atendidas$/);
+    'CRITERIO 3 · y devuelve la dirección con el día seleccionado INTACTO',
+  ).toMatch(new RegExp(`/operacion\\?dia=${fechas.hoy}$`));
 });
 
 // ───────────────────────────────────────────────────────────────────────────
