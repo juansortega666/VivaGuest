@@ -1183,11 +1183,28 @@ test('EL RECORRIDO DEL CORE VALUE: un checkout del .ics acaba en el pago de la a
   // the client». Sin bytes de verdad no se ejecuta nunca.
   await paginaAdmin.goto(`/operacion?aseo=${aseoId}`);
 
-  // TRAMPA 1 DE `TESTING.md`: el panel se portalea a `document.body`, así que
-  // TODO lo que se afirme de él va acotado al diálogo. Acotarlo por el contenedor
-  // de página lo dejaría midiendo un contenedor vacío.
-  const panel = paginaAdmin.getByRole('dialog');
-  await expect(panel, 'JUNTA 4 · el panel del aseo abre por dirección directa').toBeVisible();
+  /*
+    ── LA TRAMPA 1 DE `TESTING.md` TIENE UNA EXCEPCIÓN DESDE EL PLAN 10-05 ────
+
+    Decía, y sigue valiendo para `/apartamentos` y `/finanzas`: el panel se
+    portalea a `document.body`, así que todo lo que se afirme de él va acotado al
+    diálogo, porque el contenedor de página queda vacío.
+
+    **El detalle del aseo de `/operacion` ya NO es un diálogo.** El plan 10-05 lo
+    sacó del `Sheet` y lo metió inline en la columna derecha de la pantalla, así
+    que el rol de diálogo dejó de estar disponible como ámbito y lo sustituye un
+    localizador propio. El problema de fondo no desaparece, **cambia de forma**:
+    ahora la lista del día pinta el mismo nombre de apartamento que el detalle,
+    así que un ámbito demasiado ancho vuelve a dar verdes por accidente. El
+    control que lo mide en los dos sentidos vive en `e2e/operacion.spec.ts`,
+    en el caso `CONTROL DE ALCANCE (08-11)`.
+  */
+  const panel = paginaAdmin.locator('[data-slot="detalle-aseo"]');
+  await expect(panel, 'JUNTA 4 · el detalle del aseo abre por dirección directa').toBeVisible();
+  await expect(
+    paginaAdmin.getByRole('dialog'),
+    'JUNTA 4 · y lo hace SIN ningún diálogo: el detalle es inline desde el plan 10-05',
+  ).toHaveCount(0);
 
   await expect(
     panel.getByRole('button', { name: 'Ver la foto de Habitación 1' }),

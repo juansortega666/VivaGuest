@@ -421,3 +421,40 @@ Task 5 ni en la Task 6, y se queda como el punto 5.** Las razones:
 **Condición de salida, sin cambios:** mover el `it` a hermano del anterior y comprobar
 que la cuenta del archivo SUBE en uno. Si al desanidarlo sale rojo, es un hallazgo de
 segundo orden y hay que medirlo antes de tocar la consulta.
+
+---
+
+## 10. La trampa 1 de `TESTING.md` ganó una excepción y el documento todavía no la dice (2026-09-29)
+
+**Encontrado al correr la suite COMPLETA tras la Task 5 de 10-05.** Lo causa este
+plan, y por eso no es un hallazgo fuera de alcance sino una deuda de documentación
+con dueño.
+
+**Estado:** `e2e/recorrido-core.spec.ts:1189` quedó rojo en la corrida completa con
+
+```
+Error: JUNTA 4 · el panel del aseo abre por dirección directa
+expect(locator).toBeVisible() failed
+Locator: getByRole('dialog')
+```
+
+Es un consumidor del panel de `/operacion` que vive **fuera** de
+`e2e/operacion.spec.ts`, y que el barrido de la Task 5 no alcanzó porque su lista de
+archivos nombraba un solo spec. **Arreglado en el mismo commit**, retargeteado a
+`[data-slot="detalle-aseo"]` y con la aserción de cero diálogos al lado.
+
+**Lo que queda pendiente es el DOCUMENTO.** `.planning/codebase/TESTING.md` §1 dice,
+sin matices, que el panel se portalea a `document.body` y que todo lo que se afirme
+de él va acotado a `getByRole('dialog')`. **Eso sigue siendo cierto para
+`/apartamentos` y `/finanzas`, y dejó de serlo para `/operacion`.** Quien escriba el
+próximo spec sobre esta pantalla va a leer la regla vieja.
+
+**Por qué no se arregla acá.** `.planning/codebase/` lo escribe `/gsd-map-codebase`
+leyendo el código, y la lista de archivos de la Task 6 de este plan son los cuatro
+documentos de la fase, no el mapa del repo. Editarlo a mano deja el mapa y su
+generador diciendo cosas distintas.
+
+**Condición de salida:** una corrida de `/gsd-map-codebase` que regenere `TESTING.md`
+con la excepción dentro, o una nota fechada en su §1 apuntando al caso
+`CONTROL DE ALCANCE (08-11)` de `e2e/operacion.spec.ts`, que es donde la forma nueva
+del problema está medida en los dos sentidos.
