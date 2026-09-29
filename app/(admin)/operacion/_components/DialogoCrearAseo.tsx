@@ -107,9 +107,21 @@ function BotonCrear() {
   );
 }
 
+/**
+ * El valor inicial del campo de fecha: el día seleccionado, o vacío si ya pasó.
+ *
+ * Comparación entre cadenas `'YYYY-MM-DD'` y nunca construyendo un `Date`: su orden
+ * lexicográfico coincide con el cronológico, y `new Date('2026-09-10')` es
+ * medianoche UTC, que en Bogotá es el día anterior.
+ */
+function fechaPorDefecto(dia: string, hoy: string): string {
+  return dia >= hoy ? dia : '';
+}
+
 export function DialogoCrearAseo({
   apartamentos,
   hoy,
+  dia,
 }: {
   /** Solo unidades gestionadas y activas, ya ordenadas por nombre. */
   apartamentos: ApartamentoParaAseo[];
@@ -117,8 +129,26 @@ export function DialogoCrearAseo({
    * El día de negocio de Bogotá, del servidor. Llega por prop y no de `hoyBog()`
    * en el cliente: el reloj del navegador puede estar en cualquier zona, y es el
    * mismo valor que la ventana de la pantalla ya usó.
+   *
+   * **Sigue siendo el `min` del campo de fecha y NO su valor por defecto**: no se
+   * puede crear un aseo en el pasado, y eso no cambió con el selector de día.
    */
   hoy: string;
+  /**
+   * EL DÍA SELECCIONADO EN LA PANTALLA (plan 10-05), que pasa a ser la FECHA POR
+   * DEFECTO del formulario.
+   *
+   * **Es un cambio de comportamiento y va escrito:** antes el campo nacía vacío y
+   * el admin tecleaba el día; ahora crear un aseo apunta por defecto al día que
+   * está en pantalla, que es el que acaba de mirar. Con el eje de la pantalla en
+   * un día concreto, obligar a re-teclear ese mismo día sería pedirle al admin que
+   * repita lo que el selector ya dice.
+   *
+   * Con un día ANTERIOR a hoy el campo vuelve a nacer vacío, porque ese valor
+   * violaría el `min` y dejaría el formulario inválido de salida, sin que nada
+   * explicara por qué.
+   */
+  dia: string;
 }) {
   const router = useRouter();
 
@@ -131,7 +161,7 @@ export function DialogoCrearAseo({
   // tendría que volver a elegir apartamento y tipo para corregir un día. §15.3
   // exige justo lo contrario: el formulario conserva lo escrito.
   const [apartamento, setApartamento] = useState<ApartamentoParaAseo | null>(null);
-  const [fecha, setFecha] = useState('');
+  const [fecha, setFecha] = useState(fechaPorDefecto(dia, hoy));
   const [tipo, setTipo] = useState<string>(TIPOS[0].valor);
 
   const [estado, accion] = useActionState<ResultadoAccion | null, FormData>(
@@ -170,10 +200,18 @@ export function DialogoCrearAseo({
 
   function alCambiarApertura(siguiente: boolean) {
     setAbierto(siguiente);
-    if (siguiente) return;
+
+    if (siguiente) {
+      // LA FECHA POR DEFECTO SE VUELVE A FIJAR AL ABRIR, y no basta con el estado
+      // inicial: este componente NO se desmonta al navegar de día, así que su
+      // `useState` conserva el valor del día anterior. Sin esto, el admin navega al
+      // viernes, abre el diálogo y el campo sigue diciendo el jueves.
+      setFecha(fechaPorDefecto(dia, hoy));
+      return;
+    }
 
     setApartamento(null);
-    setFecha('');
+    setFecha(fechaPorDefecto(dia, hoy));
     setTipo(TIPOS[0].valor);
     procesado.current = null;
     // La action ya llamó a `revalidatePath('/operacion')`; esto pide el árbol de

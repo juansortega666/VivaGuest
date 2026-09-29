@@ -39,7 +39,33 @@ import { cn } from '@/lib/utils';
  *     se vean igual. Solo el icono lleva color.
  *   - `Sin asignar` nunca lleva campana: no es una persona.
  */
-export function FranjaCarga({ chips, sinAvisos }: { chips: ChipDeCarga[]; sinAvisos: string[] }) {
+/**
+ * El literal de siempre. Va como DEFAULT de la prop nueva y no como cadena suelta
+ * en el JSX, y eso no es estilo: `FranjaCarga.test.ts` afirma `Carga de hoy` en
+ * tres casos, y un default distinto los pondria rojos sin que nada del
+ * comportamiento hubiera cambiado. Con el default, esas tres unitarias siguen
+ * verdes SIN TOCARSE, que es la prueba de que la prop nueva no cambio nada.
+ */
+const TITULO_POR_DEFECTO = 'Carga de hoy';
+
+export function FranjaCarga({
+  chips,
+  sinAvisos,
+  titulo = TITULO_POR_DEFECTO,
+}: {
+  chips: ChipDeCarga[];
+  sinAvisos: string[];
+  /**
+   * El encabezado de la franja (plan 10-05).
+   *
+   * Existe porque la franja dejo de ser siempre "de hoy": con el selector de dia,
+   * la carga que se muestra es la del DIA SELECCIONADO, y un encabezado que diga
+   * `Carga de hoy` mientras la pantalla esta en el viernes es una mentira pequeña
+   * y constante. Quien compone el texto es la pagina, que es la unica que sabe si
+   * el dia efectivo es el de negocio.
+   */
+  titulo?: string;
+}) {
   /**
    * ── LA CONDICION DE RENDER ES UNA DISYUNCION, Y NO SE SIMPLIFICA ─────────
    *
@@ -60,7 +86,7 @@ export function FranjaCarga({ chips, sinAvisos }: { chips: ChipDeCarga[]; sinAvi
   return (
     <div className="flex flex-wrap items-center gap-sm">
       <h2 className="mr-md text-micro font-semibold tracking-columna text-muted-foreground uppercase">
-        Carga de hoy
+        {titulo}
       </h2>
 
       <ul className="flex flex-wrap items-center gap-sm">

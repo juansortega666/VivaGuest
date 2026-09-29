@@ -11,8 +11,6 @@ import {
 } from '@/lib/data/avisos';
 import { identificadorValido } from '@/lib/data/finanzas-detalle';
 import {
-  agruparPorDia,
-  bandejaSinConfirmar,
   cargaPorAseador,
   filasDelDia,
   leerAseadoresActivos,
@@ -20,20 +18,22 @@ import {
   leerOperacion,
   leerUltimoExitoDeSync,
   resumenDelDia,
+  type FilaDeOperacion,
   type GastosDelDia,
 } from '@/lib/data/operacion';
 import { leerPanelDeAseo } from '@/lib/data/panel-aseo';
 import { estadoDeAvisosDeAseador } from '@/lib/domain/avisos';
+import { estadoDeAseo, type ClaveEstadoAseo } from '@/lib/domain/cleanings';
 import { diaValido, formatFechaBog, formatFechaLargaBog } from '@/lib/domain/dates';
 import { formatAbreviadoCOP, formatCOP } from '@/lib/domain/money';
 import { estadoDeSincronizacion } from '@/lib/domain/salud-sync';
 import { publicEnv } from '@/lib/env';
 
-import { BandejaSinConfirmar } from './_components/BandejaSinConfirmar';
-import { BloqueDia } from './_components/BloqueDia';
 import { DialogoCrearAseo } from './_components/DialogoCrearAseo';
 import { LeyendaDeAseos } from './_components/EstadoAseo';
 import { FranjaCarga } from './_components/FranjaCarga';
+import { InfoDelDia } from './_components/InfoDelDia';
+import { ListaDelDia } from './_components/ListaDelDia';
 import { MedidorDeAlmacenamiento } from './_components/MedidorDeAlmacenamiento';
 import type { ContextoDeAcciones } from './_components/MenuAseo';
 import { MetricaDelDia } from './_components/MetricaDelDia';
@@ -108,22 +108,16 @@ export const metadata: Metadata = {
  * destino de las notificaciones que la base escribió sin él. Ver su cabecera.
  */
 
-/**
- * El texto de la derecha de la cabecera de `Atrasados` (05-UI-SPEC §12.2):
- * `3 aseos · el más viejo del 4 de septiembre`.
+/*
+ * ── `resumenDeAtrasados()` SE FUE CON EL BLOQUE `Atrasados` (plan 10-05) ────
  *
- * `el más viejo del {fecha}` es lo que convierte `3 aseos` en una decision: tres
- * de ayer y tres de hace una semana son problemas distintos, y el numero solo no
- * distingue los dos casos.
- *
- * CON UNO SOLO SE DICE `1 aseo · del 4 de septiembre`: "el mas viejo" de un
- * conjunto de uno es una comparacion que no existe, y el contrato solo redacto la
- * forma plural. La fecha se conserva en los dos casos porque es el dato que da la
- * decision.
- *
- * `formatFechaLargaBog` y no `formatFechaBog`: esta ultima emite el dia de la
- * semana (`vie, 4 de septiembre`) y detras de "del" eso es agramatical.
+ * Componia `3 aseos · el más viejo del 4 de septiembre` para la cabecera de ese
+ * bloque, y el bloque murio con el eje relativo a hoy. Lo que respondia —cuan viejo
+ * es lo mas viejo que sigue sin cerrar— lo responde ahora el selector de dia, que
+ * deja ir a cualquier dia pasado, mas la alerta de hora limite vencida de la
+ * campana, cuya rama NO se acota por fecha.
  */
+
 /**
  * La cifra de la métrica de gastos: `4 · $ 180K`.
  *
@@ -172,12 +166,56 @@ function tituloDeGastos(gastos: GastosDelDia, dia: string): string {
   return `${formatCOP(gastos.total)} en ${cuantos} sobre los aseos programados el ${formatFechaLargaBog(dia)}. ${divergencia}`;
 }
 
-function resumenDeAtrasados(total: number, masViejo: string | null): string {
-  const conteo = `${total} ${total === 1 ? 'aseo' : 'aseos'}`;
-  if (masViejo === null) return conteo;
+/** Una línea del desglose por estado de la columna derecha. */
+interface LineaDeDesglose {
+  clave: ClaveEstadoAseo;
+  etiqueta: string;
+  conteo: number;
+}
 
-  const cual = total === 1 ? 'del' : 'el más viejo del';
-  return `${conteo} · ${cual} ${formatFechaLargaBog(masViejo)}`;
+/**
+ * Cuenta las filas del día por estado visible, CONSERVANDO EL ORDEN DE APARICIÓN.
+ *
+ * Las etiquetas salen de `estadoDeAseo()`, la única derivación del repo, así que son
+ * literalmente las mismas que pinta cada tarjeta. Un `switch` propio sobre `state`
+ * sería el `if` duplicado que esa función existe para evitar.
+ *
+ * El orden es el de aparición en la lista del día y NUNCA por conteo: una lista que
+ * se reordena sola cambia de sitio cada vez que alguien confirma un aseo.
+ *
+ * Solo emite los estados CON filas: seis líneas en cero serían seis líneas diciendo
+ * que no hay nada que decir, que es la misma regla de data-ink de la leyenda
+ * `+0 en otros días`.
+ */
+function desglosarPorEstado(filas: FilaDeOperacion[]): LineaDeDesglose[] {
+  const porClave = new Map<ClaveEstadoAseo, LineaDeDesglose>();
+
+  for (const fila of filas) {
+    const { clave, etiqueta } = estadoDeAseo(fila);
+    const linea = porClave.get(clave);
+    if (linea) linea.conteo += 1;
+    else porClave.set(clave, { clave, etiqueta, conteo: 1 });
+  }
+
+  return [...porClave.values()];
+}
+
+/**
+ * La cabecera de la columna derecha y el título de la franja de carga.
+ *
+ * Los dos dicen DE QUÉ DÍA HABLAN, y los compone la página porque es la única que
+ * sabe si el día efectivo es el de negocio de Bogotá. `Hoy` cuando lo es, y la fecha
+ * larga cuando no: `Carga de hoy` mientras la pantalla está en el viernes es una
+ * mentira pequeña y constante.
+ *
+ * `formatFechaLargaBog` y no `formatFechaBog`: esta última emite el día de la semana
+ * (`vie, 4 de septiembre`) y detrás de "del" eso es agramatical.
+ */
+function copiaDelDia(dia: string, hoy: string): { cabecera: string; franja: string } {
+  if (dia === hoy) return { cabecera: 'El día de hoy', franja: 'Carga de hoy' };
+
+  const largo = formatFechaLargaBog(dia);
+  return { cabecera: `El día del ${largo}`, franja: `Carga del ${largo}` };
 }
 
 /**
@@ -455,9 +493,47 @@ export default async function OperacionPage({
    */
   const saludDeSync = estadoDeSincronizacion(ultimoExito, ahoraMs);
 
-  const bloques = agruparPorDia(operacion.filas, operacion.hoy);
-  const chips = cargaPorAseador(operacion.filas, operacion.hoy, aseadores);
-  const sinConfirmar = bandejaSinConfirmar(operacion.filas);
+  /**
+   * LA CARGA POR ASEADOR **DEL DIA SELECCIONADO**, y no de hoy (plan 10-05).
+   *
+   * `cargaPorAseador` ya recibia el dia por parametro, asi que lo unico que cambia es
+   * el argumento. Y tiene que cambiar: con el selector de dia, una franja que siguiera
+   * contando lo de hoy mientras la pantalla esta en el viernes seria un dato correcto
+   * respondiendo a la pregunta equivocada.
+   */
+  const chips = cargaPorAseador(operacion.filas, diaEfectivo, aseadores);
+
+  /**
+   * EL DESGLOSE POR ESTADO DEL DIA, para la columna derecha.
+   *
+   * Sale de `estadoDeAseo()`, la UNICA derivacion del repo, asi que sus etiquetas son
+   * literalmente las mismas que pinta cada tarjeta. Contar aca con un `switch` propio
+   * sobre `state` seria el `if` duplicado que esa funcion existe para evitar.
+   *
+   * Conserva el ORDEN DE APARICION de los estados en la lista del dia, que es el de la
+   * consulta: un orden por conteo se reordena solo y la linea que buscas cambia de
+   * sitio cada vez que alguien confirma un aseo.
+   */
+  const desgloseDelDia = desglosarPorEstado(filasDelDiaSeleccionado);
+
+  /**
+   * CUANTOS ASEOS QUEDAN MAS ALLA DEL HORIZONTE DE LA VENTANA.
+   *
+   * Lo contaba `agruparPorDia`, que murio con el eje relativo a hoy. Se cuenta aca, y
+   * la razon de que siga existiendo no cambia (T-05-54): lo que queda afuera NO SE
+   * ESCONDE, se dice cuanto hay y donde verlo.
+   *
+   * Comparacion entre cadenas `'YYYY-MM-DD'`, nunca construyendo un `Date`.
+   */
+  const masAllaDelHorizonte = operacion.filas.filter(
+    (f) => f.scheduled_date > operacion.horizonte,
+  ).length;
+
+  // La copia que dice DE QUE DIA hablan la columna derecha y la franja de carga.
+  const { cabecera: cabeceraDelDia, franja: tituloDeLaFranja } = copiaDelDia(
+    diaEfectivo,
+    operacion.hoy,
+  );
 
   // `property_id` → nombre del responsable fijo. `null` cuando no tiene, que es
   // la carencia que el Sheet levanta ANTES de que `confirm_cleaning` lance su
@@ -515,17 +591,9 @@ export default async function OperacionPage({
     .filter((a) => a.gestion_vivaguest && a.is_active)
     .map((a) => ({ id: a.id, nombre: a.nombre }));
 
-  // `Siguientes` cuenta lo de sus cinco dias juntos en su cabecera, y cada dia
-  // vuelve a contar lo suyo en la propia. No es duplicar: la de fuera es la que se
-  // ve con el bloque cerrado, que es como nace.
-  const filasSiguientes = bloques.siguientes.flatMap((grupo) => grupo.filas);
-
-  // Lo mismo para `Atrasados`, que tambien es un bloque agregado con dias dentro.
-  const filasAtrasadas = bloques.atrasados.flatMap((grupo) => grupo.filas);
-
-  // Lo que el menu de cada fila necesita y la fila no trae (plan 04-11). Baja por
-  // `BloqueDia` -> `TablaDia` -> `FilaAseo` sin que ninguno de los tres lo use:
-  // el consumidor es `MenuAseo`. Va como UN objeto y no como tres props sueltas
+  // Lo que el menu de cada tarjeta necesita y la fila no trae (plan 04-11). Baja por
+  // `ListaDelDia` -> `TarjetaAseo` sin que ninguno de los dos lo use: el consumidor es
+  // `MenuAseo`. Va como UN objeto y no como tres props sueltas
   // para que anadir un cuarto dato manana no vuelva a tocar los tres.
   //
   // Los tres datos ya estaban leidos: `aseadores` alimenta los chips de carga,
@@ -602,7 +670,39 @@ export default async function OperacionPage({
    */
 
   return (
-    <div className="flex flex-col gap-xl">
+    /*
+      ── EL PRESUPUESTO DE ALTURA DE LA PANTALLA (plan 10-05) ──────────────────
+
+      Columna flex con ALTURA CERRADA de `xl:` para arriba. Lo que sobra tras la
+      cabecera y el vistazo se lo lleva la region de las dos columnas con
+      `min-h-0 flex-1`, **sin aritmetica**: un `calc()` que restara la altura de la
+      cabecera y del vistazo se rompe el dia que la copia de una metrica pase a dos
+      lineas, y el sintoma seria la columna derecha desbordando por abajo.
+
+      LA ALTURA CERRADA SI ES ARITMETICA, Y SALE ENTERA DE TOKENS. Los cuatro
+      sustraendos son reales y cada uno tiene dueno:
+
+        --alto-barra-pruebas  la barra de ambiente de pruebas de `app/layout.tsx`
+        --spacing-barra       la barra superior del admin (56px)
+        --spacing-xl          el `pt-xl` del `<main>` del layout
+        --spacing-3xl         su `pb-3xl`
+
+      ── Y LA PRIMERA NO ES OPCIONAL. ESTA MEDIDA Y 10-04 YA LA PAGO ──────────
+
+      `app/layout.tsx` pinta la barra de ambiente de pruebas en TODO entorno cuyo
+      `NEXT_PUBLIC_VIVAGUEST_ENTORNO` no sea `produccion`, **y la suite E2E corre
+      justo ahi**. Una altura escrita sin ese sustraendo desborda 48px EXACTOS en la
+      corrida de Playwright, y la asercion de "la pagina no scrollea" sale ROJA
+      contra el codigo correcto. El fallback `0px` cubre produccion, donde la barra
+      no se pinta y la variable no existe.
+
+      `100svh` y no `100vh`: en un navegador con barra retractil `vh` cuenta el
+      viewport grande y la ultima tarjeta queda debajo del cromo.
+
+      Por debajo de `xl` NO hay altura cerrada: la pantalla se apila y scrollea el
+      documento, que es lo que ya hacia.
+    */
+    <div className="flex flex-col gap-xl xl:h-[calc(100svh-var(--alto-barra-pruebas,0px)-var(--spacing-barra)-var(--spacing-xl)-var(--spacing-3xl))]">
       {/*
         Cabecera de pagina: titulo a la izquierda, acciones a la derecha.
 
@@ -632,11 +732,20 @@ export default async function OperacionPage({
           */}
           <SincronizacionEnVivo leidoEnMs={operacion.leidoEnMs} />
 
-          {/* El dialogo trae su propio disparador, igual que
-              `DialogoCrearAseador` de la Fase 2: el patron de "dialogo fuera del
-              menu" existe porque un `DropdownMenu` desmonta lo que tiene dentro
-              al cerrarse, y aqui el padre es esta cabecera, no un menu. */}
-          <DialogoCrearAseo apartamentos={apartamentosParaCrear} hoy={operacion.hoy} />
+          {/*
+            ── `Crear aseo` SE FUE DE LA CABECERA A LA COLUMNA DERECHA (plan 10-05) ─
+
+            Vivia aqui y ahora vive en `InfoDelDia`, con el resto de la informacion
+            general del dia. La razon es que la cabecera paso a llevar el control que
+            gobierna la pantalla entera —la senal de calendario y el selector de dia—
+            y meter ahi ademas una accion de escritura le quita el foco a eso.
+
+            **Y hay una consecuencia que hay que decir en voz alta**: con el detalle de
+            un aseo abierto, la columna derecha lo muestra a el y este boton NO ESTA
+            ALCANZABLE sin cerrar el detalle. Lo hereda la Task 5 de este plan, que es
+            la que mete el detalle en esa columna, y ahi hay que decidirlo: o una copia
+            en la cabecera, o el boton fuera del bloque que el detalle sustituye.
+          */}
 
           {/*
             EL SELECTOR DE DIA VA AL FINAL DE LA FILA, Y EL ORDEN ES EL QUE EL
@@ -747,196 +856,111 @@ export default async function OperacionPage({
         />
       </ResumenDelDia>
 
-      <div className="grid grid-cols-1 gap-2xl xl:grid-cols-[minmax(0,1fr)_var(--container-rail)]">
-        {/* Carril ancho. `min-w-0` para que una tabla ancha haga scroll dentro de
-            su card en vez de ensanchar la pista de la rejilla. */}
-        <div className="flex min-w-0 flex-col gap-lg">
-          {/*
-            §13.2: debajo de la cabecera de pagina y ENCIMA de la franja de
-            carga, dentro del carril ancho. No es sticky y no empuja el carril
-            lateral, que conserva su presupuesto de altura cerrado.
-          */}
-          <TiraAvisosAdmin
-            clavePublica={publicEnv().NEXT_PUBLIC_VAPID_PUBLIC_KEY}
-            endpointRegistrado={endpointDelAdmin}
-          />
+      {/*
+        §13.2: la tira de avisos va debajo de la cabecera de pagina y ENCIMA de la
+        region de las dos columnas. No es sticky y no empuja ninguna columna: la
+        region de abajo se lleva `flex-1`, asi que lo que esta tira ocupe sale de su
+        presupuesto y ninguna de las dos listas desborda.
 
-          <FranjaCarga chips={chips} sinAvisos={aseadoresSinAvisos} />
+        Vivia dentro del carril ancho, que este plan borro; sube un nivel y se queda
+        donde §13.2 la puso.
+      */}
+      <TiraAvisosAdmin
+        clavePublica={publicEnv().NEXT_PUBLIC_VAPID_PUBLIC_KEY}
+        endpointRegistrado={endpointDelAdmin}
+      />
 
-          {/*
-            ── `Atrasados`, EL BLOQUE DE D-08 (05-UI-SPEC §12) ─────────────────
+      {/*
+        ── LAS DOS COLUMNAS (D-05-2) ───────────────────────────────────────────
 
-            VA PRIMERO, ENCIMA DE `Hoy`: es lo unico de esta pantalla que YA salio
-            mal. Y nace EXPANDIDO, al reves que `Manana` y `Siguientes`, que nacen
-            colapsados porque son planeacion. Esto es una falla, y una falla
-            colapsada es una falla escondida.
+        30% la lista del dia, 70% el detalle. El reparto vive ENTERO en
+        `@utility rejilla-operacion` y esta pagina NO escribe ni un porcentaje: es el
+        mismo patron que 10-04 establecio con `rejilla-login`, y su aritmetica esta
+        en el bloque de comentario de esa utilidad.
 
-            ── Y SOLO SE RENDERIZA SI TIENE CONTENIDO, QUE CONTRADICE §8.1 ─────
+        `min-h-0` y `flex-1`: la region se lleva LO QUE SOBRE tras la cabecera y el
+        vistazo, sin aritmetica. Un `calc()` que restara sus alturas se rompe el dia
+        que la copia de una metrica pase a dos lineas, y el sintoma seria la columna
+        derecha desbordando por abajo.
 
-            `04-UI-SPEC` §8.1 dice que un dia sin aseos SE PINTA IGUAL, con
-            `0 aseos`, porque "que hoy no haya nada es informacion". Aca la regla
-            es la contraria y la asimetria tiene razon (§12.3), asi que queda
-            escrita o parece un descuido:
+        El corte es `xl:` (1280) y no `lg:` (1024): a 1024 los utiles son 976, menos
+        el hueco son 944, y el 30% da 283px, por debajo de los 360px que hacen falta
+        para una tarjeta legible con estado, nombre y hora.
 
-              `Hoy` es un HECHO DEL CALENDARIO, y que este vacio es un dato que el
-              admin necesita confirmar. `Atrasados` es un FILTRO SOBRE UNA FALLA:
-              estar vacio es el estado normal y esperado. Un `Atrasados · 0 aseos`
-              visible todos los dias entrena al admin a saltarselo con la vista, y
-              el dia que diga `3` no lo va a ver.
-
-            Por dentro AGRUPA POR DIA, igual que `Siguientes` y por la misma razon
-            de DASH-01: el bloque abarca varios dias y una lista corrida perderia
-            la fecha, que es justo el dato que dice cuan viejo es cada uno. Los
-            dias de dentro nacen todos abiertos —todos tienen contenido, porque la
-            proyeccion solo emite los que lo tienen—, sin la condicion de
-            `Siguientes`, que existe para no apilar cinco vacios.
-
-            Y ESTE BLOQUE ES LO QUE HACE QUE EL CLIC DE UNA ALERTA DE UN DIA
-            ANTERIOR ATERRICE EN ALGUN SITIO (§12.1, T-05-55): el `href` de esas
-            alertas es `/operacion#aseo-{id}` y ese ancla lo pone `FilaAseo`, asi
-            que sin estas filas renderizadas la alerta se veria, se podria tocar y
-            no llevaria a ninguna parte.
-          */}
-          {bloques.atrasados.length > 0 && (
-            <BloqueDia
-              rotulo="Atrasados"
-              filas={filasAtrasadas}
-              acciones={acciones}
-              expandidoInicial
-              resumen={resumenDeAtrasados(filasAtrasadas.length, bloques.masViejoAtrasado)}
-            >
-              <div className="flex flex-col gap-lg p-md">
-                {bloques.atrasados.map((grupo) => (
-                  <BloqueDia
-                    key={grupo.fecha}
-                    fecha={grupo.fecha}
-                    filas={grupo.filas}
-                    acciones={acciones}
-                    expandidoInicial
-                  />
-                ))}
-              </div>
-            </BloqueDia>
-          )}
-
-          {/*
-            Lo que queda POR DETRAS de la ventana de siete dias se CUENTA y no se
-            agrupa, exactamente como lo de mas alla del horizonte por el otro
-            extremo (§12.4). Va sin expansion y apunta a un destino real: el
-            historial del apartamento, que existe y es de solo lectura.
-
-            La ventana tiene tope porque sin el la consulta creceria sin limite
-            —la retencion del producto es de seis meses— pero lo que queda afuera
-            NO SE ESCONDE: se dice cuanto hay y donde verlo (T-05-54).
-          */}
-          {bloques.antesDeLaVentana > 0 && (
-            <p className="text-micro text-muted-foreground">
-              Hay {bloques.antesDeLaVentana}{' '}
-              {bloques.antesDeLaVentana === 1 ? 'aseo sin cerrar' : 'aseos sin cerrar'} de antes
-              del {formatFechaLargaBog(bloques.primerDiaDeLaVentana)}. Ábrelos desde la ficha de su
-              apartamento.
-            </p>
-          )}
-
-          {/*
-            `Hoy` nace expandido; `Manana` y `Siguientes`, colapsados (§8.1). El
-            estado no se persiste: cada carga vuelve a esto mismo.
-          */}
-          <BloqueDia
-            rotulo="Hoy"
-            fecha={bloques.hoy.fecha}
-            filas={bloques.hoy.filas}
-            acciones={acciones}
-            expandidoInicial
-          />
-
-          <BloqueDia
-            rotulo="Mañana"
-            fecha={bloques.manana.fecha}
-            filas={bloques.manana.filas}
-            acciones={acciones}
-          />
-
-          {/*
-            `Siguientes` AGRUPA POR DIA, no es una lista corrida: DASH-01 pide
-            "organizados por dia", y 31 filas seguidas pierden justo el ancla que
-            el requisito nombra. Cinco dias es el horizonte con el que se decide un
-            suplente; mas alla no hay ninguna decision que tomar hoy.
-
-            Los dias de dentro nacen abiertos si tienen algo y cerrados si no:
-            cinco estados vacios apilados al abrir el bloque son un muro, y §8.1
-            dice literalmente que el vacio se ve "al expandir".
-          */}
-          <BloqueDia
-            rotulo={`Siguientes (${bloques.siguientes.length} días)`}
-            filas={filasSiguientes}
-            acciones={acciones}
-          >
-            <div className="flex flex-col gap-lg p-md">
-              {bloques.siguientes.map((grupo) => (
-                <BloqueDia
-                  key={grupo.fecha}
-                  fecha={grupo.fecha}
-                  filas={grupo.filas}
-                  acciones={acciones}
-                  expandidoInicial={grupo.filas.length > 0}
-                />
-              ))}
-            </div>
-          </BloqueDia>
-
-          {/*
-            Lo que queda mas alla del horizonte se CUENTA, no se agrupa, y va sin
-            expansion: no hay ninguna decision que tomar hoy sobre un aseo de
-            dentro de dos semanas, pero saber que existe evita la pregunta
-            "¿y no hay nada mas?".
-          */}
-          {bloques.masAllaDelHorizonte > 0 && (
-            <p className="text-micro text-muted-foreground">
-              Hay {bloques.masAllaDelHorizonte}{' '}
-              {bloques.masAllaDelHorizonte === 1 ? 'aseo programado' : 'aseos programados'} después
-              del {formatFechaBog(bloques.ultimoDiaDelHorizonte)}.
-            </p>
-          )}
-
-          {/* La leyenda va UNA SOLA VEZ, al pie del carril (§5). Repetirla bajo
-              cada uno de los tres dias seria tres veces el mismo parrafo. */}
-          <LeyendaDeAseos />
-        </div>
+        APILADO, LA LISTA VA PRIMERO en el orden visual, que es el del DOM: lo que se
+        opera va antes de lo que se consulta.
+      */}
+      <div
+        data-slot="rejilla-dia"
+        className="grid min-h-0 flex-1 grid-cols-1 gap-2xl xl:rejilla-operacion"
+      >
+        <ListaDelDia
+          filas={filasDelDiaSeleccionado}
+          acciones={acciones}
+          responsables={responsables}
+          responsableSinAvisos={responsableSinAvisos}
+        />
 
         {/*
-          ── EL CARRIL LATERAL SE QUEDA CON LA BANDEJA SOLA (plan 10-05) ──────
-
-          El panel de alertas se fue a la campana de la barra superior (D-05-9), asi
-          que el reparto de altura que `04-09` acordo entre las dos cards YA NO TIENE
-          DOS INQUILINOS. Ese reparto era: la bandeja a `max-h-[40%]` del carril con
-          scroll propio, y el panel con el `flex-1` que sobrara.
-
-          **La bandeja pasa a llevar su lista ENTERA, sin recorte de altura**, porque
-          no hay nada debajo a lo que dejarle sitio. Con quince sin confirmar son
-          ~600px de lista, que a 1080p caben en el carril.
-
-          ── Y ESTO ES UN ESTADO TRANSITORIO DE UNA SOLA TASK ────────────────
-
-          Va escrito porque si no parece una decision a medias: **la Task 4 de este
-          plan se lleva el carril entero**. La bandeja deja de ser una seccion y su
-          informacion pasa a ser un estado visual de cada tarjeta de aseo, dentro de
-          la lista del dia. Lo que queda aqui es lo minimo para que la pantalla siga
-          coherente y verde mientras eso llega.
-
-          `100svh` y no `100vh`: en un navegador con barra retractil `vh` cuenta el
-          viewport grande y la ultima fila queda debajo del cromo.
+          LA COLUMNA DERECHA NUNCA ESTA VACIA. Sin nada seleccionado enseña la
+          informacion general del dia; el detalle del aseo llega en la Task 5 de este
+          plan y ocupa este mismo sitio.
         */}
-        <aside
-          aria-label="Pendientes"
-          className="flex flex-col gap-lg max-xl:order-first xl:sticky xl:top-barra"
-        >
-          <BandejaSinConfirmar
-            filas={sinConfirmar}
-            responsables={responsables}
-            responsableSinAvisos={responsableSinAvisos}
-          />
-        </aside>
+        <InfoDelDia cabecera={cabeceraDelDia}>
+          <FranjaCarga chips={chips} sinAvisos={aseadoresSinAvisos} titulo={tituloDeLaFranja} />
+
+          {/*
+            EL DESGLOSE DEL DIA: cuantos aseos hay en cada estado.
+
+            Sale de `estadoDeAseo()`, la unica derivacion del repo, asi que sus
+            etiquetas son las mismas que pinta cada tarjeta y no una segunda
+            redaccion. Solo se listan los estados CON filas: seis lineas en cero
+            serian seis lineas diciendo que no hay nada que decir.
+          */}
+          {desgloseDelDia.length > 0 && (
+            <div className="flex flex-col gap-xs">
+              <h3 className="text-micro font-semibold tracking-columna text-muted-foreground uppercase">
+                Desglose
+              </h3>
+              <ul className="flex flex-col gap-xs">
+                {desgloseDelDia.map(({ clave, etiqueta, conteo }) => (
+                  <li key={clave} className="flex items-baseline gap-sm text-body">
+                    <span className="tabular-nums text-foreground">{conteo}</span>
+                    <span className="text-muted-foreground">{etiqueta}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/*
+            Lo que queda MAS ALLA DEL HORIZONTE se CUENTA, no se agrupa: no hay ninguna
+            decision que tomar hoy sobre un aseo de dentro de dos semanas, pero saber
+            que existe evita la pregunta "¿y no hay nada mas?" (T-05-54).
+
+            VIVIA AL PIE DEL CARRIL ANCHO, que este plan borro. Se MUDA, no se pierde.
+          */}
+          {masAllaDelHorizonte > 0 && (
+            <p className="text-micro text-muted-foreground">
+              Hay {masAllaDelHorizonte}{' '}
+              {masAllaDelHorizonte === 1 ? 'aseo programado' : 'aseos programados'} después del{' '}
+              {formatFechaBog(operacion.horizonte)}.
+            </p>
+          )}
+
+          {/* La leyenda va UNA SOLA VEZ (§5). */}
+          <LeyendaDeAseos />
+
+          {/* `Crear aseo` va en `outline`: el unico boton primario de la pantalla es
+              `Confirmar N aseos`, en la cabecera de la lista del dia (§4.2). */}
+          <div className="flex">
+            <DialogoCrearAseo
+              apartamentos={apartamentosParaCrear}
+              hoy={operacion.hoy}
+              dia={diaEfectivo}
+            />
+          </div>
+        </InfoDelDia>
       </div>
 
       {/*

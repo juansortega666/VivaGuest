@@ -160,13 +160,20 @@ export function DialogoReasignar({
       // drenaje es asíncrono y la action no lo sabe (05-UI-SPEC §11.4).
       toast.success(estado.mensaje);
       onAbiertoChange(false);
+      // EL REFRESCO VA ACA, Y LA RAZON COMPLETA ESTA EN
+      // `DialogoCancelarAseo.tsx`, en este mismo punto: `alCambiarApertura` es el
+      // `onOpenChange` del dialogo y NO lo dispara un cierre programatico como el
+      // `onAbiertoChange(false)` de la linea de arriba, asi que en el camino feliz
+      // el refresco no corria nunca. Medido el 2026-09-29: se reasigna, la base
+      // escribe, el toast lo dice, y la tarjeta sigue diciendo el aseador viejo.
+      router.refresh();
       return;
     }
 
     // Un error de la operación completa (RLS, red, 42501, `aseador_invalido`) va
     // a toast destructivo y el diálogo conserva su estado (§15.3).
     toast.error(estado.error);
-  }, [estado, onAbiertoChange]);
+  }, [estado, onAbiertoChange, router]);
 
   function alCambiarApertura(siguiente: boolean) {
     onAbiertoChange(siguiente);

@@ -65,7 +65,19 @@ function medidor(p: Page): Locator {
   return p.getByRole('region', { name: 'Consumo de almacenamiento' });
 }
 
-/** El panel de alertas, por su encabezado. Mismo localizador que `operacion-alertas.spec.ts`. */
+/**
+ * El panel de alertas, por su encabezado. Mismo localizador que
+ * `operacion-alertas.spec.ts`.
+ *
+ * ── EL PANEL SE MUDO A LA CAMPANA DE LA BARRA SUPERIOR (plan 10-05) ───────
+ *
+ * Vivia en un carril de `/operacion` y ahora vive en el shell, dentro de un
+ * popover que **se monta al abrir y no antes**. Asi que cada caso de este archivo
+ * que mire el panel tiene que ABRIR la campana primero, con `abrirCampana()`.
+ *
+ * Lo que este archivo mide no cambio ni una coma: que `almacenamiento_lleno`
+ * produce UNA fila, que el contador sube en uno, y que su icono no jerarquiza.
+ */
 function panel(p: Page): Locator {
   return p.getByRole('region', { name: /^Alertas/ });
 }
@@ -73,6 +85,12 @@ function panel(p: Page): Locator {
 /** Las filas del panel. Es una `<ul>`, así que son `listitem`. */
 function filasDelPanel(p: Page): Locator {
   return panel(p).getByRole('listitem');
+}
+
+/** Abre la campana de la barra superior y espera a que el panel este montado. */
+async function abrirCampana(p: Page): Promise<void> {
+  await p.locator('[data-slot="campana-alertas"]').click();
+  await expect(panel(p)).toBeVisible();
 }
 
 /** El porcentaje que el medidor está diciendo, leído del propio texto. */
@@ -147,6 +165,11 @@ test('el admin ve el consumo de Storage en la cabecera, y por debajo del umbral 
   // (c) SIN FILA EN EL PANEL. Un número de contexto no es una llamada a la
   //     acción: una alerta visible al 12% entrena al admin a saltársela con la
   //     vista, y el día que diga 85% no la va a ver.
+  //
+  //     Hay que ABRIR la campana para mirar: desde el plan 10-05 el panel vive en un
+  //     popover que se monta al abrir. Sin abrirlo, esta aserción negativa pasaría
+  //     trivialmente y no probaría nada.
+  await abrirCampana(paginaAdmin);
   await expect(panel(paginaAdmin).getByText('ALMACENAMIENTO', { exact: true })).toHaveCount(0);
 });
 
@@ -172,6 +195,7 @@ test('al cruzar el umbral aparece UNA fila ALMACENAMIENTO, el contador sube en u
 
   // ── La línea base, con el cupo todavía por defecto ────────────────────────
   await paginaAdmin.goto('/operacion');
+  await abrirCampana(paginaAdmin);
   const filasAntes = await filasDelPanel(paginaAdmin).count();
   expect(filasAntes).toBeGreaterThan(0);
   await expect(panel(paginaAdmin).getByText('ALMACENAMIENTO', { exact: true })).toHaveCount(0);
@@ -191,10 +215,14 @@ test('al cruzar el umbral aparece UNA fila ALMACENAMIENTO, el contador sube en u
 
   await paginaAdmin.goto('/operacion');
 
-  // (a) EL MEDIDOR CAMBIA DE COLOR Y DICE UN PORCENTAJE DE ALERTA.
+  // (a) EL MEDIDOR CAMBIA DE COLOR Y DICE UN PORCENTAJE DE ALERTA. Se mide ANTES de
+  //     abrir la campana, que es donde el medidor vive: en la cabecera de la pagina,
+  //     no en el panel. El popover abierto lo taparia.
   const pct = await porcentajeDelMedidor(paginaAdmin);
   expect(pct).toBeGreaterThanOrEqual(70);
   await expect(medidor(paginaAdmin)).toContainText('de 2 MB');
+
+  await abrirCampana(paginaAdmin);
 
   // (b) UNA FILA, Y SOLO UNA. La alerta es del sistema entero, no de ningún
   //     apartamento, así que no puede haber dos.

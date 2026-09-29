@@ -417,10 +417,24 @@
      recorrer la pantalla entera entre la etiqueta y el final del campo. */
   --container-formulario: 720px;
 
-  /* Carriles de la pantalla de operacion (04-UI-SPEC.md §2 y §6). La rejilla es
-     `minmax(0, 1fr) var(--container-rail)`, asi que el carril lateral es el unico
-     de los dos con ancho declarado. */
-  --container-rail:  360px;  /* carril lateral sticky: bandeja + alertas */
+  /* ── `--container-rail` SE RETIRO EN EL PLAN 10-05, Y NO SE CAMBIO DE VALOR ──
+     Eran 360px y era el ancho del carril lateral de `/operacion`: la bandeja
+     `Sin confirmar` mas el panel de alertas. El rediseno del 2026-09-28 mato el
+     carril —la bandeja paso a ser un estado de cada tarjeta y las alertas se
+     fueron a la campana de la barra superior— y el reparto de la pantalla paso a
+     `@utility rejilla-operacion`, abajo.
+
+     **NO se le cambio el valor para forzar el 30%, y esa era la tentacion.** Se
+     RETIRA, y se puede retirar porque `grep -rn "container-rail"` sobre `app/`,
+     `components/`, `lib/` y `e2e/` devolvia exactamente UN consumidor de
+     aplicacion (`operacion/page.tsx`) mas dos menciones en comentarios de este
+     archivo. O sea que NO era un token compartido con otras pantallas del admin,
+     aunque el comentario de la Fase 5 de mas abajo dijera que lo reutilizaba tal
+     cual. Ese comentario tambien se corrigio.
+
+     Y la aritmetica hace la retirada mas facil de lo que parece: a 1280px, que es
+     el minimo soportado, el 30% de la rejilla nueva da **360px exactos**, o sea el
+     valor del token que se va. */
 
   /* Ancho del Sheet de confirmacion encadenada (§10). Misma situacion que
      --container-dialogo: el `SheetContent` generado trae `sm:max-w-sm` (384px) y
@@ -536,9 +550,13 @@
 /* ── Fase 5: espaciado, anchos y tracking nuevos — 05-UI-SPEC.md §2.1 ─────────
    La escala de 02-UI-SPEC §2 sigue igual y sigue prohibido el valor arbitrario.
    `--spacing-toque` (44px), `--spacing-fila` (40px), `--spacing-barra` (56px),
-   `--container-aseador` (480px), `--container-sheet` (480px),
-   `--container-dialogo` (480px) y `--container-rail` (360px) YA existen y esta
-   fase los reutiliza tal cual.
+   `--container-aseador` (480px), `--container-sheet` (480px) y
+   `--container-dialogo` (480px) YA existen y esta fase los reutiliza tal cual.
+
+   CORRECCION DEL PLAN 10-05: esta lista incluia `--container-rail` (360px) y
+   decia que la Fase 5 lo reutilizaba tal cual. **No lo reutilizaba**: su unico
+   consumidor de aplicacion era `operacion/page.tsx`. El token se retiro con el
+   carril lateral; ver la nota en su sitio, mas arriba.
 
    LOS DOS ANCHOS NUEVOS LLEVAN NOMBRE PROPIO, Y ESO NO ES COSMETICO. Tailwind
    v4.3 resuelve las utilidades de ancho con nombre contra el namespace de
@@ -818,6 +836,43 @@
    (`lg:rejilla-login`).                                                       */
 @utility rejilla-login {
   grid-template-columns: 50% 50%;
+}
+
+/* ── EL REPARTO DE `/operacion`: 30 · 70 (D-05-2, plan 10-05) ────────────────
+
+   Decision del dueno del 2026-09-28: la lista del dia a la izquierda, estrecha
+   (pidio 28% a 30%), y el detalle a la derecha, ancho (70% a 72%). Se toma el
+   extremo del rango que mas le da a la lista, por la aritmetica de abajo.
+
+   ── LA ARITMETICA, Y ES LA QUE HACE FACIL LA DECISION ──────────────────────
+
+   El `<main>` del layout aporta `max-w-admin` (1440px) y `px-xl` (24px por lado),
+   o sea 1392px utiles a 1440 y mas, y `viewport − 48` por debajo. Sobre eso, dos
+   pistas con `gap-2xl` (32px):
+
+     viewport 1920 y 1440 -> 1392 utiles -> lista 408px · detalle 952px
+     viewport 1280        -> 1232 utiles -> lista 360px · detalle 840px
+     viewport 1279 y menos-> apilado, ancho completo las dos
+
+   **A 1280 las dos medidas son las de la pantalla vieja, intercambiadas de lado**:
+   360px era el carril lateral (`--container-rail`, que este plan retira) y 840px
+   el carril ancho. Nada se estrecho.
+
+   ── `minmax(0, Nfr)` Y NO `Nfr` A SECAS ────────────────────────────────────
+
+   El minimo implicito de una pista de rejilla es `auto`, asi que una tarjeta con
+   un nombre de apartamento largo ensancharia su pista y empujaria la otra fuera
+   del viewport en vez de truncar dentro. Es la misma razon que ya estaba escrita
+   para la rejilla vieja de esta pantalla.
+
+   ── Y POR QUE VIVE AQUI Y NO COMO VALOR ARBITRARIO EN EL JSX ───────────────
+
+   El mismo argumento que 10-04 escribio para `rejilla-login`: es el contrato de
+   la pantalla y tiene que estar en UN sitio, con su razon al lado. Tailwind v4 no
+   tiene namespace de plantilla de rejilla, asi que un token no es posible; una
+   utilidad si, y acepta variantes (`xl:rejilla-operacion`).                    */
+@utility rejilla-operacion {
+  grid-template-columns: minmax(0, 30fr) minmax(0, 70fr);
 }
 
 @layer base {

@@ -6,7 +6,6 @@ import {
   HORIZONTE_DIAS,
   SIN_ASIGNAR,
   VENTANA_ATRAS_DIAS,
-  agruparPorDia,
   bandejaSinConfirmar,
   cargaPorAseador,
   filasDelDia,
@@ -388,208 +387,85 @@ describe('leerGastosDelDia', () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('agruparPorDia', () => {
-  it('parte las filas en Hoy, Mañana y los cinco días de Siguientes', () => {
-    const deHoy = fila({ scheduled_date: HOY });
-    const deManana = fila({ scheduled_date: dia(1) });
-    const enDos = fila({ scheduled_date: dia(2) });
-    const enSeis = fila({ scheduled_date: dia(6) });
+describe('el eje del dia, donde estaba la agrupacion relativa a hoy', () => {
+  /**
+   * ════════════════════════════════════════════════════════════════════════════
+   * AQUI VIVIAN LOS DOS `describe` DE `agruparPorDia`. LA FUNCION MURIO CON EL
+   * REDISENO (plan 10-05) Y SUS CASOS **SE REESCRIBIERON, NO SE BORRARON**.
+   *
+   * `agruparPorDia` codificaba el eje `Atrasados / Hoy / Mañana / Siguientes` —o
+   * sea "relativo a hoy"— DENTRO de la capa de datos. Con un selector de dia,
+   * `Mañana` deja de tener significado y lo que queda en su sitio son
+   * `filasDelDia()` y `resumenDelDia()`.
+   *
+   * Lo que NO se puede perder son las PROPIEDADES que sus casos afirmaban, y este
+   * bloque las conserva una por una:
+   *
+   *   1. un aseo de AYER sale en la lista de AYER y en ninguna otra
+   *   2. las filas de gestion externa salen en la lista de SU DIA, no aparte
+   *   3. los cancelados SE CONSERVAN en las filas, porque el contador del toggle
+   *      `Ver cancelados (N)` los necesita
+   *   4. el orden de entrada se conserva
+   *
+   * Las tres primeras tienen caso propio abajo; la cuarta la afirma el bloque de
+   * `filasDelDia` de mas arriba, con su propio caso por nombre.
+   *
+   * ── LO QUE SE FUE DE VERDAD, Y HAY QUE DECIRLO ─────────────────────────────
+   *
+   * Los casos que afirmaban la FORMA de los bloques —cinco grupos de `Siguientes`
+   * vacios incluidos, el agrupado por dia de `Atrasados`, su orden ascendente, su
+   * `masViejoAtrasado`— no tienen equivalente: afirmaban una estructura que ya no
+   * existe. Lo que aquella estructura daba (que un atrasado se vea y su alerta
+   * aterrice) lo da ahora el selector de dia mas el dia metido en el destino de la
+   * alerta, y eso se mide en `alertas.test.ts` y en la suite E2E, no aqui.
+   *
+   * ── Y LAS DOS CONSTANTES SIGUEN VIVAS, QUE ERA EL RIESGO ──────────────────
+   *
+   * `HORIZONTE_DIAS` y `VENTANA_ATRAS_DIAS` se fueron a borrar con la funcion y no
+   * se borraron: siguen definiendo la ventana que alimenta las alertas y la cifra
+   * de desbordamiento del vistazo. Hay un caso abajo que lo afirma por valor.
+   * ════════════════════════════════════════════════════════════════════════════
+   */
 
-    const bloques = agruparPorDia([enSeis, deManana, enDos, deHoy], HOY);
-
-    expect(bloques.hoy.fecha).toBe(HOY);
-    expect(ids(bloques.hoy.filas)).toEqual([deHoy.id]);
-
-    expect(bloques.manana.fecha).toBe(dia(1));
-    expect(ids(bloques.manana.filas)).toEqual([deManana.id]);
-
-    // Cinco grupos: D+2 … D+6. Se emiten TODOS aunque estén vacíos, porque
-    // UI-SPEC §8.1 pinta la cabecera del día con `0 aseos`: que hoy no haya
-    // nada en un día es información, no un día que se oculta.
-    expect(bloques.siguientes.map((g) => g.fecha)).toEqual([
-      dia(2),
-      dia(3),
-      dia(4),
-      dia(5),
-      dia(6),
-    ]);
-    expect(ids(bloques.siguientes[0].filas)).toEqual([enDos.id]);
-    expect(ids(bloques.siguientes[1].filas)).toEqual([]);
-    expect(ids(bloques.siguientes[4].filas)).toEqual([enSeis.id]);
-  });
-
-  it('el horizonte es de seis días y lo que queda más lejos solo se cuenta', () => {
-    expect(HORIZONTE_DIAS).toBe(6);
-
-    const bloques = agruparPorDia(
-      [
-        fila({ scheduled_date: dia(7) }),
-        fila({ scheduled_date: dia(20) }),
-        fila({ scheduled_date: dia(6) }),
-      ],
-      HOY,
-    );
-
-    expect(bloques.ultimoDiaDelHorizonte).toBe(dia(6));
-    expect(bloques.masAllaDelHorizonte).toBe(2);
-    // Y no se cuelan en ningún grupo.
-    expect(bloques.siguientes.flatMap((g) => g.filas)).toHaveLength(1);
-  });
-
-  // ESTE TEST DECÍA LO CONTRARIO HASTA D-08, y decirlo era el defecto: un aseo
-  // de ayer vivo y vencido no aparecía en ninguna parte, así que la alerta que
-  // `alertasComputadas()` sí sabía producir no tenía dónde aterrizar. Criterio 7
-  // del ROADMAP. Lo que se conserva intacto es la otra mitad de la aserción: un
-  // aseo anterior a hoy NO se cuela en `hoy`, ni en `mañana`, ni en `siguientes`,
-  // ni en el conteo del horizonte.
-  it('un aseo de AYER va al bloque Atrasados y a ningún otro', () => {
+  it('un aseo de AYER sale en la lista de AYER y en ninguna otra', () => {
+    // Hasta D-08 un aseo de ayer no aparecia en ninguna parte y la alerta que
+    // `alertasComputadas()` si sabia producir no tenia donde aterrizar (criterio 7
+    // del ROADMAP). Con el eje del dia, "donde aterriza" es el dia del aseo.
     const deAyer = fila({ scheduled_date: dia(-1) });
     const deHoy = fila({ scheduled_date: HOY });
+    const deManana = fila({ scheduled_date: dia(1) });
 
-    const bloques = agruparPorDia([deAyer, deHoy], HOY);
+    const todas = [deAyer, deHoy, deManana];
 
-    expect(bloques.atrasados.map((g) => g.fecha)).toEqual([dia(-1)]);
-    expect(ids(bloques.atrasados[0].filas)).toEqual([deAyer.id]);
-
-    expect(ids(bloques.hoy.filas)).toEqual([deHoy.id]);
-    expect(bloques.manana.filas).toHaveLength(0);
-    expect(bloques.siguientes.flatMap((g) => g.filas)).toHaveLength(0);
-    expect(bloques.masAllaDelHorizonte).toBe(0);
+    expect(ids(filasDelDia(todas, dia(-1)))).toEqual([deAyer.id]);
+    expect(ids(filasDelDia(todas, HOY))).toEqual([deHoy.id]);
+    expect(ids(filasDelDia(todas, dia(1)))).toEqual([deManana.id]);
   });
 
-  it('conserva el orden de entrada dentro de cada día', () => {
-    // La consulta ya viene ordenada por `scheduled_date` y luego `hora_limite`.
-    // Reordenar aquí desharía ese orden y la columna de horas dejaría de subir.
-    const tarde = fila({ scheduled_date: HOY, hora_limite: '15:00:00' });
-    const temprano = fila({ scheduled_date: HOY, hora_limite: '09:00:00' });
-
-    const bloques = agruparPorDia([temprano, tarde], HOY);
-
-    expect(ids(bloques.hoy.filas)).toEqual([temprano.id, tarde.id]);
-  });
-
-  it('las filas de gestión externa van en los mismos bloques, no aparte', () => {
+  it('las filas de gestion externa salen en la lista de SU DIA, no aparte', () => {
     const inerte = filaInerte({ scheduled_date: HOY });
     const gestionado = fila({ scheduled_date: HOY });
 
-    const bloques = agruparPorDia([gestionado, inerte], HOY);
-
-    expect(ids(bloques.hoy.filas)).toEqual([gestionado.id, inerte.id]);
+    expect(ids(filasDelDia([gestionado, inerte], HOY))).toEqual([gestionado.id, inerte.id]);
   });
 
-  it('los cancelados SE conservan: la cabecera del día necesita su conteo', () => {
+  it('los cancelados SE conservan: el toggle `Ver cancelados (N)` necesita su conteo', () => {
     const cancelado = fila({ scheduled_date: HOY, state: 'cancelada' });
+    const vivo = fila({ scheduled_date: HOY });
 
-    const bloques = agruparPorDia([cancelado], HOY);
-
-    expect(ids(bloques.hoy.filas)).toEqual([cancelado.id]);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe('agruparPorDia · Atrasados (D-08, criterio 7)', () => {
-  /**
-   * EL SEÑUELO CENTRAL DE D-08, Y HAY QUE DECIR POR QUÉ.
-   *
-   * Hay DOS filtros de fecha en `operacion.ts`, no uno: el `.gte()` de la
-   * consulta y el descarte que esta proyección hacía por su cuenta. Ampliar
-   * SOLO la consulta deja este grupo vacío y el defecto exactamente igual de
-   * vivo, con la sensación de estar arreglado. Este test se corrió en rojo con
-   * el `if (fecha < hoy) continue;` restaurado a mano, precisamente para medir
-   * que atrapa esa mitad.
-   */
-  it('AGRUPA lo anterior a hoy POR DÍA y en orden ascendente, no en una lista corrida', () => {
-    const deAyer = fila({ scheduled_date: dia(-1) });
-    const deHaceTres = fila({ scheduled_date: dia(-3) });
-    const otroDeHaceTres = fila({ scheduled_date: dia(-3), hora_limite: '15:00:00' });
-
-    const bloques = agruparPorDia([deAyer, deHaceTres, otroDeHaceTres], HOY);
-
-    // Por día, ascendente: lo más viejo arriba. Una lista corrida perdería la
-    // fecha, que es el dato que dice cuán viejo es (UI-SPEC §12.2).
-    expect(bloques.atrasados.map((g) => g.fecha)).toEqual([dia(-3), dia(-1)]);
-    expect(ids(bloques.atrasados[0].filas)).toEqual([deHaceTres.id, otroDeHaceTres.id]);
-    expect(ids(bloques.atrasados[1].filas)).toEqual([deAyer.id]);
+    expect(ids(filasDelDia([cancelado, vivo], HOY))).toEqual([cancelado.id, vivo.id]);
+    // Y NO cuentan como activos en el vistazo, que es la otra mitad: se conservan
+    // en las FILAS y se descuentan en la CIFRA.
+    expect(resumenDelDia([cancelado, vivo], HOY, HOY, { conteo: 0, total: 0 }).activos).toBe(1);
   });
 
-  it('solo emite los días QUE TIENEN algo: un día viejo sin aseos no pinta cabecera', () => {
-    // Al revés que `Siguientes`, que emite sus cinco días vacíos incluidos. Un
-    // día pasado sin aseos no es información: es que no había nada que hacer
-    // (UI-SPEC §12.3, misma razón por la que el bloque entero desaparece vacío).
-    const bloques = agruparPorDia([fila({ scheduled_date: dia(-2) })], HOY);
-
-    expect(bloques.atrasados.map((g) => g.fecha)).toEqual([dia(-2)]);
-  });
-
-  it('solo entran los VIVOS y GESTIONADOS: terminado, cancelado y externo quedan fuera', () => {
-    // Un aseo terminado o cancelado de ayer no está atrasado: está cerrado
-    // (UI-SPEC §12.2). Y una unidad de gestión externa no la opera VivaGuest,
-    // así que no hay nada que el admin pueda hacer al respecto.
-    const vivo = fila({ scheduled_date: dia(-1), state: 'pendiente' });
-    const enCurso = fila({ scheduled_date: dia(-1), state: 'en_curso' });
-    const terminado = fila({ scheduled_date: dia(-1), state: 'completada' });
-    const cancelado = fila({ scheduled_date: dia(-1), state: 'cancelada' });
-    const externo = filaInerte({ scheduled_date: dia(-1) });
-
-    const bloques = agruparPorDia([vivo, enCurso, terminado, cancelado, externo], HOY);
-
-    expect(bloques.atrasados).toHaveLength(1);
-    expect(ids(bloques.atrasados[0].filas)).toEqual([vivo.id, enCurso.id]);
-  });
-
-  it('el tope es de SIETE días: lo de hace ocho no se agrupa, solo se cuenta', () => {
+  it('LAS DOS CONSTANTES DE LA VENTANA SIGUEN DECLARADAS, y borrarlas apagaria el criterio 7', () => {
+    // Se fueron a borrar con `agruparPorDia` y no se borraron. `VENTANA_ATRAS_DIAS`
+    // es lo que hace que un aseo de ayer vivo y vencido llegue a
+    // `alertasComputadas()`, y `HORIZONTE_DIAS` define el otro extremo de la misma
+    // ventana, que es de donde sale el `+N en otros dias` del vistazo.
     expect(VENTANA_ATRAS_DIAS).toBe(7);
-
-    const enElBorde = fila({ scheduled_date: dia(-7) });
-    const fuera = fila({ scheduled_date: dia(-8) });
-    const muyFuera = fila({ scheduled_date: dia(-40) });
-    // Uno cerrado de hace un mes NO es "sin cerrar": no entra en el conteo.
-    const cerradoViejo = fila({ scheduled_date: dia(-40), state: 'completada' });
-
-    const bloques = agruparPorDia([enElBorde, fuera, muyFuera, cerradoViejo], HOY);
-
-    expect(bloques.atrasados.map((g) => g.fecha)).toEqual([dia(-7)]);
-    expect(bloques.primerDiaDeLaVentana).toBe(dia(-7));
-    expect(bloques.antesDeLaVentana).toBe(2);
-  });
-
-  it('expone la fecha del atrasado MÁS VIEJO, que es lo que la cabecera necesita', () => {
-    // `3 aseos` a secas no es una decisión; `3 aseos · el más viejo del 4 de
-    // septiembre` sí (UI-SPEC §12.2).
-    const bloques = agruparPorDia(
-      [fila({ scheduled_date: dia(-1) }), fila({ scheduled_date: dia(-5) })],
-      HOY,
-    );
-
-    expect(bloques.masViejoAtrasado).toBe(dia(-5));
-  });
-
-  it('sin nada atrasado el grupo sale vacío y sin fecha: el bloque no se renderiza', () => {
-    const bloques = agruparPorDia([fila({ scheduled_date: HOY })], HOY);
-
-    expect(bloques.atrasados).toEqual([]);
-    expect(bloques.antesDeLaVentana).toBe(0);
-    expect(bloques.masViejoAtrasado).toBeNull();
-  });
-
-  it('NO toca los tres bloques existentes ni el conteo del horizonte', () => {
-    // T-05-56: la regresión silenciosa del carril es el riesgo real de este
-    // cambio. Mismo conjunto de filas, mismas tres proyecciones de siempre.
-    const deAyer = fila({ scheduled_date: dia(-1) });
-    const deHoy = fila({ scheduled_date: HOY });
-    const deManana = fila({ scheduled_date: dia(1) });
-    const enTres = fila({ scheduled_date: dia(3) });
-    const lejos = fila({ scheduled_date: dia(30) });
-
-    const bloques = agruparPorDia([deAyer, deHoy, deManana, enTres, lejos], HOY);
-
-    expect(ids(bloques.hoy.filas)).toEqual([deHoy.id]);
-    expect(ids(bloques.manana.filas)).toEqual([deManana.id]);
-    expect(bloques.siguientes.map((g) => g.fecha)).toHaveLength(HORIZONTE_DIAS - 1);
-    expect(ids(bloques.siguientes[1].filas)).toEqual([enTres.id]);
-    expect(bloques.ultimoDiaDelHorizonte).toBe(dia(6));
-    expect(bloques.masAllaDelHorizonte).toBe(1);
+    expect(HORIZONTE_DIAS).toBe(6);
   });
 });
 

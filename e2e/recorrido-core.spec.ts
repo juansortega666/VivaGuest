@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 import { formatFechaBog, formatFechaCortaBog, formatFechaLargaBog } from '@/lib/domain/dates';
 import { construirPayload } from '@/lib/push/payload';
@@ -141,39 +141,32 @@ function escaparParaRegex(texto: string): string {
   return texto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** La cabecera colapsable de un bloque de día, por su rótulo. */
-function cabeceraDeBloque(p: Page, rotulo: string) {
-  return p.getByRole('button', {
-    name: new RegExp(`^${rotulo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`),
-  });
-}
-
-/**
- * El rótulo de un día sin rótulo relativo: la fecha corta capitalizada, que es
- * lo que compone la cabecera de cada uno de los cinco días de `Siguientes`.
- */
-function rotuloDeFecha(fecha: string): string {
-  const corta = formatFechaBog(fecha);
-  return corta.charAt(0).toUpperCase() + corta.slice(1);
-}
-
-/**
- * Abre un bloque si estaba cerrado, y lo deja como está si ya estaba abierto.
+/*
+ * ── `rotuloDeFecha` Y `abrirBloque` SE FUERON (plan 10-05) ────────────────
  *
- * Un `.click()` a secas sobre un bloque ya abierto lo CIERRA, y el fallo aparece
- * después, buscando una fila que sí existe. Y el `esperarControlHidratado()` de
- * delante no sobra: la cabecera es de un client component que llega por
- * streaming, y un clic sobre el nodo antes de que React le monte el manejador
- * «funciona» sin hacer nada.
+ * Servian a los acordeones `Hoy / Mañana / Siguientes` de `/operacion`, que
+ * murieron con el rediseño: la pantalla se filtra por UN dia con el selector de su
+ * cabecera y la lista es una sola.
+ *
+ * Lo que los sustituye es `irAlDia()`: en vez de expandir un bloque, se NAVEGA al
+ * dia del aseo. Es la misma pregunta —¿el admin ve esto?— contra la pantalla nueva.
  */
-async function abrirBloque(p: Page, rotulo: string) {
-  const cabecera = cabeceraDeBloque(p, rotulo);
-  await esperarControlHidratado(cabecera);
-  if ((await cabecera.getAttribute('aria-expanded')) === 'false') await cabecera.click();
-  await expect(cabecera, `el bloque ${rotulo} tiene que quedar abierto`).toHaveAttribute(
-    'aria-expanded',
-    'true',
-  );
+
+/**
+ * Lleva `/operacion` al dia pedido y espera a que su lista este pintada.
+ *
+ * `?dia=` es el parametro que gobierna la pantalla entera desde el plan 10-05. Se
+ * navega con `goto` y no pulsando el selector: lo que estos casos miden es que el
+ * aseo SE VE en su dia, no como se llega.
+ */
+async function irAlDia(p: Page, dia: string): Promise<void> {
+  await p.goto(`/operacion?dia=${dia}`);
+  await expect(p.locator('[data-slot="lista-dia"]')).toBeVisible();
+}
+
+/** La tarjeta de un aseo, por el nombre de su apartamento. Ya no hay filas de tabla. */
+function tarjetaDe(p: Page, apartamento: string): Locator {
+  return p.locator('[data-slot="tarjeta-aseo"]').filter({ hasText: apartamento });
 }
 
 let servicio: Servicio;
@@ -292,17 +285,16 @@ test('un checkout publicado en el .ics se vuelve un aseo con su fecha, y el admi
   // es la que separa «el dato existe» de «el producto lo muestra».
   await paginaAdmin.goto('/operacion');
 
-  // El checkout cae en `hoy + 2`, o sea dentro de `Siguientes`, que nace
-  // colapsado (§8.1). El día de dentro nace expandido porque al montar ya tenía
-  // su fila; `abrirBloque()` cubre los dos casos.
-  await abrirBloque(paginaAdmin, 'Siguientes');
-  await abrirBloque(paginaAdmin, rotuloDeFecha(checkout));
+  // El checkout cae en `hoy + 2`. En la pantalla vieja eso era el bloque
+  // `Siguientes`, que nacia colapsado y habia que expandir dos veces; ahora se
+  // NAVEGA a ese dia, que es lo que el selector hace de verdad.
+  await irAlDia(paginaAdmin, checkout);
 
-  const fila = paginaAdmin.getByRole('row').filter({ hasText: unidad.nombre });
+  const fila = tarjetaDe(paginaAdmin, unidad.nombre);
 
   await expect(
     fila,
-    'el aseo que salió del feed tiene que verse en /operacion, en el bloque del día de su checkout, con el nombre de su apartamento',
+    'el aseo que salió del feed tiene que verse en /operacion, en el día de su checkout, con el nombre de su apartamento',
   ).toHaveCount(1);
 
   await expect(
@@ -312,7 +304,7 @@ test('un checkout publicado en el .ics se vuelve un aseo con su fecha, y el admi
 
   await expect(
     fila.getByText('Sin confirmar', { exact: true }),
-    'con su etiqueta de texto y no solo con el color: la fila tiene que decirlo con palabras',
+    'con su etiqueta de texto y no solo con el color: la tarjeta tiene que decirlo con palabras',
   ).toBeVisible();
 });
 
@@ -744,22 +736,24 @@ test('EL RECORRIDO DEL CORE VALUE: un checkout del .ics acaba en el pago de la a
   // JUNTA 2 · DE LA CONFIRMACIÓN A LA ASIGNACIÓN
   // ═════════════════════════════════════════════════════════════════════════
 
-  await paginaAdmin.goto('/operacion');
-  await abrirBloque(paginaAdmin, 'Hoy');
+  // El aseo cae en el dia de su checkout, que no es hoy: se navega a ese dia. En la
+  // pantalla vieja bastaba con expandir el bloque `Hoy` porque el aseo estaba ahi;
+  // con el eje del dia hay que ir a donde esta.
+  await irAlDia(paginaAdmin, checkout);
 
-  const filaDelAseo = paginaAdmin.getByRole('row').filter({ hasText: unidad.nombre });
+  const filaDelAseo = tarjetaDe(paginaAdmin, unidad.nombre);
 
   await expect(
     filaDelAseo.locator('[data-estado="sin_confirmar"]'),
     'JUNTA 2 · el aseo que salió del feed llega a /operacion SIN CONFIRMAR, que es lo que lo mete en la bandeja del admin',
   ).toHaveCount(1);
 
-  // Se confirma desde el menú de LA FILA y no desde la bandeja de la cabecera.
-  // La bandeja cuenta TODOS los aseos sin confirmar de la ventana, así que su
-  // rótulo (`Confirmar N aseos`) depende de lo que hayan dejado los demás casos
-  // del archivo, y una tanda de más de uno cambia el botón primario y el copy del
-  // aviso. El menú de la fila abre la misma hoja con una tanda de uno, y es lo
-  // que deja este recorrido sin depender del resto del archivo.
+  // Se confirma desde el menú de LA TARJETA y no desde el boton de la tanda. Desde
+  // el plan 10-05 la tanda cuenta los sin confirmar DEL DIA —antes eran los de la
+  // ventana entera— pero el argumento no cambia: su rotulo (`Confirmar N aseos`)
+  // sigue dependiendo de lo que hayan dejado los demas casos del archivo en ese dia,
+  // y una tanda de mas de uno cambia el boton primario y el copy del aviso. El menu
+  // de la tarjeta abre la misma hoja con una tanda de uno.
   const menuDelAseo = paginaAdmin.getByRole('button', {
     name: `Acciones del aseo de ${unidad.nombre} del ${formatFechaBog(checkout)}`,
   });

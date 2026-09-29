@@ -279,3 +279,59 @@ pantalla. Es un cambio de infraestructura de pruebas con su propia medición.
 **Condición de salida:** o un `distDir` separado para la corrida E2E, o la receta
 de arriba escrita en `COMO-CORRER-PRUEBAS.md`, que es donde el punto 2 de este
 mismo archivo ya pide que vivan las trampas del stack local.
+
+---
+
+## 7. CERRADO el punto 3: los dos rojos E2E, y uno era un defecto de producto (2026-09-29)
+
+**Encontrado y cerrado al ejecutar la Task 4 de 10-05.** El punto 3 de este archivo
+registraba dos casos rojos con la base reseteada y decía que el primero no tenía la
+causa aislada. Ya la tiene, y no era del test.
+
+### `e2e/operacion.spec.ts:429` — el contador `Ver cancelados (1)`
+
+**Era un DEFECTO DE PRODUCTO, no un test frágil**, y el rediseño solo lo destapó
+del todo.
+
+`router.refresh()` vivía en `alCambiarApertura`, que es el `onOpenChange` del
+diálogo. Ese callback lo dispara la PRIMITIVA cuando el usuario pide cerrar, y
+**no lo dispara un cierre programático**, que es justo lo que hace el camino feliz:
+la action responde, el efecto llama a `onAbiertoChange(false)` y el diálogo se
+cierra por código. Desde que el plan 04-14 quitó los `revalidatePath()` de las
+nueve actions no quedaba nadie más que refrescara.
+
+**Medido con dos sondas, el 2026-09-29:**
+
+```
+CANCELAR   tras cancelar:  {"tarjetas":1,"botones":[…,"Activar","Crear aseo"]}
+           tras recargar:  {"tarjetas":0,"botones":[…,"Ver cancelados (1)",…]}
+
+REASIGNAR  tras reasignar: "Pendiente 10:15 E2E Op Gestionada … Aseadora Ana …"
+           esperado:       Aseadora Bea …
+```
+
+O sea: el admin actúa, la base escribe, el toast lo dice, **y la pantalla se queda
+exactamente igual hasta que alguien recarga a mano**.
+
+**Un bug, CUATRO sitios.** El mismo patrón estaba en `DialogoCancelarAseo`,
+`DialogoReasignar`, `DialogoReprogramar` y `DialogoCerrarAseo`. Los cuatro
+arreglados moviendo el `router.refresh()` al camino de éxito.
+
+**Por qué el efecto SÍ es seguro para el refresco**, cuando la cabecera de
+`DialogoCancelarAseo` prohíbe con medición devolver el TOAST a ese mismo efecto: lo
+único que puede desmontar el diálogo es que llegue un árbol nuevo, y si llegó un
+árbol nuevo el refresco ya sobra. O el efecto corre y refresca, o no corre porque
+alguien ya refrescó. El toast no tiene esa salida, y por eso sigue donde está.
+
+### `e2e/push-instalacion.spec.ts:97` — el timeout de 30 s
+
+Verde en esta corrida, aislado y dentro de la suite completa. **No se tocó nada de
+push en este plan**, así que lo que cambió es el entorno: el punto 2 de este archivo
+ya avisaba de que ese spec es sensible al `edge-runtime`, que está excluido del
+stack local. Queda como intermitente conocido y no como rojo fijo.
+
+### La suite completa, con la base reseteada
+
+| | Al escribir el punto 3 | 2026-09-29 |
+|---|---|---|
+| E2E | 171 pasados · **2 fallados** · 1 saltado | **199 pasados · 0 fallados** · 1 saltado |

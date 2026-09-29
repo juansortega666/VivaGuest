@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
 import {
-  agruparPorDia,
+  filasDelDia,
   leerAlertasDelAdmin,
   leerAseadoresActivos,
   leerOperacion,
@@ -205,12 +205,20 @@ describe('leerOperacion contra PostgREST real', () => {
     expect(terminado?.scheduled_date).toBe(escenario.fechas.ayer);
 
     // ── Y ACÁ SE VE POR QUÉ SON DOS FILTROS Y NO UNO ────────────────────────
-    // La consulta lo trae; la PROYECCIÓN decide qué hacer con él. Un aseo
-    // terminado de ayer no está atrasado, está cerrado, así que no entra en
-    // `Atrasados` (05-UI-SPEC §12.2). Las dos mitades, medidas juntas y contra
-    // PostgREST de verdad.
-    const bloques = agruparPorDia(filas, hoy);
-    expect(bloques.atrasados.flatMap((g) => g.filas)).toHaveLength(0);
+    // La consulta lo trae; la PROYECCIÓN decide qué hacer con él. Las dos mitades,
+    // medidas juntas y contra PostgREST de verdad.
+    //
+    // ── REESCRITO EN EL PLAN 10-05 ───────────────────────────────────────────
+    // Afirmaba sobre `agruparPorDia`, que codificaba el eje `Atrasados / Hoy /
+    // Mañana / Siguientes` dentro de la capa de datos y murió con el selector de
+    // día. La propiedad que este caso defiende es la de la CONSULTA —que la ventana
+    // baja siete días y trae el aseo de ayer—, y la proyección solo estaba ahí para
+    // demostrar que lo traído se puede recortar. `filasDelDia()` lo demuestra igual
+    // y sin resucitar un eje que ya no existe.
+    expect(filasDelDia(filas, escenario.fechas.ayer).map((f) => f.id)).toContain(
+      escenario.aseoTerminado,
+    );
+    expect(filasDelDia(filas, hoy).map((f) => f.id)).not.toContain(escenario.aseoTerminado);
   });
 
   test('las filas de gestión externa vienen en el MISMO conjunto, no en otra consulta', async () => {

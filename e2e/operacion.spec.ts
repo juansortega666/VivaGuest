@@ -13,6 +13,7 @@ import {
   limpiarOperacion,
   pulsarHastaNavegar,
   sembrarAseos,
+  type AseoASembrar,
   sembrarDanos,
   sembrarOperacion,
   test,
@@ -65,29 +66,26 @@ function menuDelAseo(p: Page, apartamento: string, fecha: string) {
   });
 }
 
-/** La cabecera colapsable de un bloque de día, por su rótulo relativo. */
-function cabeceraDeBloque(p: Page, rotulo: string) {
-  return p.getByRole('button', { name: new RegExp(`^${rotulo}`) });
-}
+/*
+ * ── `cabeceraDeBloque`, `abrirBloque` Y `rotuloDeFecha` SE FUERON (plan 10-05) ──
+ *
+ * Los tres servian a los acordeones `Atrasados / Hoy / Mañana / Siguientes`, que
+ * murieron con el eje relativo a hoy. Ya no hay nada que expandir: la pantalla se
+ * filtra por UN dia con el selector de la cabecera y la lista es una sola.
+ *
+ * Lo que los sustituye es `tarjetaDe()`, abajo. Y si un caso necesita mirar otro
+ * dia, lo que hace es NAVEGAR a ese dia, no expandir nada.
+ */
 
 /**
- * Abre un bloque de día si estaba cerrado, y lo deja como está si ya estaba
- * abierto. Un `.click()` a secas sobre un bloque ya abierto lo CIERRA, y el
- * fallo aparece después, buscando una fila que sí existe.
+ * La tarjeta de un aseo, por el nombre de su apartamento.
+ *
+ * Se acota a `[data-slot="tarjeta-aseo"]` y NO a `getByRole('row')`, que es lo que
+ * usaban los casos viejos: ya no hay tabla. Y no se acota por texto suelto en la
+ * pagina, que encontraria tambien el nombre pintado en la columna derecha.
  */
-async function abrirBloque(p: Page, rotulo: string) {
-  const cabecera = cabeceraDeBloque(p, rotulo);
-  if ((await cabecera.getAttribute('aria-expanded')) === 'false') await cabecera.click();
-  await expect(cabecera).toHaveAttribute('aria-expanded', 'true');
-}
-
-/**
- * El rótulo de un día SIN rótulo relativo: la fecha larga capitalizada, que es
- * lo que `etiquetaDeCabecera()` compone para los cinco días de `Siguientes`.
- */
-function rotuloDeFecha(fecha: string): string {
-  const larga = formatFechaBog(fecha);
-  return larga.charAt(0).toUpperCase() + larga.slice(1);
+function tarjetaDe(p: Page, apartamento: string) {
+  return p.locator('[data-slot="tarjeta-aseo"]').filter({ hasText: apartamento });
 }
 
 /**
@@ -249,6 +247,12 @@ test.beforeEach(async () => {
       escenario.gestionada.id,
       escenario.segunda.id,
       escenario.tercera.id,
+      // Las tres de relleno de la tanda por dia (D-05-8). Van en la limpieza y no
+      // solo en la siembra: un aseo que sobreviva de un caso anterior desplaza los
+      // conteos del siguiente, y el rojo aparece en el caso que no lo causo.
+      escenario.cuarta.id,
+      escenario.quinta.id,
+      escenario.sexta.id,
       escenario.externa.id,
     ]);
   if (error) throw new Error(`No se pudo limpiar entre tests: ${error.message}`);
@@ -263,38 +267,73 @@ test.beforeEach(async () => {
 // 1. EL ATERRIZAJE
 // ───────────────────────────────────────────────────────────────────────────
 
-test('el admin aterriza en /operacion, con Hoy abierto y los otros dos cerrados', async ({
+test('el admin aterriza en /operacion, en el dia de HOY y con la lista del dia', async ({
   paginaAdmin,
 }) => {
-  // Desde la raíz, no desde `/operacion` directo: lo que se mide es que
-  // `/operacion` es la RUTA DE ENTRADA del admin (plan 04-09), no que la página
-  // exista. Con `/apartamentos` de landing esto se cae.
+  const { gestionada, segunda, fechas } = escenario;
+
+  // Uno de hoy y uno de mañana: el de mañana es el CONTROL. Sin el, una pantalla
+  // que renderizara la ventana entera pasaria esta asercion igual de bien.
+  await sembrarAseos(servicio, [
+    { propiedad: gestionada.id, fecha: fechas.hoy },
+    { propiedad: segunda.id, fecha: fechas.manana },
+  ]);
+
+  /**
+   * ── REESCRITO EN EL PLAN 10-05, Y LA PROPIEDAD DE ENTRADA ES LA MISMA ─────
+   *
+   * Afirmaba `Hoy` expandido y `Mañana` y `Siguientes` colapsados, o sea la forma
+   * de los tres acordeones relativos a hoy. Esos acordeones murieron con el eje
+   * del dia: la pantalla se filtra por UN dia y la lista es una sola.
+   *
+   * Lo que se conserva intacto es la mitad que no era sobre acordeones: que
+   * `/operacion` es LA RUTA DE ENTRADA del admin (plan 04-09), medida desde la
+   * raiz y no yendo a `/operacion` directo. Y lo que la sustituye por el otro
+   * lado: que el dia de entrada es HOY, con la lista de hoy y nada mas.
+   */
   await paginaAdmin.goto('/');
   await paginaAdmin.waitForURL(/\/operacion$/);
 
   await expect(paginaAdmin.getByRole('heading', { name: 'Operación', level: 1 })).toBeVisible();
 
-  await expect(cabeceraDeBloque(paginaAdmin, 'Hoy')).toHaveAttribute('aria-expanded', 'true');
-  await expect(cabeceraDeBloque(paginaAdmin, 'Mañana')).toHaveAttribute('aria-expanded', 'false');
-  await expect(cabeceraDeBloque(paginaAdmin, 'Siguientes')).toHaveAttribute(
-    'aria-expanded',
-    'false',
-  );
+  // El dia de entrada es hoy: el selector lo dice.
+  await expect(centroDelSelector(paginaAdmin)).toHaveText('Hoy');
+
+  // Y la lista trae SOLO el aseo de hoy. El de mañana no esta renderizado: no es
+  // que este colapsado, es que la pantalla mira otro dia.
+  await expect(paginaAdmin.locator('[data-slot="tarjeta-aseo"]')).toHaveCount(1);
 });
 
-test('abrir un bloque de día no recarga la página', async ({ paginaAdmin }) => {
+test('navegar de dia NO RECARGA la pagina', async ({ paginaAdmin }) => {
+  const { gestionada, fechas } = escenario;
+  await sembrarAseos(servicio, [{ propiedad: gestionada.id, fecha: fechas.hoy }]);
+
   await paginaAdmin.goto('/operacion');
 
-  // La marca vive en `window` y NO sobrevive a una navegación. Sin ella, un
-  // bloque implementado con un enlace a `?dia=manana` pasaría el assert de
-  // `aria-expanded` igual de bien y nadie se enteraría de que la pantalla entera
-  // se vuelve a pedir cada vez que se abre un día.
+  /**
+   * ── REESCRITO SOBRE EL SELECTOR, Y LA PROPIEDAD ES LA MISMA ──────────────
+   *
+   * Afirmaba que abrir un bloque de dia no recargaba la pagina, y existia porque
+   * un bloque implementado con un enlace a `?dia=manana` habria pasado el assert
+   * de `aria-expanded` igual de bien sin que nadie se enterara de que la pantalla
+   * entera se volvia a pedir en cada clic.
+   *
+   * **Y ahora el selector de dia ES ese enlace**, asi que la pregunta pasa a ser la
+   * de verdad: cambiar de dia tiene que ser una navegacion de CLIENTE del App
+   * Router, no una recarga del documento. Una recarga costaria el arbol entero y
+   * se llevaria por delante el estado de cliente de la lista (el toggle de
+   * cancelados, la tanda a medias).
+   *
+   * La marca vive en `window` y NO sobrevive a una recarga. Es el unico
+   * instrumento que distingue las dos cosas: las dos dejan la URL igual y las dos
+   * pintan el dia nuevo.
+   */
   await paginaAdmin.evaluate(() => {
     (window as unknown as Record<string, unknown>).__marcaDeOperacion = 'viva';
   });
 
-  await cabeceraDeBloque(paginaAdmin, 'Mañana').click();
-  await expect(cabeceraDeBloque(paginaAdmin, 'Mañana')).toHaveAttribute('aria-expanded', 'true');
+  const siguiente = selectorDeDia(paginaAdmin).getByRole('link', { name: /día siguiente/ });
+  await pulsarHastaNavegar(paginaAdmin, siguiente, /[?&]dia=/);
 
   await expect
     .poll(() =>
@@ -810,6 +849,321 @@ async function colorDelTokenDeAviso(p: Page): Promise<string> {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// 1.d LAS DOS COLUMNAS Y LA TARJETA — el rediseño del plan 10-05
+//
+// ── QUE MIDE ESTE BLOQUE ──────────────────────────────────────────────────
+//
+// La estructura que el dueño describio el 2026-09-28: dos columnas al 30 y al 70
+// que scrollean POR DENTRO, una tarjeta por aseo con el sin confirmar como estado
+// visual, y una columna derecha que nunca esta vacia.
+//
+// Todas las medidas se toman a 1280x720, que es el viewport por defecto de
+// `devices['Desktop Chrome']` y el minimo soportado del proyecto (02-UI-SPEC §6.3).
+// ───────────────────────────────────────────────────────────────────────────
+
+test('a 1280 las dos columnas miden 360 y 840, con 32 de hueco', async ({ paginaAdmin }) => {
+  const { gestionada, fechas } = escenario;
+  await sembrarAseos(servicio, [{ propiedad: gestionada.id, fecha: fechas.hoy }]);
+
+  await paginaAdmin.goto('/operacion');
+
+  // La aritmetica esta escrita entera en `@utility rejilla-operacion`: a 1280 los
+  // utiles son 1232 (viewport menos los 24px de `px-xl` por lado), el 30% da 360 y
+  // el 70% da 840. **Son las dos medidas de la pantalla vieja intercambiadas de
+  // lado**: 360 era el carril lateral y 840 el ancho.
+  const medidas = await paginaAdmin.evaluate(() => {
+    const rejilla = document.querySelector('[data-slot="rejilla-dia"]');
+    if (rejilla === null) return null;
+    const hijos = [...rejilla.children].map((h) => Math.round(h.getBoundingClientRect().width));
+    const cajas = [...rejilla.children].map((h) => h.getBoundingClientRect());
+    return {
+      hijos,
+      hueco: cajas.length === 2 ? Math.round(cajas[1].left - cajas[0].right) : -1,
+    };
+  });
+
+  expect(medidas).not.toBeNull();
+  expect(medidas?.hijos).toEqual([360, 840]);
+  expect(medidas?.hueco).toBe(32);
+});
+
+test('con TREINTA tarjetas en el dia la PAGINA no scrollea: scrollea la lista', async ({
+  paginaAdmin,
+}) => {
+  const { gestionada, segunda, tercera, cuarta, quinta, sexta, fechas } = escenario;
+  const unidades = [gestionada, segunda, tercera, cuarta, quinta, sexta];
+
+  /**
+   * ── TREINTA EN UN DIA, Y HACEN FALTA LOS CANCELADOS PARA LLEGAR ──────────
+   *
+   * El indice unico parcial `cleanings_one_active_per_property_date` deja UN aseo
+   * ACTIVO por apartamento y fecha, asi que con seis unidades el techo de activos
+   * en un dia es seis. Su clausula `where` excluye los cancelados, asi que de
+   * cancelados si caben varios por apartamento y fecha.
+   *
+   * Seis activos mas veinticuatro cancelados, con el toggle puesto, dan treinta
+   * tarjetas en pantalla. **Y son tarjetas de verdad**: una cancelada mide y ocupa
+   * exactamente lo mismo que una pendiente, que es lo unico que esta medicion
+   * necesita. Treinta activos pedirian treinta apartamentos sembrados.
+   */
+  const filas: AseoASembrar[] = unidades.map((u) => ({ propiedad: u.id, fecha: fechas.hoy }));
+  for (let i = 0; i < 4; i += 1) {
+    for (const unidad of unidades) {
+      filas.push({ propiedad: unidad.id, fecha: fechas.hoy, estado: 'cancelada' });
+    }
+  }
+  await sembrarAseos(servicio, filas);
+
+  await paginaAdmin.goto('/operacion');
+  await paginaAdmin.getByRole('button', { name: 'Ver cancelados (24)' }).click();
+  await expect(paginaAdmin.locator('[data-slot="tarjeta-aseo"]')).toHaveCount(30);
+
+  const medidas = await paginaAdmin.evaluate(() => {
+    const lista = document.querySelector('[data-slot="lista-dia"] ul');
+    return {
+      documentoScrollea: document.documentElement.scrollHeight > document.documentElement.clientHeight,
+      alturaDoc: document.documentElement.scrollHeight,
+      clienteDoc: document.documentElement.clientHeight,
+      listaScrollea: lista === null ? null : lista.scrollHeight > lista.clientHeight,
+    };
+  });
+
+  // LA PAGINA NO SCROLLEA. Si esto sale rojo con un `scrollHeight` 48 mayor que el
+  // `clientHeight`, la causa es la barra de ambiente de pruebas: mide 48px, se pinta
+  // en todo entorno que no sea produccion —incluido este— y su resta tiene que estar
+  // dentro del `calc()` de la altura del contenedor de pagina.
+  expect(
+    medidas.documentoScrollea,
+    `el documento scrollea: ${medidas.alturaDoc} contra ${medidas.clienteDoc}`,
+  ).toBe(false);
+
+  // Y LA QUE SCROLLEA ES LA LISTA. Sin esta mitad, la de arriba pasaria tambien en
+  // una pantalla que recortara las treinta tarjetas sin dar forma de verlas.
+  expect(medidas.listaScrollea).toBe(true);
+});
+
+test('cada aseo es UNA tarjeta, y la del sin confirmar se distingue SIN abrir nada', async ({
+  paginaAdmin,
+}) => {
+  const { gestionada, segunda, aseadoraA, fechas } = escenario;
+
+  await sembrarAseos(servicio, [
+    // Sin confirmar: `confirmado_at` nulo y `pendiente`.
+    { propiedad: gestionada.id, fecha: fechas.hoy },
+    // Confirmada y asignada: pendiente a secas.
+    { propiedad: segunda.id, fecha: fechas.hoy, aseador: aseadoraA.id, confirmado: true },
+  ]);
+
+  await paginaAdmin.goto('/operacion');
+
+  const tarjetas = paginaAdmin.locator('[data-slot="tarjeta-aseo"]');
+  await expect(tarjetas).toHaveCount(2);
+
+  /**
+   * ── EL SIN CONFIRMAR ES UN ESTADO DE LA TARJETA, NO UNA SECCION ──────────
+   *
+   * Se mide sobre `data-estado`, que es la CLAVE DEL DOMINIO y no su traduccion:
+   * una asercion sobre el texto `Sin confirmar` se rompe el dia que alguien
+   * reescriba la copia, y ademas ese texto tambien lo pinta el rotulo de la metrica
+   * del vistazo.
+   */
+  const sinConfirmar = tarjetaDe(paginaAdmin, gestionada.nombre);
+  await expect(sinConfirmar.locator('[data-estado]')).toHaveAttribute(
+    'data-estado',
+    'sin_confirmar',
+  );
+
+  // Y LA DE AL LADO NO: es el control que hace que lo de arriba signifique algo.
+  await expect(tarjetaDe(paginaAdmin, segunda.nombre).locator('[data-estado]')).toHaveAttribute(
+    'data-estado',
+    'pendiente',
+  );
+
+  // El icono del sin confirmar es el del dominio (`Inbox`), y esa silueta es lo que
+  // lo distingue de un vistazo dentro de la misma lista.
+  await expect(sinConfirmar.locator('svg').first()).toHaveClass(/lucide-inbox/);
+});
+
+test('la lista se ordena por HORA LIMITE, y el sin confirmar NO flota arriba', async ({
+  paginaAdmin,
+}) => {
+  const { gestionada, segunda, tercera, aseadoraA, fechas } = escenario;
+
+  /**
+   * ── ESTO INVIERTE A MEDIAS UN CONTRATO ESCRITO, Y POR ESO SE MIDE ────────
+   *
+   * `TablaDia` decia: los sin confirmar NO flotan arriba porque su superficie es
+   * la bandeja del carril, y duplicarlos arriba del dia los listaria dos veces.
+   * **Esa razon murio con la bandeja.**
+   *
+   * La que la sustituye es otra y hay que defenderla con una asercion, no con un
+   * comentario: reordenar por estado hace que la MISMA tarjeta cambie de sitio
+   * cuando alguien la confirma, debajo del cursor, en una lista que se refresca
+   * sola por tiempo real.
+   *
+   * El sin confirmar se siembra en el MEDIO a proposito: primero y ultimo pasarian
+   * por casualidad con varios ordenes distintos.
+   */
+  await sembrarAseos(servicio, [
+    { propiedad: gestionada.id, fecha: fechas.hoy, horaLimite: '09:00', aseador: aseadoraA.id, confirmado: true },
+    // El del medio, y el unico sin confirmar.
+    { propiedad: segunda.id, fecha: fechas.hoy, horaLimite: '12:00' },
+    { propiedad: tercera.id, fecha: fechas.hoy, horaLimite: '15:00', aseador: aseadoraA.id, confirmado: true },
+  ]);
+
+  await paginaAdmin.goto('/operacion');
+
+  const horas = await paginaAdmin
+    .locator('[data-slot="tarjeta-aseo"]')
+    .evaluateAll((tarjetas) =>
+      tarjetas.map((t) => (t.textContent ?? '').match(/\d{2}:\d{2}/)?.[0] ?? '??'),
+    );
+
+  expect(horas).toEqual(['09:00', '12:00', '15:00']);
+});
+
+test('una tarjeta con la hora limite VENCIDA no se tinta, ni cambia de peso, ni de alto', async ({
+  paginaAdmin,
+}) => {
+  const { gestionada, segunda, aseadoraA, fechas } = escenario;
+
+  /**
+   * ── LA PROHIBICION DE 05-UI-SPEC §12.5 NO CADUCA AL CAMBIAR DE FORMA ─────
+   *
+   * Decia: ninguna FILA atrasada se tinta, ni cambia de peso, ni de alto, porque lo
+   * que la distinguia era el bloque `Atrasados`, un canal de mucho mas ancho de
+   * banda que un tinte. El bloque murio; el canal que lo sustituye es el SELECTOR DE
+   * DIA, que es mas ancho todavia: no es que la tarjeta se vea distinta, es que
+   * estas mirando otro dia.
+   *
+   * Se siembran dos aseos del MISMO dia, los dos confirmados para que el borde de
+   * estado del sin confirmar no participe, y con horas limite a los dos lados del
+   * reloj. El primero esta VENCIDO —lo dice su `Hourglass`— y el segundo no.
+   */
+  await sembrarAseos(servicio, [
+    { propiedad: gestionada.id, fecha: fechas.hoy, horaLimite: '00:00', aseador: aseadoraA.id, confirmado: true },
+    { propiedad: segunda.id, fecha: fechas.hoy, horaLimite: '23:59', aseador: aseadoraA.id, confirmado: true },
+  ]);
+
+  await paginaAdmin.goto('/operacion');
+
+  const vencida = tarjetaDe(paginaAdmin, gestionada.nombre);
+  const alDia = tarjetaDe(paginaAdmin, segunda.nombre);
+
+  // CONTROL: la vencida SI lo dice, y lo dice con la señal inline del dominio. Sin
+  // esta mitad, las comparaciones de abajo pasarian sobre dos tarjetas que la
+  // pantalla no distingue en absoluto y no probarian nada.
+  await expect(vencida.getByRole('img', { name: 'Se venció la hora límite' })).toBeVisible();
+  await expect(alDia.getByRole('img', { name: 'Se venció la hora límite' })).toHaveCount(0);
+
+  // Y AHORA LAS TRES QUE LA PROHIBICION NOMBRA. Se mide el estilo COMPUTADO y no la
+  // lista de clases: una clase que no este en el archivo puede llegar de un ancestro.
+  const [estiloVencida, estiloAlDia] = await Promise.all(
+    [vencida, alDia].map((t) =>
+      t.evaluate((el) => {
+        const s = getComputedStyle(el);
+        return {
+          fondo: s.backgroundColor,
+          peso: s.fontWeight,
+          alto: (el as HTMLElement).offsetHeight,
+        };
+      }),
+    ),
+  );
+
+  expect(estiloVencida.fondo, 'NO SE TINTA').toBe(estiloAlDia.fondo);
+  expect(estiloVencida.peso, 'NO CAMBIA DE PESO').toBe(estiloAlDia.peso);
+  expect(estiloVencida.alto, 'NO CAMBIA DE ALTO').toBe(estiloAlDia.alto);
+});
+
+test('la franja de carga dice DE QUE DIA habla, y no siempre `Carga de hoy`', async ({
+  paginaAdmin,
+}) => {
+  const { gestionada, aseadoraA, fechas } = escenario;
+  await sembrarAseos(servicio, [
+    { propiedad: gestionada.id, fecha: fechas.manana, aseador: aseadoraA.id, confirmado: true },
+  ]);
+
+  // En HOY dice lo de siempre, que es el literal que las tres unitarias de
+  // `FranjaCarga.test.ts` afirman y que sigue siendo el default de la prop.
+  await paginaAdmin.goto('/operacion');
+  await expect(paginaAdmin.locator('[data-slot="info-dia"]')).toContainText('Carga de hoy');
+
+  // Y en otro dia dice ESE dia. `Carga de hoy` mientras la pantalla esta en el
+  // viernes es una mentira pequeña y constante: el dato es correcto y responde a la
+  // pregunta equivocada.
+  await paginaAdmin.goto(`/operacion?dia=${fechas.manana}`);
+  const info = paginaAdmin.locator('[data-slot="info-dia"]');
+  await expect(info).toContainText(`Carga del ${formatFechaLargaBog(fechas.manana)}`);
+  await expect(info).not.toContainText('Carga de hoy');
+});
+
+test('NO existe ninguna seccion `Sin confirmar`: la bandeja murio', async ({ paginaAdmin }) => {
+  const { gestionada, fechas } = escenario;
+  await sembrarAseos(servicio, [{ propiedad: gestionada.id, fecha: fechas.hoy }]);
+
+  await paginaAdmin.goto('/operacion');
+
+  // `BandejaSinConfirmar` renderizaba un `<h2>Sin confirmar</h2>`. Se mide sobre el
+  // ROL de encabezado y no sobre el texto: `Sin confirmar` sigue existiendo en la
+  // pantalla, como rotulo de la metrica del vistazo y como etiqueta del estado de la
+  // tarjeta. Lo que no existe es la SECCION.
+  await expect(paginaAdmin.getByRole('heading', { name: 'Sin confirmar' })).toHaveCount(0);
+
+  // Y el estado si esta, en los dos sitios que lo sustituyen.
+  await expect(paginaAdmin.locator('[data-metrica="sin-confirmar"]')).toHaveCount(1);
+  await expect(paginaAdmin.locator('[data-estado="sin_confirmar"]')).toHaveCount(1);
+});
+
+test('sin seleccion, la columna derecha NO esta vacia', async ({ paginaAdmin }) => {
+  const { gestionada, aseadoraA, fechas } = escenario;
+  await sembrarAseos(servicio, [
+    { propiedad: gestionada.id, fecha: fechas.hoy, aseador: aseadoraA.id, confirmado: true },
+  ]);
+
+  await paginaAdmin.goto('/operacion');
+
+  // Lo pidio el dueño con esas palabras: **nunca una caja vacia**. Una columna del
+  // 70% del ancho esperando a que alguien pulse algo ocupa el sitio mas grande de la
+  // pantalla y no dice nada, asi que el admin aprende a no mirarla.
+  const info = paginaAdmin.locator('[data-slot="info-dia"]');
+  await expect(info).toBeVisible();
+
+  // Las tres piezas que el contrato nombra.
+  await expect(info.getByText('Carga de hoy')).toBeVisible();
+  await expect(info.getByRole('heading', { name: 'Desglose' })).toBeVisible();
+  await expect(info.getByRole('button', { name: 'Crear aseo' })).toBeVisible();
+});
+
+test('a 1279 la pantalla se APILA y la lista del dia va primero', async ({ paginaAdmin }) => {
+  const { gestionada, fechas } = escenario;
+  await sembrarAseos(servicio, [{ propiedad: gestionada.id, fecha: fechas.hoy }]);
+
+  await paginaAdmin.setViewportSize({ width: 1279, height: 720 });
+  await paginaAdmin.goto('/operacion');
+
+  // El corte es `xl:` (1280) y no `lg:` (1024): a 1024 los utiles son 976, menos el
+  // hueco son 944, y el 30% da 283px, por debajo de los 360 que hacen falta para una
+  // tarjeta legible con estado, nombre y hora.
+  const apilado = await paginaAdmin.evaluate(() => {
+    const rejilla = document.querySelector('[data-slot="rejilla-dia"]');
+    if (rejilla === null) return null;
+    const cajas = [...rejilla.children].map((h) => h.getBoundingClientRect());
+    return {
+      // Apilado: las dos cajas arrancan en la MISMA x y a distinta y.
+      mismaColumna: cajas.every((c) => Math.round(c.left) === Math.round(cajas[0].left)),
+      listaPrimero:
+        (rejilla.children[0] as HTMLElement).dataset.slot === 'lista-dia',
+    };
+  });
+
+  expect(apilado?.mismaColumna).toBe(true);
+  // LO QUE SE OPERA VA ANTES DE LO QUE SE CONSULTA. El orden visual apilado es el
+  // del DOM, asi que se mide sobre el DOM.
+  expect(apilado?.listaPrimero).toBe(true);
+});
+
+// ───────────────────────────────────────────────────────────────────────────
 // 2. EL FLUJO COMPLETO DEL CRITERIO 3, ENCADENADO SOBRE EL MISMO ASEO
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -884,17 +1238,29 @@ test('crear, confirmar, reasignar, reprogramar y cerrar, el mismo aseo de punta 
   await dialogoReprogramar.getByRole('button', { name: 'Reprogramar' }).click();
   await esperarToast(paginaAdmin, `El aseo quedó para el ${formatFechaBog(fechas.pasado)}.`);
 
-  // ── (e) CERRAR MANUALMENTE, ya dentro de `Siguientes` ────────────────────
-  // El aseo se fue del bloque `Hoy`. Hay que abrir DOS bloques, y el segundo es
-  // una consecuencia real del diseño que conviene tener escrita: `Siguientes`
-  // nace colapsado, y el día de dentro nace colapsado TAMBIÉN, porque cuando la
-  // pantalla se montó ese día tenía cero filas (`expandidoInicial` se evalúa una
-  // sola vez, al montar). El `router.refresh()` de la reprogramación trae la fila
-  // nueva pero no vuelve a montar el bloque, así que su estado de colapso se
-  // conserva. No es un fallo: es lo que hace que la pantalla no se reorganice
-  // sola debajo del cursor cada vez que entra un cambio por Realtime.
-  await abrirBloque(paginaAdmin, 'Siguientes');
-  await abrirBloque(paginaAdmin, rotuloDeFecha(fechas.pasado));
+  // ── (e) CERRAR MANUALMENTE, ya en el DIA NUEVO ──────────────────────────
+  //
+  // ── REESCRITO EN EL PLAN 10-05, Y EL PASO SE SIMPLIFICO ──────────────────
+  //
+  // Antes habia que abrir DOS bloques: `Siguientes` y, dentro, el dia. El segundo
+  // era una consecuencia real del diseño viejo que el caso tenia escrita: ese dia
+  // nacia colapsado porque al MONTAR la pantalla tenia cero filas, y el
+  // `router.refresh()` de la reprogramacion traia la fila sin volver a montar el
+  // bloque.
+  //
+  // Con el eje del dia, reprogramar saca el aseo del dia que esta en pantalla y
+  // hay que IR a su dia nuevo. Es mas trabajo para el admin que expandir un bloque
+  // —una navegacion contra un clic— y a cambio la pantalla no tiene tres listas
+  // apiladas. Es la decision del rediseño, vista desde el unico sitio donde
+  // cuesta.
+  //
+  // Y ANTES DE IR, EL CONTROL: el aseo ya NO esta en el dia de hoy. Sin el, la
+  // asercion de abajo pasaria sobre una pantalla que renderizara la ventana
+  // entera.
+  await expect(tarjetaDe(paginaAdmin, gestionada.nombre)).toHaveCount(0);
+
+  await paginaAdmin.goto(`/operacion?dia=${fechas.pasado}`);
+  await expect(tarjetaDe(paginaAdmin, gestionada.nombre)).toHaveCount(1);
 
   await menuDelAseo(paginaAdmin, gestionada.nombre, fechas.pasado).click();
   await paginaAdmin.getByRole('menuitem', { name: 'Cerrar manualmente', exact: true }).click();
@@ -1027,30 +1393,46 @@ test('crear sobre una fecha ya ocupada da el error BAJO el campo de fecha, sin c
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// 5. EL SHEET ENCADENADO: QUINCE, CONFIRMAR TRES Y CERRAR A MITAD
+// 5. EL SHEET ENCADENADO: SEIS, CONFIRMAR TRES Y CERRAR A MITAD
 // ───────────────────────────────────────────────────────────────────────────
 
-test('confirmar tres de quince y cerrar a mitad NO pierde lo confirmado', async ({
+test('confirmar tres de seis y cerrar a mitad NO pierde lo confirmado', async ({
   paginaAdmin,
 }) => {
-  const { gestionada, segunda, tercera, fechas } = escenario;
+  const { gestionada, segunda, tercera, cuarta, quinta, sexta, fechas } = escenario;
 
-  // Quince sin confirmar, que es la tanda que una corrida del sync mete de golpe
-  // y para la que el `Sheet` está calibrado (§10). Hacen falta TRES apartamentos:
-  // el índice único parcial deja un aseo activo por apartamento y fecha, y la
-  // ventana son siete días.
-  const filas = [];
-  for (let dia = 0; dia < 5; dia += 1) {
-    const fecha = diaSumado(fechas.hoy, dia);
-    filas.push({ propiedad: gestionada.id, fecha });
-    filas.push({ propiedad: segunda.id, fecha });
-    filas.push({ propiedad: tercera.id, fecha });
-  }
-  await sembrarAseos(servicio, filas);
+  /**
+   * ── LA TANDA BAJO DE QUINCE A SEIS, Y NO ES UN AFLOJAMIENTO (D-05-8) ─────
+   *
+   * Antes eran quince: tres apartamentos por cinco dias. La tanda confirmaba los
+   * sin confirmar de la VENTANA ENTERA, asi que lo escaso era el APARTAMENTO —el
+   * indice unico parcial deja UN aseo activo por apartamento y fecha— y el dia daba
+   * holgura.
+   *
+   * La tanda paso a ser POR DIA, porque el dueño pidio que todo salga de la fecha
+   * del selector sin excepcion. **El indice unico sigue ahi**, asi que quince sin
+   * confirmar EN UN SOLO DIA exigirian quince apartamentos sembrados.
+   *
+   * Seis es lo MINIMO que permite confirmar tres y cerrar A MITAD, que es la
+   * propiedad que este caso defiende y que no se toca. **Lo escaso paso a ser el
+   * apartamento y no el dia.**
+   *
+   * Y lo que hay que dejar escrito porque se pierde: la calibracion del `Sheet`
+   * para quince es una AFIRMACION DE DISEÑO (§10) y NO un requisito de este test.
+   * Que corra con seis no dice nada sobre si quince siguen cabiendo; eso lo dice el
+   * contrato, y volver a medirlo pediria quince apartamentos, no quince dias.
+   */
+  await sembrarAseos(
+    servicio,
+    [gestionada, segunda, tercera, cuarta, quinta, sexta].map((unidad) => ({
+      propiedad: unidad.id,
+      fecha: fechas.hoy,
+    })),
+  );
 
   await paginaAdmin.goto('/operacion');
 
-  const cta = paginaAdmin.getByRole('button', { name: 'Confirmar 15 aseos' });
+  const cta = paginaAdmin.getByRole('button', { name: 'Confirmar 6 aseos' });
   await expect(cta).toBeVisible();
   await cta.click();
 
@@ -1068,7 +1450,7 @@ test('confirmar tres de quince y cerrar a mitad NO pierde lo confirmado', async 
   expect(caja.width).toBe(480);
 
   for (let i = 1; i <= 3; i += 1) {
-    await expect(sheet.getByText(`${i} de 15`, { exact: true })).toBeVisible();
+    await expect(sheet.getByText(`${i} de 6`, { exact: true })).toBeVisible();
 
     const campo = sheet.getByLabel('Número de huéspedes');
     // §16.3: al encadenar, el foco vuelve al campo de huéspedes y no se queda en
@@ -1084,16 +1466,16 @@ test('confirmar tres de quince y cerrar a mitad NO pierde lo confirmado', async 
   // aspa de cierre, cuyo nombre accesible es también `Cerrar` (el `sr-only` que
   // el plan 02 tradujo del CLI). Sin acotar, Playwright falla por strict mode, y
   // acotar con `.first()` dejaría el test a merced del orden del DOM.
-  await expect(sheet.getByText('4 de 15', { exact: true })).toBeVisible();
+  await expect(sheet.getByText('4 de 6', { exact: true })).toBeVisible();
   await sheet.locator('form').getByRole('button', { name: 'Cerrar', exact: true }).click();
 
   await esperarToastQueEmpiezaCon(
     paginaAdmin,
-    'Confirmaste 3 de 15. Los demás siguen en la bandeja.',
+    'Confirmaste 3 de 6. Los demás siguen en la bandeja.',
   );
 
-  // La bandeja queda con doce.
-  await expect(paginaAdmin.getByRole('button', { name: 'Confirmar 12 aseos' })).toBeVisible();
+  // La lista del dia queda con tres por confirmar.
+  await expect(paginaAdmin.getByRole('button', { name: 'Confirmar 3 aseos' })).toBeVisible();
 
   // ── D-10 EN LA BASE, QUE ES DONDE IMPORTA ────────────────────────────────
   // Lo confirmado NO se pierde jamás: cada aseo se escribió en su propia llamada.
@@ -1102,7 +1484,7 @@ test('confirmar tres de quince y cerrar a mitad NO pierde lo confirmado', async 
   const { data: confirmados, error } = await servicio
     .from('cleanings')
     .select('id, num_huespedes, aseador_id')
-    .in('property_id', [gestionada.id, segunda.id, tercera.id])
+    .in('property_id', [gestionada, segunda, tercera, cuarta, quinta, sexta].map((u) => u.id))
     .not('confirmado_at', 'is', null);
   if (error) throw new Error(error.message);
 
@@ -1138,13 +1520,17 @@ test('una unidad de gestión externa aparece en el día, con su contacto, y SIN 
 
   await paginaAdmin.goto('/operacion');
 
-  // La FECHA del día la lleva la cabecera del bloque, que es donde el contrato la
-  // pone: la fila no repite la fecha en cada línea.
-  await expect(
-    cabeceraDeBloque(paginaAdmin, 'Hoy').filter({ hasText: formatFechaBog(fechas.hoy) }),
-  ).toBeVisible();
-
-  const filaInerte = paginaAdmin.getByRole('row').filter({ hasText: externa.nombre });
+  // ── REESCRITO EN EL PLAN 10-05: DE FILA DE TABLA A TARJETA ──────────────
+  //
+  // Las CUATRO propiedades que este caso defiende son las mismas y no se aflojo
+  // ninguna: la unidad externa esta, lleva su contacto, no tiene menu, y sus dos
+  // huecos dicen `no aplica`. Lo unico que cambia es el localizador, porque ya no
+  // hay `<table>` y `getByRole('row')` no encuentra nada.
+  //
+  // Lo que SI se fue es la asercion de la fecha en la cabecera del bloque: esa
+  // cabecera murio con los acordeones. **La fecha del dia no se perdio**, la dice
+  // el selector, y su caso propio la mide en el bloque 1.b.
+  const filaInerte = tarjetaDe(paginaAdmin, externa.nombre);
 
   // (a) Está, y con su contacto externo: es el "a cargo de quién" que pide
   //     DASH-07. Sacarla a otra vista rompería el panorama del día.
@@ -1157,7 +1543,7 @@ test('una unidad de gestión externa aparece en el día, con su contacto, y SIN 
   // (c) CONTROL, y sin él la aserción de arriba pasaría sobre una pantalla que no
   //     renderiza menús en ninguna fila. La fila gestionada del MISMO día sí lo
   //     tiene.
-  const filaNormal = paginaAdmin.getByRole('row').filter({ hasText: gestionada.nombre });
+  const filaNormal = tarjetaDe(paginaAdmin, gestionada.nombre);
   await expect(filaNormal.getByRole('button', { name: /^Acciones del aseo/ })).toHaveCount(1);
 
   // (d) Los dos huecos de la fila inerte se anuncian como `no aplica` y no como
@@ -1783,7 +2169,10 @@ test('CRITERIO 4: la fila de gestión externa no abre panel, y su nombre sigue l
 
   await paginaAdmin.goto('/operacion');
 
-  const fila = paginaAdmin.getByRole('row').filter({ hasText: externa.nombre });
+  // REESCRITO EN EL PLAN 10-05: de fila de tabla a tarjeta. Las dos mitades que
+  // este caso defiende —que tocarla no abre nada y que su nombre sigue llevando a
+  // la ficha— son las mismas y no se afloja ninguna.
+  const fila = tarjetaDe(paginaAdmin, externa.nombre);
   await expect(fila).toHaveCount(1);
 
   // ── MITAD 1: TOCAR LA FILA NO ABRE NADA ─────────────────────────────────

@@ -286,44 +286,46 @@ test.describe('Finanzas, con dos periodos cerrados y uno en curso', () => {
 
     expect(secciones).toEqual(['Operación', 'Apartamentos', 'Aseadores', 'Finanzas']);
 
-    // ── MITAD B: la tabla del día NO tiene ni una columna de dinero ────────
-    // Se mira TODA la tabla, no solo sus encabezados: una celda con una cifra de
-    // pesos dentro de una columna que se llame de otra forma rompe D7-1 igual.
+    // ── MITAD B: LA LISTA DEL DÍA NO MUESTRA NI UNA CIFRA DE PESOS ────────
     //
-    // ── EL BLOQUE DEL DÍA HAY QUE ABRIRLO, Y MEDIRLO CUESTA UNA HORA ───────
-    // `BloqueDia` es colapsable. Cerrado, su contenido está en el DOM pero
-    // `hidden`, así que queda FUERA del árbol de accesibilidad y
-    // `getByRole('table')` devuelve CERO. El síntoma es una lista de encabezados
-    // vacía, que se lee como "la tabla perdió sus columnas" y no como "la tabla
-    // está cerrada". Mismo patrón que `abrirBloque()` de `operacion.spec.ts`.
-    const cabeceraDeHoy = paginaAdmin.getByRole('button', { name: /^Hoy/ });
-    if ((await cabeceraDeHoy.getAttribute('aria-expanded')) === 'false') {
-      await cabeceraDeHoy.click();
-    }
-    await expect(cabeceraDeHoy).toHaveAttribute('aria-expanded', 'true');
+    // ── REESCRITO EN EL PLAN 10-05, Y LA PROPIEDAD DE D7-1 ES LA MISMA ────
+    //
+    // Afirmaba la lista EXACTA de los seis encabezados de la tabla del día, y
+    // además que su texto no llevara pesos. La tabla murió con el rediseño: cada
+    // aseo es ahora una `[data-slot="tarjeta-aseo"]` y no hay encabezados que
+    // listar. Con ellos se va también el párrafo sobre abrir el bloque colapsado,
+    // porque ya no hay bloques.
+    //
+    // **Lo que D7-1 pide vigilar sobrevive entero, y es la mitad que importaba**:
+    // que el dinero NO se asome a la pantalla operativa. Se mide sobre el texto de
+    // TODAS las tarjetas del día, que es donde una columna nueva de dinero habría
+    // acabado igual. Y se añade la columna derecha, que en la pantalla vieja no
+    // existía y es superficie nueva donde el dinero podría colarse.
+    const lista = paginaAdmin.locator('[data-slot="lista-dia"]');
+    await expect(lista).toBeVisible();
 
-    const tablaDelDia = paginaAdmin.getByRole('table').first();
-    // `count()` no espera. Sin este `toBeVisible()`, una lectura antes de la
-    // hidratación devuelve cero filas y el fallo apunta al sitio equivocado.
-    await expect(tablaDelDia).toBeVisible();
-
-    // `Acciones` es el encabezado de la columna del menú: va en un `sr-only`,
-    // que el árbol de accesibilidad SÍ expone. Se afirma la lista completa a
-    // propósito: una columna nueva de dinero rompería esta igualdad, que es
-    // exactamente lo que D7-1 pide vigilar.
-    expect(await encabezados(tablaDelDia)).toEqual([
-      'Estado',
-      'Apartamento',
-      'Hora límite',
-      'A cargo',
-      'Huéspedes',
-      'Acciones',
-    ]);
-
-    const contenidoDelDia = (await tablaDelDia.textContent()) ?? '';
+    const contenidoDelDia = (await lista.textContent()) ?? '';
     expect(
       contenidoDelDia,
-      'la tabla de /operacion no muestra ni una cifra de pesos: el dinero vive en Finanzas (D7-1)',
+      'la lista del día de /operacion no muestra ni una cifra de pesos: el dinero vive en Finanzas (D7-1)',
+    ).not.toMatch(/\$\s?\d/);
+
+    // ── Y LA COLUMNA DERECHA TAMPOCO, CON UNA EXCEPCION DECLARADA ─────────
+    //
+    // El vistazo del día SÍ lleva una cifra de pesos: la métrica `Gastos del día`,
+    // que el dueño pidió el 2026-09-28 con esas palabras. **Eso no rompe D7-1 y hay
+    // que decir por qué**: D7-1 saca de la pantalla operativa el MARGEN —tarifa,
+    // pago y su diferencia—, que es lo que se comparte cuando se comparte la
+    // pantalla. Un gasto reportado por la aseadora no es margen: es un hecho del
+    // día, como un daño o un faltante.
+    //
+    // Por eso la aserción se acota a `[data-slot="info-dia"]` y no a la pantalla
+    // entera: la columna derecha es superficie NUEVA y ahí no entra ninguna cifra.
+    const info = paginaAdmin.locator('[data-slot="info-dia"]');
+    const contenidoDeInfo = (await info.textContent()) ?? '';
+    expect(
+      contenidoDeInfo,
+      'la columna derecha de /operacion tampoco muestra dinero (D7-1)',
     ).not.toMatch(/\$\s?\d/);
 
     // ── Y al entrar, el link queda marcado como página actual ──────────────

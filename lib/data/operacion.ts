@@ -146,57 +146,19 @@ export type FilaDeOperacion = Pick<
   sin_evidencia_completa: boolean;
 };
 
-/** Un día del carril ancho, con su cabecera propia (UI-SPEC §8.1). */
-export interface GrupoDeDia {
-  /** `'YYYY-MM-DD'`. Se formatea con `formatFechaBog()` al pintar. */
-  fecha: string;
-  filas: FilaDeOperacion[];
-}
-
-/**
- * Los tres bloques de UI-SPEC §8.1, el cuarto que trajo D-08, y las dos líneas
- * de lo que queda fuera de la ventana por cada lado.
+/*
+ * ── `GrupoDeDia` Y `BloquesDeAgenda` SE FUERON CON `agruparPorDia` (plan 10-05) ──
  *
- * LOS CUATRO CAMPOS DE `Atrasados` SON DATOS, NO PRESENTACIÓN. Quién decide si
- * el bloque se pinta, en qué orden va y cómo se redacta su cabecera es el
- * componente; acá solo se dice qué hay.
+ * Codificaban el eje `Atrasados / Hoy / Mañana / Siguientes`, o sea "relativo a
+ * hoy", DENTRO de la capa de datos. Con un selector de día, `Mañana` deja de tener
+ * significado: la pantalla se filtra por UN día y lo que queda en su sitio es
+ * `filasDelDia()` más `resumenDelDia()`.
+ *
+ * `HORIZONTE_DIAS` y `VENTANA_ATRAS_DIAS` **se quedan**, y borrarlas sería el error:
+ * siguen definiendo la ventana que alimenta las alertas —en particular la de hora
+ * límite vencida, que es el criterio 7 del ROADMAP— y la cifra de desbordamiento de
+ * `Sin confirmar` del vistazo.
  */
-export interface BloquesDeAgenda {
-  /**
-   * Aseos VIVOS y gestionados con fecha anterior a hoy, dentro de la ventana de
-   * `VENTANA_ATRAS_DIAS` (05-UI-SPEC §12.2). Agrupados POR DÍA y ascendentes: lo
-   * más viejo primero.
-   *
-   * AL REVÉS QUE `siguientes`, SOLO SE EMITEN LOS DÍAS CON CONTENIDO. Un día
-   * futuro vacío es información —no hay nada programado y el admin lo confirma—;
-   * un día pasado vacío es que no había nada que hacer, y siete cabeceras en
-   * cero serían un muro que entrena a saltarse el bloque justo cuando importa
-   * (§12.3).
-   */
-  atrasados: GrupoDeDia[];
-  hoy: GrupoDeDia;
-  manana: GrupoDeDia;
-  /** D+2 … D+6. Siempre cinco grupos, vacíos incluidos. */
-  siguientes: GrupoDeDia[];
-  /** `hoy + HORIZONTE_DIAS`, para la línea `Hay N aseos programados después del …`. */
-  ultimoDiaDelHorizonte: string;
-  /** Cuántos aseos quedan por detrás del horizonte. Se cuentan, no se agrupan. */
-  masAllaDelHorizonte: number;
-  /** `hoy - VENTANA_ATRAS_DIAS`, para la línea `Hay N aseos sin cerrar de antes del …`. */
-  primerDiaDeLaVentana: string;
-  /**
-   * Cuántos aseos vivos quedan por detrás de la ventana. Se cuentan, no se
-   * agrupan, exactamente como `masAllaDelHorizonte` por el otro extremo.
-   */
-  antesDeLaVentana: number;
-  /**
-   * La fecha del atrasado más antiguo DENTRO de la ventana, `null` si no hay
-   * ninguno. La cabecera la usa para decir `3 aseos · el más viejo del 4 de
-   * septiembre`: `3 aseos` a secas no es una decisión, porque tres de ayer y
-   * tres de hace una semana son problemas distintos (§12.2).
-   */
-  masViejoAtrasado: string | null;
-}
 
 /** Un chip de la franja de carga. `aseadorId` nulo es el chip `Sin asignar`. */
 export interface ChipDeCarga {
@@ -570,121 +532,6 @@ export function resumenDelDia(
         ).length;
 
   return { activos, sinConfirmar, sinConfirmarEnOtrosDias, urgentes, gastos };
-}
-
-/**
- * Los tres bloques del carril ancho (DASH-01), sobre las filas ya traídas.
- *
- * Toda comparación de fechas se hace sobre cadenas `'YYYY-MM-DD'` y NUNCA
- * construyendo un `Date`: el orden lexicográfico de esa forma coincide con el
- * cronológico, y un `new Date('2026-09-10')` se parsea como medianoche UTC y en
- * Bogotá renderiza el día anterior.
- *
- * Los cinco grupos de `Siguientes` se emiten SIEMPRE, vacíos incluidos: UI-SPEC
- * §8.1 pinta la cabecera del día con `0 aseos` porque que hoy no haya nada en un
- * día es información, no un día que se oculta.
- *
- * ── EL SEGUNDO FILTRO DE FECHA, QUE D-08 REESCRIBIÓ Y NO BORRÓ ────────────
- *
- * Hasta D-08 acá había un descarte de todo lo anterior a `hoy`, redundante con
- * el `.gte()` de la consulta, y su razón de existir era —y sigue siendo— que
- * esta función también la llaman los tests con filas armadas a mano: una
- * proyección que dependa de que su entrada venga filtrada es una proyección que
- * miente en cuanto alguien la reutiliza. Por eso el filtro es SUYO y no se puede
- * delegar a la consulta.
- *
- * Lo que cambió es a dónde van esas filas: a partir de D-08 **sí tienen sitio**,
- * el bloque `Atrasados`. Y ese es justo el motivo por el que ampliar solo la
- * consulta habría dejado el defecto intacto con apariencia de arreglado: las
- * filas habrían llegado y este descarte las habría vuelto a tirar, con el bloque
- * saliendo vacío y sin que nada avisara.
- *
- * Lo que NO cambió: un aseo anterior a `hoy` sigue sin colarse en `hoy`, en
- * `mañana`, en `siguientes` ni en el conteo del horizonte.
- */
-export function agruparPorDia(filas: FilaDeOperacion[], hoy: string): BloquesDeAgenda {
-  const manana = sumarDias(hoy, 1);
-  const ultimoDiaDelHorizonte = sumarDias(hoy, HORIZONTE_DIAS);
-  const primerDiaDeLaVentana = sumarDias(hoy, -VENTANA_ATRAS_DIAS);
-
-  const bloqueHoy: GrupoDeDia = { fecha: hoy, filas: [] };
-  const bloqueManana: GrupoDeDia = { fecha: manana, filas: [] };
-
-  const siguientes: GrupoDeDia[] = [];
-  for (let offset = 2; offset <= HORIZONTE_DIAS; offset += 1) {
-    siguientes.push({ fecha: sumarDias(hoy, offset), filas: [] });
-  }
-  const porFecha = new Map(siguientes.map((grupo) => [grupo.fecha, grupo]));
-
-  let masAllaDelHorizonte = 0;
-
-  // Los días atrasados se descubren sobre la marcha (solo los que tienen algo),
-  // así que se indexan en un mapa y se ordenan al final. Al revés que
-  // `siguientes`, que es una rejilla fija de cinco días conocidos de antemano.
-  const atrasadosPorFecha = new Map<string, GrupoDeDia>();
-  let antesDeLaVentana = 0;
-
-  for (const fila of filas) {
-    const fecha = fila.scheduled_date;
-
-    if (fecha < hoy) {
-      // El contenido de `Atrasados` (§12.2): gestionado y con trabajo vivo. Un
-      // aseo terminado o cancelado de ayer NO está atrasado, está cerrado, y una
-      // unidad de gestión externa no la opera VivaGuest, así que no hay nada que
-      // el admin pueda hacer con ella. Mismo predicado que usa
-      // `alertasComputadas()` para decidir si alerta, y no por casualidad: la
-      // alerta y la fila donde aterriza su clic tienen que aparecer juntas o no
-      // aparecer (T-05-55).
-      const vivo = fila.is_managed && fila.state !== null && ESTADOS_VIVOS.has(fila.state);
-      if (!vivo) continue;
-
-      // Fuera de la ventana se CUENTA y no se agrupa, igual que lo que queda más
-      // allá del horizonte por el otro extremo (§12.4).
-      if (fecha < primerDiaDeLaVentana) {
-        antesDeLaVentana += 1;
-        continue;
-      }
-
-      const grupo = atrasadosPorFecha.get(fecha);
-      if (grupo) grupo.filas.push(fila);
-      else atrasadosPorFecha.set(fecha, { fecha, filas: [fila] });
-      continue;
-    }
-
-    if (fecha === hoy) {
-      bloqueHoy.filas.push(fila);
-      continue;
-    }
-    if (fecha === manana) {
-      bloqueManana.filas.push(fila);
-      continue;
-    }
-
-    const grupo = porFecha.get(fecha);
-    // Sin grupo solo puede significar una cosa: la fecha pasó del horizonte.
-    // Los días son discretos y los cinco intermedios están todos en el mapa.
-    if (grupo) grupo.filas.push(fila);
-    else masAllaDelHorizonte += 1;
-  }
-
-  // Ascendente: lo más viejo arriba. La comparación es entre cadenas
-  // `'YYYY-MM-DD'`, cuyo orden lexicográfico coincide con el cronológico; no se
-  // construye ningún `Date`.
-  const atrasados = [...atrasadosPorFecha.values()].sort((a, b) =>
-    a.fecha < b.fecha ? -1 : 1,
-  );
-
-  return {
-    atrasados,
-    hoy: bloqueHoy,
-    manana: bloqueManana,
-    siguientes,
-    ultimoDiaDelHorizonte,
-    masAllaDelHorizonte,
-    primerDiaDeLaVentana,
-    antesDeLaVentana,
-    masViejoAtrasado: atrasados.length === 0 ? null : atrasados[0].fecha,
-  };
 }
 
 /**

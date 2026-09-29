@@ -541,12 +541,39 @@ export interface EscenarioDeOperacion {
   /**
    * Tercera gestionada. Existe por una razón aritmética, no por simetría: el
    * índice único parcial `cleanings_one_active_per_property_date` deja UN aseo
-   * activo por apartamento y fecha, y la ventana de `/operacion` son siete días
-   * (hoy … hoy+6). Con dos unidades el techo son catorce aseos sin confirmar y el
-   * `Sheet` encadenado hay que probarlo con QUINCE, que es la tanda que una
-   * corrida del sync mete de golpe y para la que está calibrado (§10).
+   * activo por apartamento y fecha.
    */
   tercera: UnidadSembrada;
+  /**
+   * LAS TRES DE RELLENO, Y LA RAZÓN CAMBIÓ CON EL PLAN 10-05 (D-05-8).
+   *
+   * ── LO QUE DECÍA ANTES ─────────────────────────────────────────────────
+   *
+   * La tanda del `Sheet` encadenado confirmaba los sin confirmar de la VENTANA
+   * ENTERA de catorce días. Con tres unidades y cinco días se llegaba a QUINCE, que
+   * es la tanda que una corrida del sync mete de golpe y para la que el `Sheet`
+   * está calibrado (§10). Lo escaso era el APARTAMENTO, y el día daba holgura.
+   *
+   * ── LO QUE CAMBIÓ ──────────────────────────────────────────────────────
+   *
+   * La tanda pasó a ser POR DÍA, porque el dueño pidió que todo salga de la fecha
+   * del selector sin excepción. **Y el índice único parcial sigue ahí**: un aseo
+   * activo por apartamento y fecha. Así que quince sin confirmar EN UN SOLO DÍA
+   * exigirían quince apartamentos sembrados.
+   *
+   * Se bajó a SEIS, que es lo mínimo que permite confirmar tres y cerrar A MITAD,
+   * que es la propiedad que ese caso defiende. **Lo escaso pasó a ser el
+   * apartamento y no el día.**
+   *
+   * Y lo que hay que dejar escrito, porque se pierde: la calibración del `Sheet`
+   * para quince es una AFIRMACIÓN DE DISEÑO (§10) y no un requisito del test. Que
+   * el caso corra con seis no dice nada sobre si quince siguen cabiendo; eso lo
+   * dice el contrato, y si algún día hay que volver a medirlo hacen falta quince
+   * apartamentos, no quince días.
+   */
+  cuarta: UnidadSembrada;
+  quinta: UnidadSembrada;
+  sexta: UnidadSembrada;
   /** `gestion_vivaguest = false`, con `contacto_externo` poblado (DASH-07). */
   externa: UnidadSembrada & { contacto: string };
 
@@ -615,6 +642,29 @@ export async function sembrarOperacion(servicio: Servicio): Promise<EscenarioDeO
     aseadoraB.id,
   );
 
+  // Las tres de relleno de la tanda POR DÍA (D-05-8). Ver el tipo.
+  const cuarta = await crearUnidadGestionada(
+    servicio,
+    `E2E Op Cuarta ${sufijo}`,
+    sufijo,
+    aseadoraA.id,
+    aseadoraB.id,
+  );
+  const quinta = await crearUnidadGestionada(
+    servicio,
+    `E2E Op Quinta ${sufijo}`,
+    sufijo,
+    aseadoraA.id,
+    aseadoraB.id,
+  );
+  const sexta = await crearUnidadGestionada(
+    servicio,
+    `E2E Op Sexta ${sufijo}`,
+    sufijo,
+    aseadoraA.id,
+    aseadoraB.id,
+  );
+
   // `props_assignees_only_when_managed` exige que la informativa NO tenga
   // responsable ni suplente: quien la atiende va en `contacto_externo`.
   const contacto = `Administración Externa ${sufijo}`;
@@ -638,6 +688,9 @@ export async function sembrarOperacion(servicio: Servicio): Promise<EscenarioDeO
     gestionada,
     segunda,
     tercera,
+    cuarta,
+    quinta,
+    sexta,
     externa: { ...externa, contacto },
     aseadoraA,
     aseadoraB,
@@ -723,6 +776,9 @@ export async function limpiarOperacion(
     escenario.gestionada.id,
     escenario.segunda.id,
     escenario.tercera.id,
+    escenario.cuarta.id,
+    escenario.quinta.id,
+    escenario.sexta.id,
     escenario.externa.id,
   ];
 

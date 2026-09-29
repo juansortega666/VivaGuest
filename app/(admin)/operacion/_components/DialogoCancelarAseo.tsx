@@ -204,7 +204,32 @@ export function DialogoCancelarAseo({
 
     // Solo el efecto de interfaz. El aviso ya se publicó arriba.
     if (estado.ok) onAbiertoChange(false);
-  }, [estado, onAbiertoChange]);
+
+    // ── EL REFRESCO VA **ACA** Y NO SOLO EN `alCambiarApertura` ────────────
+    //
+    // MEDIDO EL 2026-09-29, ejecutando la Task 4 del plan 10-05. `alCambiarApertura`
+    // es el `onOpenChange` del dialogo, y ese callback lo dispara la PRIMITIVA
+    // cuando el usuario pide cerrar: no lo dispara un cierre PROGRAMATICO como el
+    // `onAbiertoChange(false)` de aqui arriba. O sea que en el camino feliz
+    // —accion correcta, dialogo cerrado por codigo— **`router.refresh()` no corria
+    // nunca**, y desde que el plan 04-14 quito los `revalidatePath()` de las nueve
+    // actions no quedaba nadie mas que refrescara.
+    //
+    // El sintoma, medido con la sonda: el admin cancela un aseo, la base escribe,
+    // el toast lo dice, y la tarjeta se queda EXACTAMENTE IGUAL hasta que alguien
+    // recarga a mano. Con recarga, correcto. Es el rojo del punto 3 de
+    // `deferred-items.md`, cuya causa estaba sin aislar.
+    //
+    // ── Y ESTE EFECTO SI ES SEGURO PARA EL REFRESCO, AL REVES QUE PARA EL AVISO ─
+    //
+    // La cabecera de arriba prohibe devolver el TOAST a este efecto, y con razon
+    // medida: el efecto llega un commit mas tarde, y ese commit puede traer el
+    // desmontaje del dialogo. **Para el refresco esa carrera no existe**, y el
+    // argumento es de una linea: lo unico que puede desmontar este dialogo es que
+    // llegue un arbol nuevo, y si llego un arbol nuevo el refresco ya sobra. O el
+    // efecto corre y refresca, o no corre porque alguien ya refresco.
+    if (estado.ok) router.refresh();
+  }, [estado, onAbiertoChange, router]);
 
   function alCambiarApertura(siguiente: boolean) {
     onAbiertoChange(siguiente);

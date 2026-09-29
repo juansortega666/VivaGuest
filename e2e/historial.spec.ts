@@ -79,6 +79,12 @@ test.beforeEach(async () => {
       escenario.gestionada.id,
       escenario.segunda.id,
       escenario.tercera.id,
+      // Las tres de relleno de la tanda por dia (D-05-8). Van en la limpieza y no
+      // solo en la siembra: un aseo que sobreviva de un caso anterior desplaza los
+      // conteos del siguiente, y el rojo aparece en el caso que no lo causo.
+      escenario.cuarta.id,
+      escenario.quinta.id,
+      escenario.sexta.id,
       escenario.externa.id,
     ]);
   if (error) throw new Error(`No se pudo limpiar entre tests: ${error.message}`);
