@@ -14,6 +14,7 @@ import {
   agruparPorDia,
   bandejaSinConfirmar,
   cargaPorAseador,
+  filasDelDia,
   leerAlertasAtendidas,
   leerAlertasDelAdmin,
   leerAseadoresActivos,
@@ -31,7 +32,7 @@ import {
   type NotificacionParaAlertas,
 } from '@/lib/domain/alertas';
 import { estadoDeAvisosDeAseador } from '@/lib/domain/avisos';
-import { formatFechaBog, formatFechaLargaBog } from '@/lib/domain/dates';
+import { diaValido, formatFechaBog, formatFechaLargaBog } from '@/lib/domain/dates';
 import { publicEnv } from '@/lib/env';
 
 import { BandejaSinConfirmar } from './_components/BandejaSinConfirmar';
@@ -41,8 +42,11 @@ import { LeyendaDeAseos } from './_components/EstadoAseo';
 import { FranjaCarga } from './_components/FranjaCarga';
 import { MedidorDeAlmacenamiento } from './_components/MedidorDeAlmacenamiento';
 import type { ContextoDeAcciones } from './_components/MenuAseo';
+import { MetricaDelDia } from './_components/MetricaDelDia';
 import { PanelAlertas } from './_components/PanelAlertas';
 import { PanelAseo } from './_components/PanelAseo';
+import { ResumenDelDia } from './_components/ResumenDelDia';
+import { SelectorDeDia } from './_components/SelectorDeDia';
 import { SincronizacionEnVivo } from './_components/SincronizacionEnVivo';
 import { TiraAvisosAdmin } from './_components/TiraAvisosAdmin';
 
@@ -325,6 +329,22 @@ export default async function OperacionPage({
   );
 
   /**
+   * EL DÍA DEL SELECTOR, CON LA MISMA DISCIPLINA QUE `?aseo` (D-05-1).
+   *
+   * `diaValido()` es la guarda de forma, y existe por la razón literal de arriba
+   * aplicada al otro tipo: sin ella una cadena arbitraria llega a Postgres como
+   * argumento de tipo FECHA y vuelve como `22P02`. La función vive en
+   * `lib/domain/dates.ts` porque ahí está la única implementación del calendario de
+   * negocio del repo; un regex acá sería una quinta definición de la misma forma.
+   *
+   * Ausente o inválido cae a `hoyBog()`, que es el `operacion.hoy` de abajo. **Y EL
+   * PARÁMETRO HUÉRFANO NO SE LIMPIA**, misma regla que `?aseo` de §11.4: limpiarlo
+   * reescribiría un enlace que alguien pegó en un chat.
+   */
+  const crudoDelDia = parametros.dia;
+  const diaPedido = diaValido(typeof crudoDelDia === 'string' ? crudoDelDia : undefined);
+
+  /**
    * LA LECTURA DEL PANEL, Y SOLO CUANDO EL PARAMETRO ESTA PRESENTE.
    *
    * Se construye la promesa **sin esperarla** y entra al mismo `Promise.all` de
@@ -350,7 +370,10 @@ export default async function OperacionPage({
     aseoAbierto,
     consumo,
   ] = await Promise.all([
-      leerOperacion(supabase, ahoraMs),
+      // El día pedido no cambia el EJE de la ventana, solo la AMPLÍA cuando cae
+      // fuera. Ver la cabecera de `leerOperacion`: mover el eje apagaría las
+      // alertas de hoy al navegar a un día pasado (criterio 7 del ROADMAP).
+      leerOperacion(supabase, ahoraMs, diaPedido),
       leerAseadoresActivos(supabase),
       listarApartamentos(supabase),
       verAtendidas
@@ -383,6 +406,39 @@ export default async function OperacionPage({
       // existe para evitar.
       leerConsumoDeStorage(supabase).catch(() => null),
     ]);
+
+  /**
+   * EL DÍA EFECTIVO DE LA PANTALLA. Es el del selector, y `operacion.hoy` cuando la
+   * dirección no lo trae o lo trae roto.
+   *
+   * Se resuelve DESPUÉS de la lectura y no antes, porque el fallback es el día de
+   * negocio de Bogotá y ese lo calcula `leerOperacion()` con `hoyBog()`. Llamar
+   * `hoyBog()` otra vez acá daría la misma respuesta el 99,99 % de las veces y una
+   * distinta justo a medianoche de Bogotá, que es exactamente el tipo de
+   * incoherencia que D-14 existe para evitar: la ventana de la consulta y el día
+   * que la pantalla dice tienen que salir de la MISMA lectura del reloj.
+   */
+  const diaEfectivo = diaPedido ?? operacion.hoy;
+
+  const filasDelDiaSeleccionado = filasDelDia(operacion.filas, diaEfectivo);
+
+  /**
+   * LA PRIMERA CIFRA DEL VISTAZO: los aseos ACTIVOS del día seleccionado.
+   *
+   * Gestionados y no cancelados. Las unidades de gestión externa NO cuentan, por la
+   * misma razón por la que `cargaPorAseador` las excluye: no son trabajo que
+   * VivaGuest hace, así que sumarlas al número que el admin usa para dimensionar su
+   * día lo haría decidir sobre trabajo que no es suyo.
+   *
+   * **VIVE ACÁ SOLO DURANTE ESTA TASK.** La Task 2 de este plan la muda a
+   * `resumenDelDia()` de `lib/data/operacion.ts`, junto con las otras tres cifras y
+   * con sus unitarias. Está escrita inline y no en la capa de datos porque esta
+   * task es el trazador del eje del día y no el vistazo, y adelantar la proyección
+   * obligaría a escribir dos veces su contrato de tipos.
+   */
+  const activosDelDia = filasDelDiaSeleccionado.filter(
+    (f) => f.is_managed && f.state !== 'cancelada',
+  ).length;
 
   const bloques = agruparPorDia(operacion.filas, operacion.hoy);
   const chips = cargaPorAseador(operacion.filas, operacion.hoy, aseadores);
@@ -479,6 +535,14 @@ export default async function OperacionPage({
   for (const [clave, valor] of Object.entries(parametros)) {
     // El unico que gobierna el panel se quita, y lo vuelve a poner quien lo
     // necesite. Todo lo demas viaja intacto.
+    //
+    // ── `?dia` ENTRA ACA POR CONSTRUCCION, Y ESTA COMPROBADO ────────────────
+    // Este bucle copia TODO menos `aseo`, asi que el dia del selector viaja en
+    // `vivos` sin que haya que nombrarlo, y de eso depende que abrir y cerrar el
+    // detalle no se coma el dia. Va anotado y no supuesto: es la propiedad que
+    // mide el caso E2E de que cerrar el detalle conserva el `?dia`, y el dia que
+    // alguien cierre este bucle a una lista de claves conocidas, se rompe sin
+    // ruido.
     if (clave === 'aseo') continue;
     if (typeof valor === 'string') vivos.set(clave, valor);
     else if (Array.isArray(valor)) for (const uno of valor) vivos.append(clave, uno);
@@ -584,8 +648,44 @@ export default async function OperacionPage({
               menu" existe porque un `DropdownMenu` desmonta lo que tiene dentro
               al cerrarse, y aqui el padre es esta cabecera, no un menu. */}
           <DialogoCrearAseo apartamentos={apartamentosParaCrear} hoy={operacion.hoy} />
+
+          {/*
+            EL SELECTOR DE DIA VA AL FINAL DE LA FILA, Y EL ORDEN ES EL QUE EL
+            DUENO PIDIO LITERAL (2026-09-28): la senal de estado del calendario
+            inmediatamente a su izquierda. Esa senal la trae la Task 2 de este
+            plan; el hueco es aqui, justo antes de este bloque.
+
+            Va ULTIMO y no primero porque es el control que gobierna la pantalla
+            entera: el ojo lo busca en el extremo, y ponerlo entre el medidor de
+            almacenamiento y la marca de sincronizacion lo dejaria pareciendo una
+            tercera pieza de estado del sistema.
+          */}
+          <SelectorDeDia
+            dia={diaEfectivo}
+            hoy={operacion.hoy}
+            parametrosVivos={cola}
+          />
         </div>
       </div>
+
+      {/*
+        ── EL VISTAZO DEL DIA SELECCIONADO (plan 10-05) ────────────────────────
+
+        En esta task lleva UNA sola metrica, a proposito: esto es el trazador que
+        prueba que el dia viaja desde la direccion hasta el rango de la consulta y
+        sale por una cifra en pantalla. Las otras tres, con sus dos trampas (los
+        urgentes de un dia pasado y los gastos), entran en la Task 2.
+
+        El contenedor ya nace con la rejilla de cuatro: cambiar el numero de pistas
+        despues seria mover la geometria dos veces.
+      */}
+      <ResumenDelDia>
+        <MetricaDelDia
+          clave="activos"
+          rotulo="Aseos activos"
+          cifra={String(activosDelDia)}
+        />
+      </ResumenDelDia>
 
       <div className="grid grid-cols-1 gap-2xl xl:grid-cols-[minmax(0,1fr)_var(--container-rail)]">
         {/* Carril ancho. `min-w-0` para que una tabla ancha haga scroll dentro de

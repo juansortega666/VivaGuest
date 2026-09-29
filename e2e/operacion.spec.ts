@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 
-import { formatFechaBog, formatFechaLargaBog } from '@/lib/domain/dates';
+import { formatFechaBog, formatFechaCortaBog, formatFechaLargaBog } from '@/lib/domain/dates';
 import { formatCOP } from '@/lib/domain/money';
 
 import {
@@ -303,6 +303,172 @@ test('abrir un bloque de día no recarga la página', async ({ paginaAdmin }) =>
       ),
     )
     .toBe('viva');
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// 1.b EL EJE DEL DIA — el trazador del plan 10-05
+//
+// ── QUE MIDE ESTE BLOQUE ──────────────────────────────────────────────────
+//
+// Que el dia viaja DESDE LA DIRECCION hasta el rango de la consulta y sale por
+// una cifra en pantalla. Antes de este plan el eje de `/operacion` era "relativo
+// a hoy" y vivia en la capa de datos (`agruparPorDia`), asi que no habia nada que
+// un navegador pudiera pedir.
+//
+// ── LA TRAMPA DE `07-14`, Y VA ESCRITA PORQUE TIRA LAS ASERCIONES ─────────
+//
+// `page.waitForURL` y `expect(page).toHaveURL` NO VEN el cambio de direccion de
+// un control de parametro de esta clase, ni con veinte segundos de plazo: su
+// sondeo corre DENTRO del documento y se traba con el commit de la transicion de
+// React. Se sondea `page.url()` desde Node, y la asercion sobre la direccion se
+// escribe DESPUES de la espera. El repo ya tiene `esperarUrlDeCliente` en
+// `e2e/fixtures.ts` para exactamente esto: se usa, no se reinventa.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** El selector de dia de la cabecera. */
+function selectorDeDia(p: Page) {
+  return p.locator('[data-slot="selector-dia"]');
+}
+
+/**
+ * EL CONTROL DEL CENTRO DEL SELECTOR, POR POSICION Y NO POR NOMBRE.
+ *
+ * ── Y ESO NO ES PEREZA, ES UNA TRAMPA MEDIDA (2026-09-28) ─────────────────
+ *
+ * `getByRole('link', { name: 'Hoy' })` NO SIRVE para afirmar la ausencia. El
+ * nombre accesible del control del centro cuando el dia efectivo no es hoy es
+ * `11 sep · volver a hoy` (WCAG 2.2 SC 2.5.3 exige que CONTENGA su texto
+ * visible), y el emparejamiento por nombre de Playwright es por SUBCADENA y sin
+ * distinguir mayusculas. O sea que `name: 'Hoy'` casa con `volver a hoy` y un
+ * `toHaveCount(0)` sale rojo contra el codigo correcto.
+ *
+ * Medido: `Expected: 0 / Received: 1`, con el selector en `11 sep`.
+ *
+ * Por posicion y afirmando el TEXTO VISIBLE, que es lo que el contrato redacto:
+ * `Hoy` cuando el dia efectivo es el de negocio, y la fecha corta cuando no.
+ */
+function centroDelSelector(p: Page) {
+  return selectorDeDia(p).getByRole('link').nth(1);
+}
+
+/** La CIFRA de una metrica del vistazo, por su clave estable y no por su copia. */
+function cifraDeMetrica(p: Page, clave: string) {
+  return p.locator(`[data-slot="metrica-dia"][data-metrica="${clave}"] [data-cifra="true"]`);
+}
+
+test('el selector de dia trae tres controles y el del centro dice Hoy', async ({ paginaAdmin }) => {
+  await paginaAdmin.goto('/operacion');
+
+  const selector = selectorDeDia(paginaAdmin);
+  await expect(selector).toBeVisible();
+
+  // Tres ENLACES y no tres botones: cambiar de dia cambia que filas lee el
+  // servidor, asi que vive en la direccion (regla de `04-13`). Con botones y
+  // `router.push` esto pasaria igual, y por eso la cuenta se hace sobre el rol de
+  // enlace y no sobre un conteo de hijos.
+  await expect(selector.getByRole('link')).toHaveCount(3);
+
+  // Sin `?dia` en la direccion, el dia efectivo es el de negocio de Bogota.
+  await expect(centroDelSelector(paginaAdmin)).toHaveText('Hoy');
+});
+
+test('la metrica de aseos activos dice el conteo del dia de hoy', async ({ paginaAdmin }) => {
+  const { gestionada, segunda, externa, fechas } = escenario;
+
+  // Dos gestionados de hoy y una unidad de gestion externa del mismo dia: la
+  // externa NO cuenta como trabajo activo, por la misma razon por la que los chips
+  // de carga la excluyen.
+  await sembrarAseos(servicio, [
+    { propiedad: gestionada.id, fecha: fechas.hoy },
+    { propiedad: segunda.id, fecha: fechas.hoy },
+    { propiedad: externa.id, fecha: fechas.hoy },
+  ]);
+
+  await paginaAdmin.goto('/operacion');
+
+  await expect(cifraDeMetrica(paginaAdmin, 'activos')).toHaveText('2');
+});
+
+test('pulsar el dia anterior cambia la direccion y la cifra pasa al conteo de ayer', async ({
+  paginaAdmin,
+}) => {
+  const { gestionada, segunda, tercera, fechas } = escenario;
+
+  // Tres de hoy y uno de ayer: los dos conteos son DISTINTOS a proposito, porque
+  // con el mismo numero la asercion pasaria sin que la pantalla hubiera cambiado
+  // de dia.
+  await sembrarAseos(servicio, [
+    { propiedad: gestionada.id, fecha: fechas.hoy },
+    { propiedad: segunda.id, fecha: fechas.hoy },
+    { propiedad: tercera.id, fecha: fechas.hoy },
+    { propiedad: gestionada.id, fecha: fechas.ayer },
+  ]);
+
+  await paginaAdmin.goto('/operacion');
+  await expect(cifraDeMetrica(paginaAdmin, 'activos')).toHaveText('3');
+
+  const anterior = selectorDeDia(paginaAdmin).getByRole('link', { name: /día anterior/ });
+  await pulsarHastaNavegar(paginaAdmin, anterior, /[?&]dia=/);
+
+  // La asercion sobre la direccion se escribe DESPUES de la espera, nunca como la
+  // espera: ver la cabecera de este bloque.
+  expect(paginaAdmin.url()).toContain(`dia=${fechas.ayer}`);
+
+  await expect(cifraDeMetrica(paginaAdmin, 'activos')).toHaveText('1');
+
+  // Y el selector deja de decir `Hoy`: el rotulo del centro es la fecha corta
+  // cuando el dia efectivo no es el de negocio.
+  await expect(centroDelSelector(paginaAdmin)).toHaveText(formatFechaCortaBog(fechas.ayer));
+});
+
+test('navegar de dia CONSERVA los demas parametros de la direccion', async ({ paginaAdmin }) => {
+  const { gestionada, fechas } = escenario;
+  await sembrarAseos(servicio, [{ propiedad: gestionada.id, fecha: fechas.hoy }]);
+
+  /**
+   * ── POR QUE UN PARAMETRO ARBITRARIO Y NO UNO REAL DE LA PANTALLA ──────────
+   *
+   * Porque lo que se defiende es el MECANISMO, no un parametro concreto: el bucle
+   * de `vivos` de `page.tsx` copia TODO menos `aseo`, y con un parametro que la
+   * pantalla no conoce esta asercion se pone roja el dia que alguien cierre ese
+   * bucle a una lista de claves conocidas. Con `?alertas=atendidas` la asercion
+   * moriria con el toggle en la Task 3 de este plan y la propiedad se quedaria sin
+   * defender.
+   *
+   * Y la propiedad es la de la regla 3 de §5.1, medida en `08-02-MEDICION.md` §4.3
+   * con el enlace del panel: un `href` con consulta literal borra los parametros
+   * del anfitrion. El selector no puede comerselos.
+   */
+  await paginaAdmin.goto('/operacion?sonda=viva');
+
+  const siguiente = selectorDeDia(paginaAdmin).getByRole('link', { name: /día siguiente/ });
+  await pulsarHastaNavegar(paginaAdmin, siguiente, /[?&]dia=/);
+
+  expect(paginaAdmin.url()).toContain(`dia=${fechas.manana}`);
+  expect(paginaAdmin.url()).toContain('sonda=viva');
+});
+
+test('un ?dia invalido renderiza hoy Y el parametro sigue en la direccion', async ({
+  paginaAdmin,
+}) => {
+  const { gestionada, segunda, fechas } = escenario;
+
+  await sembrarAseos(servicio, [
+    { propiedad: gestionada.id, fecha: fechas.hoy },
+    { propiedad: segunda.id, fecha: fechas.hoy },
+  ]);
+
+  // `2026-02-30` pasa cualquier regex de forma y NO EXISTE. Es el caso que separa
+  // la guarda de forma de un regex suelto, y el que sin guarda llega a Postgres
+  // como argumento de tipo fecha y vuelve como `22P02`.
+  await paginaAdmin.goto('/operacion?dia=2026-02-30');
+
+  await expect(cifraDeMetrica(paginaAdmin, 'activos')).toHaveText('2');
+  await expect(centroDelSelector(paginaAdmin)).toHaveText('Hoy');
+
+  // EL PARAMETRO HUERFANO NO SE LIMPIA (§11.4): limpiarlo reescribiria un enlace
+  // que alguien pego en un chat. La pantalla cae a hoy y calla.
+  expect(paginaAdmin.url()).toContain('dia=2026-02-30');
 });
 
 // ───────────────────────────────────────────────────────────────────────────

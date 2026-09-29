@@ -300,21 +300,50 @@ const SELECT_OPERACION = `
  * mostrar. Con 34 unidades gestionadas y 5 informativas es irrelevante, pero no
  * se puede afirmar que esta consulta usa el índice.
  *
+ * ── EL DÍA PEDIDO **AMPLÍA** LA VENTANA Y NO MUEVE SU EJE (D-05-1, plan 10-05) ─
+ *
+ * El selector de día de la pantalla puede pedir un día que cae fuera de los
+ * catorce. Cuando eso pasa, el límite de ESE extremo se estira hasta el día
+ * pedido y **el otro no se mueve**. El eje sigue siendo `hoyBog()` con sus dos
+ * constantes.
+ *
+ * **Y esa es la decisión central del plan, no un detalle de implementación.** La
+ * ventana de catorce días es la que alimenta `alertasComputadas()`, y en
+ * particular la alerta de hora límite vencida, que es el criterio 7 del ROADMAP y
+ * la única que NO se acota por fecha. Mover el eje al día seleccionado haría que
+ * **navegar a un día pasado apagara las alertas de hoy**: el admin se iría a
+ * revisar el martes y las tres alertas vivas de esta tarde desaparecerían de la
+ * campana sin que nada lo dijera. Hay una unitaria que lo afirma por los dos
+ * extremos, y su señuelo (mover el eje en vez de ampliar) es el señuelo
+ * importante del plan.
+ *
+ * Toda comparación es entre cadenas `'YYYY-MM-DD'`: su orden lexicográfico
+ * coincide con el cronológico y no se construye ningún `Date`.
+ *
  * @param ahoraMs El instante de la lectura. Entra por parámetro para que la
  *   cabecera de frescura y las proyecciones compartan una sola marca (D-14).
+ * @param diaPedido El día del selector, ya validado por `diaValido()`. `null`
+ *   cuando la dirección no lo trae, y entonces la ventana es la de siempre.
  */
 export async function leerOperacion(
   supabase: SupabaseClient<Database>,
   ahoraMs: number = Date.now(),
+  diaPedido: string | null = null,
 ): Promise<Operacion> {
   const hoy = hoyBog();
   const horizonte = sumarDias(hoy, HORIZONTE_DIAS);
+  const arranque = sumarDias(hoy, -VENTANA_ATRAS_DIAS);
+
+  // Ampliar, nunca estrechar: el día pedido solo puede empujar un límite HACIA
+  // AFUERA. Un día de dentro de la ventana deja los dos exactamente donde están.
+  const desde = diaPedido !== null && diaPedido < arranque ? diaPedido : arranque;
+  const hasta = diaPedido !== null && diaPedido > horizonte ? diaPedido : horizonte;
 
   const { data, error } = await supabase
     .from('cleanings')
     .select(SELECT_OPERACION)
-    .gte('scheduled_date', sumarDias(hoy, -VENTANA_ATRAS_DIAS))
-    .lte('scheduled_date', horizonte)
+    .gte('scheduled_date', desde)
+    .lte('scheduled_date', hasta)
     .order('scheduled_date', { ascending: true })
     // Desempate dentro del día: la columna de horas de la tabla tiene que subir.
     // Las proyecciones de abajo CONSERVAN este orden y no reordenan por su
@@ -380,6 +409,37 @@ async function marcarSinEvidencia(
   if (error || !data) return new Set();
 
   return new Set(data);
+}
+
+/**
+ * LAS FILAS DE UN DÍA, Y NADA MÁS (plan 10-05).
+ *
+ * Es la proyección que sustituye a `agruparPorDia` cuando el eje de la pantalla
+ * deja de ser "relativo a hoy" y pasa a ser el día del selector. Con un selector
+ * de día, `Mañana` deja de tener significado.
+ *
+ * ── EL FILTRO ES SUYO Y NO SE DELEGA A LA CONSULTA ─────────────────────────
+ *
+ * Misma razón literal que ya tiene escrita la cabecera de `agruparPorDia`: **una
+ * proyección que dependa de que su entrada venga filtrada es una proyección que
+ * miente en cuanto alguien la reutiliza**. Y aquí no es teórico: la consulta trae
+ * la ventana ENTERA de catorce días a propósito, porque de ella salen las alertas
+ * y la cifra de desbordamiento del vistazo. Este filtro es el único sitio donde el
+ * día seleccionado recorta.
+ *
+ * Comparación entre cadenas `'YYYY-MM-DD'`, nunca construyendo un `Date`.
+ *
+ * CONSERVA EL ORDEN DE ENTRADA (fecha y después hora límite, el de la consulta) y
+ * NO MUTA el array que recibe: `filter` devuelve uno nuevo. `filas` es la misma
+ * lista que alimenta el vistazo y las alertas, y reordenarla por debajo cambiaría
+ * el orden de la pantalla entera.
+ *
+ * LOS CANCELADOS SE CONSERVAN, igual que en la consulta y por lo mismo: el
+ * contador del toggle `Ver cancelados (N)` los necesita, y quien decide qué se
+ * pinta es el componente.
+ */
+export function filasDelDia(filas: FilaDeOperacion[], dia: string): FilaDeOperacion[] {
+  return filas.filter((f) => f.scheduled_date === dia);
 }
 
 /**

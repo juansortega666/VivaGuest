@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   diaDeLaSemana,
+  diaValido,
   formatFechaBog,
   formatDiaCortoBog,
   formatFechaCortaBog,
@@ -428,6 +429,66 @@ describe('formatDiaCortoBog', () => {
     process.env.TZ = 'America/Bogota';
     expect(formatDiaCortoBog('2026-09-04')).toBe('vie 4');
     expect(formatDiaCortoBog('2026-01-01')).toBe('jue 1');
+  });
+});
+
+describe('diaValido', () => {
+  /**
+   * LA GUARDA DE FORMA DE `?dia` (D-05-1 del plan 10-05).
+   *
+   * Lo que este bloque defiende no es el regex: es que la guarda EXISTE antes de
+   * que el parametro llegue a la consulta. Sin ella una cadena arbitraria viaja a
+   * Postgres como argumento de tipo fecha y vuelve como `22P02`.
+   */
+  it('devuelve la MISMA cadena cuando el dia existe', () => {
+    expect(diaValido('2026-09-10')).toBe('2026-09-10');
+  });
+
+  it('rechaza la forma sin rellenar a dos digitos', () => {
+    // `2026-9-10` es el error de quien compone la direccion a mano con
+    // concatenacion en vez de con `sumarDias`.
+    expect(diaValido('2026-9-10')).toBeNull();
+  });
+
+  it('rechaza una palabra', () => {
+    expect(diaValido('hoy')).toBeNull();
+  });
+
+  it('rechaza el 30 de febrero, que es lo que separa esta guarda de un regex', () => {
+    // LA FORMA SOLA NO ALCANZA: '2026-02-30' pasa cualquier regex de cuatro-dos-dos.
+    // Y una guarda escrita con `new Date()` NORMALIZARIA en silencio al 2 de marzo,
+    // devolviendo "valido" para un dia que no existe.
+    expect(diaValido('2026-02-30')).toBeNull();
+  });
+
+  it('la cadena vacia y la ausencia devuelven null, no la cadena', () => {
+    expect(diaValido('')).toBeNull();
+    expect(diaValido(undefined)).toBeNull();
+  });
+
+  it('el bisiesto va con sus cuatro ramas, no solo con el multiplo de cuatro', () => {
+    // Esto es lo que defiende la tabla de longitudes de mes: 2028 es bisiesto,
+    // 2026 no, 2100 es multiplo de cuatro Y de cien y NO es bisiesto, y 2000 es
+    // multiplo de cuatrocientos y SI lo es.
+    expect(diaValido('2028-02-29')).toBe('2028-02-29');
+    expect(diaValido('2026-02-29')).toBeNull();
+    expect(diaValido('2100-02-29')).toBeNull();
+    expect(diaValido('2000-02-29')).toBe('2000-02-29');
+  });
+
+  it('rechaza el mes cero, el trece y el dia cero', () => {
+    expect(diaValido('2026-00-10')).toBeNull();
+    expect(diaValido('2026-13-10')).toBeNull();
+    expect(diaValido('2026-09-00')).toBeNull();
+    expect(diaValido('2026-09-31')).toBeNull();
+  });
+
+  it('no normaliza: lo que entra valido sale identico', () => {
+    // La regla de §11.4 es que el parametro huerfano NO SE LIMPIA. Una guarda que
+    // devolviera una cadena reescrita haria que el enlace que alguien pego en un
+    // chat dejara de ser el que pego.
+    const crudo = '2026-12-31';
+    expect(diaValido(crudo)).toBe(crudo);
   });
 });
 

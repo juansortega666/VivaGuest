@@ -360,6 +360,74 @@ export function sumarDias(fecha: string, dias: number): string {
   return DIA_ISO.format(new Date(Date.UTC(ano, mes - 1, dia + dias)));
 }
 
+/** La forma exacta de un dia de negocio: cuatro digitos, guion, dos, guion, dos. */
+const FORMA_DE_DIA = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * Longitud de cada mes con febrero en 28. El bisiesto se decide aparte, abajo.
+ *
+ * EL COMENTARIO DE `ultimoDiaDelMes` DESCONFIA DE ESTA TABLA, Y CON RAZON: dice
+ * que la tabla es exactamente donde falla el bisiesto. Aca la tabla SI es
+ * admisible, y por dos motivos que hay que dejar escritos o esto se lee como una
+ * contradiccion:
+ *
+ *   1. `ultimoDiaDelMes` puede permitirse `sumarDias`, que construye un
+ *      instante. Esta guarda NO puede (ver su cabecera): construir cualquier
+ *      objeto de fecha es justo lo que tiene prohibido.
+ *   2. La regla del bisiesto va escrita a mano, con sus tres ramas, y hay
+ *      unitarias sobre las tres: el 29 de febrero de un bisiesto, el de un ano
+ *      normal, el de un ano de siglo no bisiesto (2100) y el de uno que si lo es
+ *      (2000). La tabla sin esas cuatro seria el defecto que el otro comentario
+ *      teme; con ellas, esta defendida.
+ */
+const DIAS_POR_MES = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
+
+/** El bisiesto gregoriano completo: no solo el multiplo de cuatro. */
+function esBisiesto(ano: number): boolean {
+  return (ano % 4 === 0 && ano % 100 !== 0) || ano % 400 === 0;
+}
+
+/**
+ * LA GUARDA DE FORMA DEL PARAMETRO `?dia` DE `/operacion` (D-05-1).
+ *
+ * Devuelve la MISMA cadena si es un dia de negocio que existe en el calendario, y
+ * `null` si no. Es el gemelo de `identificadorValido` de
+ * `lib/data/finanzas-detalle.ts` para el otro parametro de esa pantalla, y existe
+ * por la misma razon literal: **cortar el viaje antes de que una cadena arbitraria
+ * llegue a Postgres como argumento de tipo fecha**, donde vuelve como `22P02`, un
+ * error de sintaxis que la pantalla no sabe explicar.
+ *
+ * ── NO CONSTRUYE NINGUN OBJETO DE FECHA, Y ESO NO ES UN DETALLE ────────────
+ *
+ * La cabecera de este archivo lo prohibe con su razon: `new Date('2026-09-10')`
+ * se parsea como medianoche UTC y en Bogota renderiza el DIA ANTERIOR. Una guarda
+ * que validara redondeando por un `Date` ademas NORMALIZARIA en silencio: el 30
+ * de febrero se convierte en el 2 de marzo y la funcion devolveria "valido" para
+ * un dia que no existe. Se comparan los tres numeros contra la tabla de meses.
+ *
+ * ── Y LA FORMA SOLA NO ALCANZA ─────────────────────────────────────────────
+ *
+ * `'2026-02-30'` pasa cualquier regex de forma. Ese caso es el que separa una
+ * guarda de verdad de un regex suelto, y tiene unitaria propia.
+ */
+export function diaValido(crudo: string | undefined): string | null {
+  if (crudo === undefined || crudo === '') return null;
+
+  const partes = FORMA_DE_DIA.exec(crudo);
+  if (partes === null) return null;
+
+  const ano = Number(partes[1]);
+  const mes = Number(partes[2]);
+  const dia = Number(partes[3]);
+
+  if (mes < 1 || mes > 12) return null;
+
+  const tope = mes === 2 && esBisiesto(ano) ? 29 : DIAS_POR_MES[mes - 1];
+  if (dia < 1 || dia > tope) return null;
+
+  return crudo;
+}
+
 /**
  * Hora del reloj de Bogota de un INSTANTE: `"14:32"`.
  *

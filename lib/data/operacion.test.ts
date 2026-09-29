@@ -9,6 +9,7 @@ import {
   agruparPorDia,
   bandejaSinConfirmar,
   cargaPorAseador,
+  filasDelDia,
   leerOperacion,
   type AseadorDeChip,
   type FilaDeOperacion,
@@ -97,6 +98,73 @@ function filaInerte(parcial: Partial<FilaDeOperacion> = {}): FilaDeOperacion {
 function ids(filas: FilaDeOperacion[]): string[] {
   return filas.map((f) => f.id);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('filasDelDia', () => {
+  /**
+   * LA PROYECCION DEL EJE NUEVO (plan 10-05).
+   *
+   * Sustituye a `agruparPorDia` cuando el eje de la pantalla deja de ser
+   * "relativo a hoy". Lo que se mide aca no es el `===`: es que el filtro es SUYO
+   * (la consulta trae la ventana entera a proposito, porque de ella salen las
+   * alertas) y que no le hace nada a la lista que recibe.
+   */
+  it('devuelve SOLO las filas cuyo dia es exactamente el pedido', () => {
+    const deAyer = fila({ scheduled_date: dia(-1) });
+    const deHoy = fila({ scheduled_date: HOY });
+    const deManana = fila({ scheduled_date: dia(1) });
+
+    expect(ids(filasDelDia([deAyer, deHoy, deManana], HOY))).toEqual([deHoy.id]);
+    expect(ids(filasDelDia([deAyer, deHoy, deManana], dia(-1)))).toEqual([deAyer.id]);
+  });
+
+  it('un dia sin nada devuelve la lista vacia y no revienta', () => {
+    expect(filasDelDia([fila({ scheduled_date: HOY })], dia(3))).toEqual([]);
+  });
+
+  it('CONSERVA EL ORDEN DE ENTRADA', () => {
+    // El orden de entrada es el de la consulta: fecha y despues hora limite.
+    // Reordenar aca cambiaria el orden de la lista de la pantalla sin que nada lo
+    // dijera, porque la proyeccion no tiene contrato de orden propio.
+    const primera = fila({ hora_limite: '09:00:00' });
+    const segunda = fila({ hora_limite: '11:00:00' });
+    const tercera = fila({ hora_limite: '15:00:00' });
+
+    expect(ids(filasDelDia([primera, segunda, tercera], HOY))).toEqual([
+      primera.id,
+      segunda.id,
+      tercera.id,
+    ]);
+  });
+
+  it('NO MUTA el array que recibe', () => {
+    // `filas` es la MISMA lista que alimenta el vistazo y las alertas computadas.
+    const entrada = [fila({ scheduled_date: dia(1) }), fila({ scheduled_date: HOY })];
+    const antes = ids(entrada);
+
+    filasDelDia(entrada, HOY);
+
+    expect(ids(entrada)).toEqual(antes);
+  });
+
+  it('los cancelados y los de gestion externa se conservan en su dia', () => {
+    // Los cancelados los necesita el contador del toggle `Ver cancelados (N)`, y
+    // la unidad de gestion externa sale en la lista de su dia y no aparte
+    // (DASH-07). Quien decide que se pinta es el componente.
+    const cancelado = fila({ state: 'cancelada' });
+    const externa = filaInerte();
+    const normal = fila();
+
+    expect(ids(filasDelDia([cancelado, externa, normal], HOY))).toEqual([
+      cancelado.id,
+      externa.id,
+      normal.id,
+    ]);
+  });
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -653,6 +721,105 @@ describe('leerOperacion', () => {
       ['scheduled_date', { ascending: true }],
       ['hora_limite', { ascending: true }],
     ]);
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // EL DIA PEDIDO AMPLIA LA VENTANA Y NO MUEVE SU EJE (D-05-1, plan 10-05)
+  //
+  // ── QUE DEFIENDE ESTE BLOQUE, Y POR QUE ES EL MAS IMPORTANTE DEL PLAN ────
+  //
+  // La ventana de catorce dias es la que alimenta `alertasComputadas()`, y en
+  // particular la alerta de hora limite vencida, que es el criterio 7 del
+  // ROADMAP y la unica que NO se acota por fecha. Si el selector de dia MOVIERA
+  // el eje en vez de AMPLIAR la ventana, navegar a un dia pasado apagaria las
+  // alertas de hoy: el admin se va a revisar el martes y las alertas vivas de
+  // esta tarde desaparecen sin que nada lo diga.
+  //
+  // Por eso las tres afirmaciones son: el dia de dentro no mueve nada, el dia de
+  // fuera empuja UN solo limite, y en los tres casos la ventana del eje sigue
+  // CONTENIDA en la que se pide. Lo tercero es lo que ve el senuelo del eje.
+  // ═════════════════════════════════════════════════════════════════════════
+
+  describe('la ventana ante un dia pedido', () => {
+    /** Las 15:00 UTC del dia de referencia son las 10:00 de Bogota del mismo dia. */
+    const MEDIODIA_BOG = Date.parse(`${HOY}T15:00:00Z`);
+
+    function limites(llamadas: { gte: [string, unknown][]; lte: [string, unknown][] }) {
+      return {
+        desde: llamadas.gte[0][1] as string,
+        hasta: llamadas.lte[0][1] as string,
+      };
+    }
+
+    const ARRANQUE = sumarDias(HOY, -VENTANA_ATRAS_DIAS);
+    const HORIZONTE = sumarDias(HOY, HORIZONTE_DIAS);
+
+    it('un dia DENTRO de la ventana pide el mismo rango de siempre', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(MEDIODIA_BOG));
+      const { supabase, llamadas } = clienteFalso();
+
+      return leerOperacion(comoCliente(supabase), MEDIODIA_BOG, dia(2)).then(() => {
+        expect(limites(llamadas)).toEqual({ desde: ARRANQUE, hasta: HORIZONTE });
+      });
+    });
+
+    it('un dia ANTERIOR al arranque baja el limite inferior y NO toca el superior', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(MEDIODIA_BOG));
+      const { supabase, llamadas } = clienteFalso();
+      const viejo = dia(-30);
+
+      return leerOperacion(comoCliente(supabase), MEDIODIA_BOG, viejo).then(() => {
+        expect(limites(llamadas)).toEqual({ desde: viejo, hasta: HORIZONTE });
+      });
+    });
+
+    it('un dia POSTERIOR al horizonte sube el limite superior y NO toca el inferior', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(MEDIODIA_BOG));
+      const { supabase, llamadas } = clienteFalso();
+      const lejano = dia(40);
+
+      return leerOperacion(comoCliente(supabase), MEDIODIA_BOG, lejano).then(() => {
+        expect(limites(llamadas)).toEqual({ desde: ARRANQUE, hasta: lejano });
+      });
+    });
+
+    it('LA VENTANA DE LAS ALERTAS NO SE ESTRECHA NUNCA, pida lo que pida el selector', async () => {
+      // El eje sigue siendo `hoyBog()`: el rango de la consulta tiene que CONTENER
+      // siempre `[hoy-7, hoy+6]`. Esta es la asercion que cae si alguien mueve el
+      // eje al dia pedido en vez de ampliar la ventana, y con ella cae el criterio
+      // 7 del ROADMAP.
+      for (const pedido of [null, dia(-30), dia(-1), HOY, dia(3), dia(40)]) {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date(MEDIODIA_BOG));
+        const { supabase, llamadas } = clienteFalso();
+
+        await leerOperacion(comoCliente(supabase), MEDIODIA_BOG, pedido);
+
+        const { desde, hasta } = limites(llamadas);
+        expect(
+          desde <= ARRANQUE,
+          `con ?dia=${pedido} el limite inferior subio a ${desde}, por encima de ${ARRANQUE}`,
+        ).toBe(true);
+        expect(
+          hasta >= HORIZONTE,
+          `con ?dia=${pedido} el limite superior bajo a ${hasta}, por debajo de ${HORIZONTE}`,
+        ).toBe(true);
+        vi.useRealTimers();
+      }
+    });
+
+    it('sin dia pedido la ventana es exactamente la de siempre', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(MEDIODIA_BOG));
+      const { supabase, llamadas } = clienteFalso();
+
+      return leerOperacion(comoCliente(supabase), MEDIODIA_BOG).then(() => {
+        expect(limites(llamadas)).toEqual({ desde: ARRANQUE, hasta: HORIZONTE });
+      });
+    });
   });
 
   it('devuelve las filas y UN SOLO instante de lectura', async () => {

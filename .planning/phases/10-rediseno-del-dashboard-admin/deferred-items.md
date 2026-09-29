@@ -166,3 +166,50 @@ alguien **decida el valor de marca**: o `--primary` se mueve a una luminancia qu
 deje sitio al anillo azul, o el anillo del botón primario pasa a un token propio
 con contraste medido contra su propio relleno. Cualquier intento de cerrarlo
 tocando solo la opacidad está descartado con los tres números de la tabla.
+
+---
+
+## 5. Un caso de `lib/data/operacion.test.ts` NO CORRE, y no está saltado (2026-09-28)
+
+**Encontrado al ejecutar la Task 1 de 10-05**, leyendo el bloque `leerOperacion`
+para escribir al lado las unitarias de la ventana. No lo causó este plan: lleva
+ahí desde D-08.
+
+**Estado:** un caso invisible. No sale rojo, no sale saltado, no sale en la
+cuenta. Simplemente no existe para el runner.
+
+`it('D-08: el límite inferior baja SIETE días, no se queda en hoy', …)` está
+declarado **DENTRO** del cuerpo del `it` anterior y **DESPUÉS de su `return`**:
+
+```ts
+it('acota la ventana al día de negocio de BOGOTÁ, no al del proceso', () => {
+  …
+  return leerOperacion(comoCliente(supabase)).then((operacion) => { … });
+
+  it('D-08: el límite inferior baja SIETE días, no se queda en hoy', () => { … });
+});
+```
+
+Código tras un `return` no se ejecuta, así que el `it` nunca se registra.
+**Medido:** `npx vitest run lib/data/operacion.test.ts --reporter=verbose` no
+imprime ese nombre ni una vez.
+
+**Lo que esto significa, y es lo incómodo:** el caso que defendía el criterio 7
+del ROADMAP en la capa de la CONSULTA (que el límite inferior baja siete días y
+no se queda en hoy) nunca se ha corrido. Un cierre de llave mal puesto es
+exactamente el modo de fallo que el plan 10-05 persigue con sus señuelos: una
+aserción que se cree escrita y no está defendiendo nada.
+
+**Por qué no se arregla en la Task 1.** La propiedad SÍ queda defendida por el
+bloque nuevo `la ventana ante un dia pedido`, y en concreto por el caso
+`LA VENTANA DE LAS ALERTAS NO SE ESTRECHA NUNCA`, que afirma
+`desde <= hoy − VENTANA_ATRAS_DIAS` para los seis valores de `?dia`. O sea que el
+agujero está tapado por arriba. Lo que queda pendiente es **sacar el `it` de
+donde está** (una llave), y eso toca el caso de la zona, que es el único del
+archivo que manipula el reloj del sistema con `vi.useFakeTimers()` fuera de un
+`describe` propio. Es un arreglo de dos líneas con un riesgo de arrastrar
+`useFakeTimers` a otro caso, y no es de este plan: aquí el eje es la pantalla.
+
+**Condición de salida:** mover el `it` a hermano del anterior y comprobar que la
+cuenta del archivo SUBE en uno. Si al desanidarlo el caso sale rojo, es un
+hallazgo de segundo orden y hay que medirlo antes de tocar la consulta.
