@@ -22,6 +22,34 @@ import type { NextConfig } from "next";
  * **ni `npm run dev` ni `npm run build` llevan el flag `--turbopack`.**
  * Comprobado sobre `package.json` al escribir este archivo: ninguno lo lleva.
  * Si alguien lo añade, este comentario es la razón por la que hay que quitarlo.
+ *
+ * ── `dev:turbo` ES UN CARRIL APARTE, Y TIENE UN LÍMITE MEDIDO ───────────────
+ *
+ * Desde el 2026-09-28 existe `npm run dev:turbo` (`next dev --turbopack`). La
+ * regla de arriba NO cambia: `dev` y `build` siguen sin el flag, y ese carril
+ * es el único que se despliega.
+ *
+ * Por qué existe, medido ese día en la máquina del dueño:
+ *   arranque .................... 5s   con webpack   ->  1.8s  con turbopack
+ *   ruta ya compilada ........... 3.16s con webpack  ->  0.10s con turbopack
+ *
+ * Y el límite, medido igual de duro, que es la razón por la que NO sustituye a
+ * `dev`: **con `--turbopack`, Serwist NO genera el service worker.** Solo emite
+ * un aviso y propone su "configurator mode" (serwist#54). La prueba: borrando
+ * `public/sw.js` a propósito, webpack lo regeneró con sus 592.739 bytes en el
+ * primer request y turbopack devolvió 404 permanente.
+ *
+ * La consecuencia práctica, porque este archivo decidió no usar `disable` en
+ * desarrollo justamente para poder probar push en local: con `dev:turbo` no
+ * estarías probando el service worker, estarías sirviendo el del último build
+ * de webpack, sin que nada te avise. Entonces:
+ *   - `dev:turbo` para las pantallas del admin.
+ *   - `dev` a secas para tocar `app/sw.ts`, el push o cualquier cosa de la PWA
+ *     de la aseadora.
+ *
+ * Y ojo con los dos números de issue, que no son el mismo: el serwist#360 de
+ * arriba es el de `@serwist/turbopack` en producción; el que muerde en este
+ * carril de desarrollo es el #54.
  * ════════════════════════════════════════════════════════════════════════════
  *
  * ── `disable` NO SE USA, TAMPOCO EN DESARROLLO ──────────────────────────────
